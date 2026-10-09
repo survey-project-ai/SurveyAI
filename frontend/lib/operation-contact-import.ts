@@ -24,6 +24,8 @@ export const OPERATION_CONTACT_IMPORT_PREVIEW_LIMIT = 8;
 const DEV_DUPLICATE_PHONE_STORAGE_KEY = "surveyai.dev.allowDuplicateOperationContactPhoneNumbers";
 
 const PHONE_NUMBER_PATTERN = /^[1-9]\d{7,14}$/;
+const TURKEY_COUNTRY_CODE = "90";
+const TURKEY_PHONE_NUMBER_LENGTH = 12;
 
 export async function readOperationContactImportRows(file: File): Promise<unknown[][]> {
   const fileName = file.name.toLocaleLowerCase("tr-TR");
@@ -63,11 +65,17 @@ export function normalizeCellValue(value: unknown): string {
   return String(value).trim();
 }
 
+// Keep in sync with PhoneNumberNormalizer on the backend.
 export function normalizePhoneNumber(phoneNumber: string): string {
-  const digitsOnly = phoneNumber.replace(/\D/g, "");
+  const trimmed = phoneNumber.trim();
+  const digitsOnly = trimmed.replace(/\D/g, "");
 
   if (!digitsOnly) {
     return "";
+  }
+
+  if (trimmed.startsWith("+")) {
+    return digitsOnly;
   }
 
   if (digitsOnly.startsWith("00")) {
@@ -75,7 +83,12 @@ export function normalizePhoneNumber(phoneNumber: string): string {
   }
 
   if (digitsOnly.startsWith("0")) {
-    return `90${digitsOnly.slice(1)}`;
+    return `${TURKEY_COUNTRY_CODE}${digitsOnly.slice(1)}`;
+  }
+
+  // Excel drops the leading 0 of numeric cells ("0532 123 45 67" becomes 5321234567).
+  if (digitsOnly.length === 10 && /^[2-5]/.test(digitsOnly)) {
+    return `${TURKEY_COUNTRY_CODE}${digitsOnly}`;
   }
 
   return digitsOnly;
@@ -274,7 +287,11 @@ function repairMojibake(value: string): string {
 }
 
 function isPhoneNumberValid(phoneNumber: string): boolean {
-  return PHONE_NUMBER_PATTERN.test(phoneNumber);
+  if (!PHONE_NUMBER_PATTERN.test(phoneNumber)) {
+    return false;
+  }
+
+  return !phoneNumber.startsWith(TURKEY_COUNTRY_CODE) || phoneNumber.length === TURKEY_PHONE_NUMBER_LENGTH;
 }
 
 function isDuplicatePhoneNumbersAllowedForDev(): boolean {

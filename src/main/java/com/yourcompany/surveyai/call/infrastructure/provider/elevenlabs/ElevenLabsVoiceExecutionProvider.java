@@ -22,6 +22,7 @@ import com.yourcompany.surveyai.call.domain.enums.CallProvider;
 import com.yourcompany.surveyai.common.exception.ValidationException;
 import com.yourcompany.surveyai.operation.application.support.OperationAutoEntityLexiconService;
 import com.yourcompany.surveyai.operation.support.OperationContactPhoneResolver;
+import com.yourcompany.surveyai.operation.support.PhoneNumberNormalizer;
 import com.yourcompany.surveyai.survey.domain.entity.SurveyQuestion;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -565,8 +566,7 @@ public class ElevenLabsVoiceExecutionProvider implements VoiceExecutionProvider 
         if (value == null || value.isBlank()) {
             throw new ValidationException("Contact phone number is required for ElevenLabs dispatch");
         }
-        String compact = value.replaceAll("[^\\d+]", "");
-        return compact.startsWith("+") ? compact : "+" + compact;
+        return "+" + PhoneNumberNormalizer.normalize(value);
     }
 
     private void applyOptionalDispatchSettings(Map<String, Object> payload, VoiceProviderConfiguration configuration) {

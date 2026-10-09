@@ -21,6 +21,7 @@ import com.yourcompany.surveyai.operation.domain.enums.OperationStatus;
 import com.yourcompany.surveyai.operation.repository.OperationContactRepository;
 import com.yourcompany.surveyai.operation.repository.OperationRepository;
 import com.yourcompany.surveyai.operation.support.OperationContactPhoneResolver;
+import com.yourcompany.surveyai.operation.support.PhoneNumberNormalizer;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import java.time.OffsetDateTime;
@@ -29,7 +30,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.regex.Pattern;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -42,8 +42,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional(readOnly = true)
 public class OperationContactServiceImpl implements OperationContactService {
-
-    private static final Pattern PHONE_NUMBER_PATTERN = Pattern.compile("^[1-9]\\d{7,14}$");
 
     private final OperationRepository operationRepository;
     private final OperationContactRepository operationContactRepository;
@@ -320,23 +318,13 @@ public class OperationContactServiceImpl implements OperationContactService {
     }
 
     private void validatePhoneNumber(String phoneNumber) {
-        if (!PHONE_NUMBER_PATTERN.matcher(phoneNumber).matches()) {
+        if (!PhoneNumberNormalizer.isValid(phoneNumber)) {
             throw new ValidationException("Invalid phone number format. Use a normalized number like 905551112233");
         }
     }
 
     private String normalizePhoneNumber(String phoneNumber) {
-        String digitsOnly = phoneNumber == null ? "" : phoneNumber.replaceAll("\\D", "");
-
-        if (digitsOnly.startsWith("00")) {
-            digitsOnly = digitsOnly.substring(2);
-        }
-
-        if (digitsOnly.startsWith("0")) {
-            return "90" + digitsOnly.substring(1);
-        }
-
-        return digitsOnly;
+        return PhoneNumberNormalizer.normalize(phoneNumber);
     }
 
     private String generateSyntheticStoredPhoneNumber() {

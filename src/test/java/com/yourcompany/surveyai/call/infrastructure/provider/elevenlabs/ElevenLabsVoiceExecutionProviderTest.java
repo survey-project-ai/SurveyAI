@@ -198,6 +198,25 @@ class ElevenLabsVoiceExecutionProviderTest {
     }
 
     @Test
+    void dispatchCallJob_addsTurkishCountryCodeToNumberStoredWithoutLeadingZero() {
+        ProviderDispatchRequest request = buildRequest();
+        request.contact().setPhoneNumber("5321234567");
+        VoiceProviderConfiguration configuration = configuration(false);
+        when(apiClient.startOutboundCall(any(), eq(configuration))).thenReturn("""
+                {
+                  "conversation_id": "conv_123"
+                }
+                """);
+
+        provider.dispatchCallJob(request, configuration);
+
+        org.mockito.ArgumentCaptor<String> payloadCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(apiClient).startOutboundCall(payloadCaptor.capture(), eq(configuration));
+
+        assertThat(payloadCaptor.getValue()).contains("\"to_number\":\"+905321234567\"");
+    }
+
+    @Test
     void dispatchCallJob_overridesFirstMessageWithSilenceWhenSurveyIntroIsMissing() {
         ProviderDispatchRequest request = buildRequest();
         request.survey().setIntroPrompt(null);
