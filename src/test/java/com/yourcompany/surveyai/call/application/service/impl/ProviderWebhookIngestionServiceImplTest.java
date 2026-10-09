@@ -1,6 +1,7 @@
 package com.yourcompany.surveyai.call.application.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -25,6 +26,7 @@ import com.yourcompany.surveyai.call.infrastructure.provider.mock.MockVoiceExecu
 import com.yourcompany.surveyai.call.repository.CallAttemptRepository;
 import com.yourcompany.surveyai.call.repository.CallJobRepository;
 import com.yourcompany.surveyai.common.domain.entity.Company;
+import com.yourcompany.surveyai.common.exception.NotFoundException;
 import com.yourcompany.surveyai.operation.application.support.OperationAutoEntityLexiconService;
 import com.yourcompany.surveyai.response.application.service.SurveyResponseIngestionService;
 import com.yourcompany.surveyai.operation.domain.entity.Operation;
@@ -66,19 +68,7 @@ class ProviderWebhookIngestionServiceImplTest {
         properties.getElevenlabs().setBaseUrl("https://api.elevenlabs.io");
         properties.getElevenlabs().setAgentId("agent-123");
 
-        ingestionService = new ProviderWebhookIngestionServiceImpl(
-                new CallProviderRegistry(java.util.List.of(
-                        new MockVoiceExecutionProvider(new ObjectMapper()),
-                        new ElevenLabsVoiceExecutionProvider(new ObjectMapper(), mock(ElevenLabsApiClient.class), operationAutoEntityLexiconService)
-                )),
-                new VoiceProviderConfigurationResolver(properties),
-                callAttemptRepository,
-                callJobRepository,
-                operationContactRepository,
-                surveyResponseIngestionService,
-                providerExecutionObservationService,
-                callJobDispatcher
-        );
+        ingestionService = createIngestionService(properties);
 
         when(callAttemptRepository.save(any(CallAttempt.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(callJobRepository.save(any(CallJob.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -316,6 +306,81 @@ class ProviderWebhookIngestionServiceImplTest {
         assertThat(firstAttempt.getCallJob().getStatus()).isEqualTo(CallJobStatus.FAILED);
         assertThat(firstAttempt.getOperationContact().getStatus()).isEqualTo(OperationContactStatus.FAILED);
         verify(callJobDispatcher).dispatchNextPreparedJob(operationId);
+    }
+
+    @Test
+    void ingest_rejectsWebhookForDisabledProviderWithoutRecordingIt() {
+        VoiceExecutionProperties properties = new VoiceExecutionProperties();
+        properties.getMock().setEnabled(false);
+        ProviderWebhookIngestionServiceImpl serviceWithMockDisabled = createIngestionService(properties);
+
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getHeaderNames()).thenReturn(Collections.enumeration(Collections.emptyList()));
+
+        assertThatThrownBy(() -> serviceWithMockDisabled.ingest(
+                CallProvider.MOCK,
+                """
+                {
+                  "providerCallId": "mock-call-123",
+                  "status": "COMPLETED"
+                }
+                """,
+                request
+        )).isInstanceOf(NotFoundException.class);
+
+        verify(providerExecutionObservationService, never()).recordWebhookReceived(any(), any(), any());
+        verify(callAttemptRepository, never()).findByProviderAndProviderCallIdAndDeletedAtIsNull(any(), any());
+    }
+
+    @Test
+    void ingest_doesNotApplyWebhookToAttemptOfAnotherProvider() {
+        CallAttempt attempt = buildAttempt();
+        attempt.setProvider(CallProvider.ELEVENLABS);
+        attempt.setProviderCallId("conv_live");
+        CallJob callJob = attempt.getCallJob();
+
+        when(callJobRepository.findByIdempotencyKeyAndDeletedAtIsNull(callJob.getIdempotencyKey()))
+                .thenReturn(Optional.of(callJob));
+        when(callAttemptRepository.findTopByCallJob_IdAndDeletedAtIsNullOrderByAttemptNumberDesc(callJob.getId()))
+                .thenReturn(Optional.of(attempt));
+
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getHeaderNames()).thenReturn(Collections.enumeration(Collections.emptyList()));
+
+        int applied = ingestionService.ingest(
+                CallProvider.MOCK,
+                """
+                {
+                  "idempotencyKey": "%s",
+                  "status": "COMPLETED",
+                  "occurredAt": "%s",
+                  "transcript": "forged transcript"
+                }
+                """.formatted(callJob.getIdempotencyKey(), OffsetDateTime.now()),
+                request
+        );
+
+        assertThat(applied).isZero();
+        assertThat(attempt.getStatus()).isEqualTo(CallAttemptStatus.IN_PROGRESS);
+        assertThat(callJob.getStatus()).isEqualTo(CallJobStatus.IN_PROGRESS);
+        verify(surveyResponseIngestionService, never()).ingest(any(), any());
+        verify(callJobDispatcher, never()).dispatchNextPreparedJob(any());
+    }
+
+    private ProviderWebhookIngestionServiceImpl createIngestionService(VoiceExecutionProperties properties) {
+        return new ProviderWebhookIngestionServiceImpl(
+                new CallProviderRegistry(java.util.List.of(
+                        new MockVoiceExecutionProvider(new ObjectMapper()),
+                        new ElevenLabsVoiceExecutionProvider(new ObjectMapper(), mock(ElevenLabsApiClient.class), operationAutoEntityLexiconService)
+                )),
+                new VoiceProviderConfigurationResolver(properties),
+                callAttemptRepository,
+                callJobRepository,
+                operationContactRepository,
+                surveyResponseIngestionService,
+                providerExecutionObservationService,
+                callJobDispatcher
+        );
     }
 
     private CallAttempt buildAttempt() {

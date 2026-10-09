@@ -17,6 +17,7 @@ import com.yourcompany.surveyai.call.domain.enums.CallProvider;
 import com.yourcompany.surveyai.call.domain.enums.ProviderExecutionOutcome;
 import com.yourcompany.surveyai.call.repository.CallAttemptRepository;
 import com.yourcompany.surveyai.call.repository.CallJobRepository;
+import com.yourcompany.surveyai.common.exception.NotFoundException;
 import com.yourcompany.surveyai.common.exception.ValidationException;
 import com.yourcompany.surveyai.operation.domain.entity.OperationContact;
 import com.yourcompany.surveyai.operation.domain.enums.OperationContactStatus;
@@ -82,6 +83,10 @@ public class ProviderWebhookIngestionServiceImpl implements ProviderWebhookInges
     public int ingest(CallProvider providerKey, String rawPayload, HttpServletRequest request) {
         OffsetDateTime receivedAt = OffsetDateTime.now();
         VoiceProviderConfiguration configuration = configurationResolver.getConfiguration(providerKey);
+        if (!configuration.enabled()) {
+            log.warn("Provider webhook rejected because the provider is disabled. provider={} receivedAt={}", providerKey, receivedAt);
+            throw new NotFoundException("Provider webhooks are not enabled for: " + providerKey);
+        }
         VoiceExecutionProvider provider = callProviderRegistry.getRequiredProvider(providerKey);
         ProviderWebhookRequest webhookRequest = new ProviderWebhookRequest(providerKey, rawPayload, extractHeaders(request));
         providerExecutionObservationService.recordWebhookReceived(providerKey, rawPayload, receivedAt);
@@ -104,6 +109,17 @@ public class ProviderWebhookIngestionServiceImpl implements ProviderWebhookInges
 
     private int applyEvent(ProviderWebhookEvent event) {
         Optional<CallAttempt> attemptOptional = resolveAttempt(event);
+        // Idempotency-key and correlation lookups are provider-agnostic, so a webhook must never
+        // change an attempt that was placed through a different provider.
+        if (attemptOptional.isPresent() && attemptOptional.get().getProvider() != event.provider()) {
+            log.warn(
+                    "Provider webhook ignored because it targets an attempt of another provider. provider={} attemptProvider={} callAttemptId={}",
+                    event.provider(),
+                    attemptOptional.get().getProvider(),
+                    attemptOptional.get().getId()
+            );
+            attemptOptional = Optional.empty();
+        }
         if (attemptOptional.isEmpty()) {
             log.warn(
                     "Provider webhook could not be mapped to a call attempt. provider={} eventType={} providerCallId={} idempotencyKey={}",
