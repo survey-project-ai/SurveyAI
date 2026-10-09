@@ -9,6 +9,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SurveyQuestionAutoLexiconServiceTest {
@@ -35,6 +36,74 @@ class SurveyQuestionAutoLexiconServiceTest {
         assertEquals("DISTRICT", root.path("autoLexicon").path("granularity").asText());
         assertTrue(root.path("autoLexicon").path("cityCodes").isArray());
         assertEquals("33", root.path("autoLexicon").path("cityCodes").get(0).asText());
+    }
+
+    @Test
+    void doesNotInferGeoScopeFromWordsThatOnlyContainIl() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        TurkeyGeoDataService geoDataService = new TurkeyGeoDataService(objectMapper);
+        geoDataService.load();
+        SurveyQuestionAutoLexiconService service = new SurveyQuestionAutoLexiconService(objectMapper, geoDataService);
+
+        Survey survey = new Survey();
+        survey.setName("Aile ve bilgi teknolojileri arastirmasi");
+        survey.setIntroPrompt("Bu anket urunlerimizle ilgili gorusleriniz icin yapiliyor.");
+
+        SurveyQuestion question = new SurveyQuestion();
+        question.setSurvey(survey);
+        question.setTitle("Ürünümüzle ilgili önerileriniz nelerdir?");
+        question.setSettingsJson("{}");
+
+        JsonNode root = objectMapper.readTree(service.rebuildSettingsJson(survey, question, List.of()));
+
+        assertFalse(root.has("autoLexicon"));
+    }
+
+    @Test
+    void doesNotInferGeoScopeWhenQuestionOnlyMentionsAPlace() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        TurkeyGeoDataService geoDataService = new TurkeyGeoDataService(objectMapper);
+        geoDataService.load();
+        SurveyQuestionAutoLexiconService service = new SurveyQuestionAutoLexiconService(objectMapper, geoDataService);
+
+        Survey survey = new Survey();
+        survey.setName("Yerel yonetim arastirmasi");
+
+        SurveyQuestion question = new SurveyQuestion();
+        question.setSurvey(survey);
+        question.setTitle("İlçenizin en önemli sorunu nedir?");
+        question.setSettingsJson("{}");
+
+        JsonNode root = objectMapper.readTree(service.rebuildSettingsJson(survey, question, List.of()));
+
+        assertFalse(root.has("autoLexicon"));
+    }
+
+    @Test
+    void infersGeoScopeForLocationQuestionsAndBareFieldLabels() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        TurkeyGeoDataService geoDataService = new TurkeyGeoDataService(objectMapper);
+        geoDataService.load();
+        SurveyQuestionAutoLexiconService service = new SurveyQuestionAutoLexiconService(objectMapper, geoDataService);
+
+        Survey survey = new Survey();
+        survey.setName("Saha arastirmasi");
+
+        SurveyQuestion cityQuestion = new SurveyQuestion();
+        cityQuestion.setSurvey(survey);
+        cityQuestion.setTitle("Hangi ilde yaşıyorsunuz?");
+        cityQuestion.setSettingsJson("{}");
+
+        SurveyQuestion districtField = new SurveyQuestion();
+        districtField.setSurvey(survey);
+        districtField.setTitle("İlçe");
+        districtField.setSettingsJson("{}");
+
+        JsonNode cityRoot = objectMapper.readTree(service.rebuildSettingsJson(survey, cityQuestion, List.of()));
+        JsonNode districtRoot = objectMapper.readTree(service.rebuildSettingsJson(survey, districtField, List.of()));
+
+        assertEquals("CITY", cityRoot.path("autoLexicon").path("granularity").asText());
+        assertEquals("DISTRICT", districtRoot.path("autoLexicon").path("granularity").asText());
     }
 
     @Test

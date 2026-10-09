@@ -873,6 +873,130 @@ class CallInterviewOrchestrationServiceImplTest {
     }
 
     @Test
+    void submitAnswer_stillMatchesDefaultSpecialAnswerInsideLongerReply() {
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        service.submitAnswer(
+                new InterviewAnswerRequest(
+                        fixture.callAttempt.getId(),
+                        null,
+                        null,
+                        "valla hic bilmiyorum",
+                        InterviewConversationSignal.ANSWER
+                )
+        );
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        List<SurveyAnswer> answers = answersByResponseId.get(savedResponse.getId());
+
+        assertThat(answers).hasSize(1);
+        assertThat(answers.getFirst().isValid()).isTrue();
+        assertThat(answers.getFirst().getAnswerJson()).contains("\"specialAnswerCode\":\"bilmiyorum\"");
+    }
+
+    @Test
+    void submitAnswer_doesNotMatchSpecialAliasInsideAnotherWord() {
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
+                .thenReturn(List.of(fixture.openQuestion));
+        fixture.openQuestion.setRequired(true);
+
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        service.submitAnswer(
+                new InterviewAnswerRequest(
+                        fixture.callAttempt.getId(),
+                        null,
+                        null,
+                        "Bayrampaşa'da oturduğum için",
+                        InterviewConversationSignal.ANSWER
+                )
+        );
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        List<SurveyAnswer> answers = answersByResponseId.get(savedResponse.getId());
+
+        assertThat(answers).hasSize(1);
+        assertThat(answers.getFirst().isValid()).isTrue();
+        assertThat(answers.getFirst().getAnswerJson()).contains("\"specialAnswerCode\":null");
+        assertThat(answers.getFirst().getAnswerText()).contains("Bayrampaşa");
+    }
+
+    @Test
+    void submitAnswer_doesNotTreatShortReplyContainedInLongerAliasAsRefusal() {
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        service.submitAnswer(
+                new InterviewAnswerRequest(
+                        fixture.callAttempt.getId(),
+                        null,
+                        null,
+                        "istiyorum",
+                        InterviewConversationSignal.ANSWER
+                )
+        );
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        List<SurveyAnswer> answers = answersByResponseId.getOrDefault(savedResponse.getId(), List.of());
+
+        assertThat(answers).noneMatch(answer -> answer.getAnswerJson() != null
+                && answer.getAnswerJson().contains("\"specialAnswerCode\":\"reddetti\""));
+    }
+
+    @Test
+    void submitAnswer_mapsBareYokToNoOptionInsteadOfSpecialAnswer() {
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        service.submitAnswer(
+                new InterviewAnswerRequest(
+                        fixture.callAttempt.getId(),
+                        null,
+                        null,
+                        "yok",
+                        InterviewConversationSignal.ANSWER
+                )
+        );
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        List<SurveyAnswer> answers = answersByResponseId.get(savedResponse.getId());
+
+        assertThat(answers).hasSize(1);
+        assertThat(answers.getFirst().getAnswerJson()).contains("\"specialAnswerCode\":null");
+        assertThat(answers.getFirst().getSelectedOption()).isEqualTo(fixture.noOption);
+    }
+
+    @Test
+    void submitAnswer_keepsNamedPartyOnQuestionThatListsParties() {
+        fixture.yesNoQuestion.setCode("parti_tercihi");
+        fixture.yesNoQuestion.setTitle("Bu pazar secim olsa hangi partiye oy verirsiniz?");
+
+        SurveyQuestionOption akParti = buildOption(fixture.yesNoQuestion, 1, "option_1", "AK Parti");
+        SurveyQuestionOption chp = buildOption(fixture.yesNoQuestion, 2, "option_2", "CHP");
+        SurveyQuestionOption mhp = buildOption(fixture.yesNoQuestion, 3, "option_3", "MHP");
+        SurveyQuestionOption iyiParti = buildOption(fixture.yesNoQuestion, 4, "option_4", "İYİ Parti");
+        SurveyQuestionOption demParti = buildOption(fixture.yesNoQuestion, 5, "option_5", "DEM Parti");
+        questionOptionsByQuestionId.put(fixture.yesNoQuestion.getId(), List.of(akParti, chp, mhp, iyiParti, demParti));
+
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        service.submitAnswer(
+                new InterviewAnswerRequest(
+                        fixture.callAttempt.getId(),
+                        null,
+                        null,
+                        "İYİ Parti'ye oy veririm",
+                        InterviewConversationSignal.ANSWER
+                )
+        );
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        List<SurveyAnswer> answers = answersByResponseId.get(savedResponse.getId());
+
+        assertThat(answers).hasSize(1);
+        assertThat(answers.getFirst().isValid()).isTrue();
+        assertThat(answers.getFirst().getSelectedOption()).isEqualTo(iyiParti);
+    }
+
+    @Test
     void submitAnswer_ignoresAsrArtifactsAndRepeatsCurrentQuestion() {
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
                 .thenReturn(List.of(fixture.openQuestion));

@@ -27,9 +27,19 @@ import org.springframework.stereotype.Component;
 @Component
 public class SurveyQuestionAutoLexiconService {
 
-    private static final Set<String> CITY_HINTS = Set.of("sehir", "şehir", "il", "city", "province");
+    private static final Set<String> CITY_HINTS = Set.of("sehir", "şehir", "city", "province");
+    // "il" and the vowel-dropping forms of "şehir" are too short or irregular for prefix matching
+    // ("ilgili", "bilgi", "aile"), so only these whole words count.
+    private static final Set<String> CITY_WORD_HINTS = Set.of(
+            "il", "ili", "ilde", "ilin", "iline", "ilinde", "iliniz", "ilinizi", "ilinizde", "ilimiz", "ilimizde",
+            "sehri", "sehrin", "sehrinde", "sehriniz", "sehrinizi", "sehrinizde"
+    );
     private static final Set<String> DISTRICT_HINTS = Set.of("ilce", "ilçe", "district");
     private static final Set<String> NEIGHBOURHOOD_HINTS = Set.of("mahalle", "mahallesi", "neighborhood", "neighbourhood", "semt");
+    private static final Set<String> LOCATION_QUESTION_WORDS = Set.of(
+            "hangi", "nerede", "nerde", "neresi", "yasiyorsunuz", "yasadiginiz", "oturuyorsunuz", "oturdugunuz",
+            "ikamet", "where", "which", "live", "reside"
+    );
     private static final Set<String> POLITICAL_HINTS = Set.of(
             "siyasi", "politika", "secim", "seçim", "aday", "parti", "belediye", "baskan", "başkan",
             "milletvekili", "cumhurbaskani", "cumhurbaşkanı", "oy", "tercih", "destek"
@@ -83,13 +93,12 @@ public class SurveyQuestionAutoLexiconService {
     }
 
     private GeoScope inferGeoScope(Survey survey, SurveyQuestion question, List<SurveyQuestionOption> options) {
-        String combinedText = buildCombinedContext(survey, question, options);
-        String normalizedContext = normalize(combinedText);
-        GeoGranularity granularity = inferGeoGranularity(normalizedContext);
+        GeoGranularity granularity = inferGeoGranularity(question);
         if (granularity == null) {
             return null;
         }
 
+        String combinedText = buildCombinedContext(survey, question, options);
         Set<String> cityCodes = new LinkedHashSet<>(turkeyGeoDataService.detectCityCodes(combinedText));
         List<DistrictEntry> matchedDistricts = turkeyGeoDataService.detectDistricts(combinedText, cityCodes);
         if (cityCodes.isEmpty() && !matchedDistricts.isEmpty()) {
@@ -109,17 +118,56 @@ public class SurveyQuestionAutoLexiconService {
         return new GeoScope(granularity, Set.copyOf(cityCodes), Set.copyOf(districtNames));
     }
 
-    private GeoGranularity inferGeoGranularity(String normalizedContext) {
-        if (containsAnyKeyword(normalizedContext, NEIGHBOURHOOD_HINTS)) {
+    // The granularity comes from the question itself, not the survey name or intro, and only when the
+    // question asks for a place. Otherwise "Ürünümüzle ilgili önerileriniz" or "İlçenizin en önemli
+    // sorunu nedir?" gets a geo scope and a place mentioned in the answer replaces the whole answer.
+    private GeoGranularity inferGeoGranularity(SurveyQuestion question) {
+        List<String> titleWords = words(question.getTitle());
+        List<String> questionWords = words(String.join(" ",
+                Objects.toString(question.getCode(), ""),
+                Objects.toString(question.getTitle(), ""),
+                Objects.toString(question.getDescription(), ""),
+                Objects.toString(question.getRetryPrompt(), "")
+        ));
+
+        // A bare field label such as "İl" or "İlçe adı" also asks for a place.
+        boolean asksForPlace = titleWords.size() <= 2 || questionWords.stream().anyMatch(LOCATION_QUESTION_WORDS::contains);
+        if (!asksForPlace) {
+            return null;
+        }
+        if (containsHintWord(questionWords, NEIGHBOURHOOD_HINTS, Set.of())) {
             return GeoGranularity.NEIGHBOURHOOD;
         }
-        if (containsAnyKeyword(normalizedContext, DISTRICT_HINTS)) {
+        if (containsHintWord(questionWords, DISTRICT_HINTS, Set.of())) {
             return GeoGranularity.DISTRICT;
         }
-        if (containsAnyKeyword(normalizedContext, CITY_HINTS)) {
+        if (containsHintWord(questionWords, CITY_HINTS, CITY_WORD_HINTS)) {
             return GeoGranularity.CITY;
         }
         return null;
+    }
+
+    private List<String> words(String value) {
+        String normalized = normalize(value);
+        return normalized.isBlank() ? List.of() : List.of(normalized.split(" "));
+    }
+
+    // Prefix hints also match suffixed forms ("ilcenizde", "mahallesi"); word hints must be a whole word.
+    private boolean containsHintWord(List<String> words, Collection<String> prefixHints, Collection<String> wordHints) {
+        for (String word : words) {
+            for (String hint : prefixHints) {
+                String normalizedHint = normalize(hint);
+                if (!normalizedHint.isBlank() && word.startsWith(normalizedHint)) {
+                    return true;
+                }
+            }
+            for (String hint : wordHints) {
+                if (word.equals(normalize(hint))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private ObjectNode buildGeoLexiconNode(GeoScope scope) {

@@ -36,6 +36,7 @@ import java.text.Normalizer;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -243,7 +244,9 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             "ciftci",
             "programci", "yazilimci"
     );
-    private static final Map<String, List<String>> DEFAULT_SPECIAL_ANSWERS = Map.ofEntries(
+    // Checked in declaration order. Map.ofEntries has no stable iteration order, which made the
+    // matched special answer differ between JVM runs.
+    private static final Map<String, List<String>> DEFAULT_SPECIAL_ANSWERS = orderedSpecialAnswers(
             Map.entry("bilmiyorum", List.of(
                     "bilmiyorum",
                     "fikrim yok",
@@ -748,6 +751,12 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     }
 
     private NormalizedAnswer normalizeSingleChoice(SurveyQuestion question, List<SurveyQuestionOption> options, String raw) {
+        // An answer that is exactly one option's label wins before any contextual heuristic.
+        SurveyQuestionOption exactLabelMatch = matchExactOptionLabel(options, raw);
+        if (exactLabelMatch != null) {
+            return NormalizedAnswer.validOption(raw, exactLabelMatch, List.of(exactLabelMatch.getLabel()));
+        }
+
         if (looksLikeYesNo(options)) {
             SurveyQuestionOption matchedYesNo = matchYesNoOption(options, raw);
             if (matchedYesNo != null) {
@@ -1177,14 +1186,30 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
                 if (normalizedAlias.isBlank()) {
                     continue;
                 }
-                if (normalizedCandidate.equals(normalizedAlias)
-                        || normalizedCandidate.contains(normalizedAlias)
-                        || normalizedAlias.contains(normalizedCandidate)) {
+                if (containsWords(normalizedCandidate, normalizedAlias)) {
                     return new SpecialAnswerMatch(entry.getKey(), humanizeCode(entry.getKey()));
                 }
             }
         }
         return null;
+    }
+
+    @SafeVarargs
+    private static Map<String, List<String>> orderedSpecialAnswers(Map.Entry<String, List<String>>... entries) {
+        Map<String, List<String>> ordered = new LinkedHashMap<>();
+        for (Map.Entry<String, List<String>> entry : entries) {
+            ordered.put(entry.getKey(), entry.getValue());
+        }
+        return Collections.unmodifiableMap(ordered);
+    }
+
+    // Whole-word match on normalized text: "pas" must not match inside "bayrampasa", and a short
+    // reply such as "istiyorum" must not match a longer alias like "gecmek istiyorum".
+    private boolean containsWords(String normalizedText, String normalizedPhrase) {
+        if (normalizedText.isBlank() || normalizedPhrase.isBlank()) {
+            return false;
+        }
+        return (" " + normalizedText + " ").contains(" " + normalizedPhrase + " ");
     }
 
     private Map<String, List<String>> extractSpecialAnswers(SurveyQuestion question) {
@@ -1760,7 +1785,16 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
                 "ikisine gore",
                 "ikisi de",
                 "ikiside")) {
-            return findOptionContainingAny(options, "her ikisi", "ikisi", "both");
+            return findSingleOptionContainingAny(options, "her ikisi", "ikisi", "both");
+        }
+
+        // The party/candidate shortcuts are only for "do you vote by party or by candidate?" questions.
+        // On a question that lists parties, "parti" appears in several options and in answers such as
+        // "IYI Parti", so matching on it would pick whichever party is listed first.
+        SurveyQuestionOption partyPreferenceOption = findSingleOptionContainingAny(options, "partiye", "parti bazli", "party");
+        SurveyQuestionOption candidatePreferenceOption = findSingleOptionContainingAny(options, "adaya", "adaylara", "milletvekili", "candidate");
+        if (partyPreferenceOption == null || candidatePreferenceOption == null) {
+            return null;
         }
         if (containsAnyPhrase(normalized,
                 "partiye gore",
@@ -1768,7 +1802,7 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
                 "parti bazli",
                 "parti tercihi",
                 "parti")) {
-            return findOptionContainingAny(options, "parti", "partiye gore", "party");
+            return partyPreferenceOption;
         }
         if (containsAnyPhrase(normalized,
                 "adaylara gore",
@@ -1777,29 +1811,35 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
                 "milletvekili adayina gore",
                 "aday",
                 "milletvekili")) {
-            return findOptionContainingAny(options, "aday", "milletvekili", "candidate");
+            return candidatePreferenceOption;
         }
         return null;
     }
 
-    private SurveyQuestionOption findOptionContaining(List<SurveyQuestionOption> options, String token) {
-        return options.stream()
-                .filter(option -> normalize(option.getLabel() + " " + option.getOptionCode() + " " + option.getValue()).contains(token))
-                .findFirst()
-                .orElse(null);
-    }
-
-    private SurveyQuestionOption findOptionContainingAny(List<SurveyQuestionOption> options, String... tokens) {
-        if (tokens == null || tokens.length == 0) {
-            return null;
-        }
+    private SurveyQuestionOption findSingleOptionContainingAny(List<SurveyQuestionOption> options, String... tokens) {
         for (String token : tokens) {
-            SurveyQuestionOption matched = findOptionContaining(options, token);
-            if (matched != null) {
-                return matched;
+            List<SurveyQuestionOption> matches = options.stream()
+                    .filter(option -> normalize(option.getLabel() + " " + option.getOptionCode() + " " + option.getValue()).contains(token))
+                    .toList();
+            if (matches.size() == 1) {
+                return matches.getFirst();
+            }
+            if (matches.size() > 1) {
+                return null;
             }
         }
         return null;
+    }
+
+    private SurveyQuestionOption matchExactOptionLabel(List<SurveyQuestionOption> options, String raw) {
+        String normalizedCandidate = normalize(raw);
+        if (normalizedCandidate.isBlank()) {
+            return null;
+        }
+        List<SurveyQuestionOption> matches = options.stream()
+                .filter(option -> normalizedCandidate.equals(normalize(option.getLabel())))
+                .toList();
+        return matches.size() == 1 ? matches.getFirst() : null;
     }
 
     private boolean looksLikeYesNo(List<SurveyQuestionOption> options) {
