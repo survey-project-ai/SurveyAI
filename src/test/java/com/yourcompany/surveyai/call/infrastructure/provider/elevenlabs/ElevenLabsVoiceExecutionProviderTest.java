@@ -567,6 +567,72 @@ class ElevenLabsVoiceExecutionProviderTest {
         });
     }
 
+    @Test
+    void parseWebhook_keepsCompletedInterviewWhenRespondentMentionsBeingBusyMidCall() {
+        List<ProviderWebhookEvent> events = provider.parseWebhook(
+                new ProviderWebhookRequest(
+                        CallProvider.ELEVENLABS,
+                        """
+                        {
+                          "type": "post_call_transcription",
+                          "event_timestamp": "2026-04-10T10:00:00Z",
+                          "data": {
+                            "conversation_id": "conv_completed",
+                            "status": "done",
+                            "transcript": [
+                              {"role": "agent", "message": "Merhaba, kısa bir anket için arıyorum."},
+                              {"role": "user", "message": "Alo, buyurun."},
+                              {"role": "agent", "message": "Hizmetlerden memnun musunuz?"},
+                              {"role": "user", "message": "Evet memnunum."},
+                              {"role": "agent", "message": "Neden?"},
+                              {"role": "user", "message": "Şu anda meşgulüm ama kısaca söyleyeyim, ulaşım iyi."},
+                              {"role": "agent", "message": "Teşekkürler, iyi günler."}
+                            ]
+                          }
+                        }
+                        """,
+                        Map.of()
+                ),
+                configuration(false)
+        );
+
+        assertThat(events).singleElement().satisfies(event -> {
+            assertThat(event.jobStatus()).isEqualTo(CallJobStatus.COMPLETED);
+            assertThat(event.attemptStatus()).isNotEqualTo(CallAttemptStatus.VOICEMAIL);
+            assertThat(event.errorMessage()).isNull();
+        });
+    }
+
+    @Test
+    void parseWebhook_ignoresVoicemailPhrasesSpokenByTheAgent() {
+        List<ProviderWebhookEvent> events = provider.parseWebhook(
+                new ProviderWebhookRequest(
+                        CallProvider.ELEVENLABS,
+                        """
+                        {
+                          "type": "post_call_transcription",
+                          "event_timestamp": "2026-04-10T10:00:00Z",
+                          "data": {
+                            "conversation_id": "conv_agent_phrase",
+                            "status": "done",
+                            "transcript": [
+                              {"role": "agent", "message": "Merhaba, şu anda meşgulseniz daha sonra da arayabilirim."},
+                              {"role": "user", "message": "Yok, uygunum."}
+                            ]
+                          }
+                        }
+                        """,
+                        Map.of()
+                ),
+                configuration(false)
+        );
+
+        assertThat(events).singleElement().satisfies(event -> {
+            assertThat(event.jobStatus()).isEqualTo(CallJobStatus.COMPLETED);
+            assertThat(event.attemptStatus()).isNotEqualTo(CallAttemptStatus.VOICEMAIL);
+        });
+    }
+
     private ProviderDispatchRequest buildRequest() {
         Company company = new Company();
         company.setId(UUID.randomUUID());

@@ -50,7 +50,8 @@ import org.springframework.web.client.RestClientResponseException;
 public class ElevenLabsVoiceExecutionProvider implements VoiceExecutionProvider {
 
     private static final Logger log = LoggerFactory.getLogger(ElevenLabsVoiceExecutionProvider.class);
-    private static final Pattern VOICE_DIRECTION_PATTERN = Pattern.compile("\\[(?:[a-zA-Z_\\-]{2,20})]|\\((?:[a-zA-Z_\\-]{2,20})\\)");
+    private static final int MAX_VOICEMAIL_GREETING_USER_TURNS = 2;
+    private static final Pattern VOICE_DIRECTION_PATTERN =Pattern.compile("\\[(?:[a-zA-Z_\\-]{2,20})]|\\((?:[a-zA-Z_\\-]{2,20})\\)");
 
     private final ObjectMapper objectMapper;
     private final ElevenLabsApiClient apiClient;
@@ -281,7 +282,7 @@ public class ElevenLabsVoiceExecutionProvider implements VoiceExecutionProvider 
         String eventType = firstNonBlank(text(root, "type"), text(root, "event"), text(root, "event_type"), "elevenlabs_webhook");
         String transcriptText = extractTranscript(data);
         boolean voicemailLikeOutcome = !isExplicitNonVoicemailTerminalStatus(providerStatus)
-                && isVoicemailLikeOutcome(data, transcriptText);
+                && isVoicemailLikeOutcome(data);
         if (voicemailLikeOutcome) {
             providerStatus = "voicemail";
         }
@@ -636,14 +637,13 @@ public class ElevenLabsVoiceExecutionProvider implements VoiceExecutionProvider 
         return null;
     }
 
-    private boolean isVoicemailLikeOutcome(JsonNode data, String transcriptText) {
+    private boolean isVoicemailLikeOutcome(JsonNode data) {
         if (containsVoicemailSignal(resolveFailureMessage(data))
                 || containsVoicemailSignal(text(data.path("metadata").path("body"), "call_status"))
                 || containsVoicemailSignal(text(data.path("metadata").path("body"), "answered_by"))
                 || containsVoicemailSignal(text(data.path("metadata").path("body"), "AnsweredBy"))
                 || containsVoicemailSignal(text(data, "termination_reason"))
-                || containsVoicemailSignal(text(data, "failure_reason"))
-                || containsVoicemailSignal(transcriptText)) {
+                || containsVoicemailSignal(text(data, "failure_reason"))) {
             return true;
         }
 
@@ -653,7 +653,7 @@ public class ElevenLabsVoiceExecutionProvider implements VoiceExecutionProvider 
         }
 
         boolean hasAgentMessage = false;
-        boolean hasUserMessage = false;
+        List<String> userMessages = new ArrayList<>();
         for (JsonNode item : transcriptNode) {
             String role = firstNonBlank(text(item, "role"), text(item, "speaker"));
             String message = firstNonBlank(text(item, "message"), text(item, "text"));
@@ -664,14 +664,17 @@ public class ElevenLabsVoiceExecutionProvider implements VoiceExecutionProvider 
                 hasAgentMessage = true;
             }
             if (role != null && role.equalsIgnoreCase("user")) {
-                hasUserMessage = true;
-                if (containsVoicemailSignal(message)) {
-                    return true;
-                }
+                userMessages.add(message);
             }
         }
 
-        return hasAgentMessage && !hasUserMessage && isCompletedPostCallPayload(data);
+        if (userMessages.isEmpty()) {
+            return hasAgentMessage && isCompletedPostCallPayload(data);
+        }
+        // A voicemail greeting is one or two callee turns. Scanning the agent's lines or a whole
+        // interview for phrases such as "şu anda meşgul" turned completed interviews into voicemail.
+        return userMessages.size() <= MAX_VOICEMAIL_GREETING_USER_TURNS
+                && userMessages.stream().anyMatch(this::containsVoicemailSignal);
     }
 
     private boolean isCompletedPostCallPayload(JsonNode data) {
