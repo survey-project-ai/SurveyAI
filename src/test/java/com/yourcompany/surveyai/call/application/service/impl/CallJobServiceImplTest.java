@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -347,7 +348,7 @@ class CallJobServiceImplTest {
     }
 
     @Test
-    void retryOperationCallJob_dispatchesNewAttemptForEligibleFailedJob() {
+    void retryOperationCallJob_queuesEligibleFailedJobAheadOfTheQueue() {
         Fixture fixture = new Fixture();
         CallAttempt failedAttempt = fixture.buildAttempt(1, CallAttemptStatus.FAILED, "provider-1");
         failedAttempt.setFailureReason("Provider rejected call");
@@ -365,34 +366,45 @@ class CallJobServiceImplTest {
         when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(any()))
                 .thenReturn(List.of());
 
-        doAnswer(invocation -> {
-            fixture.callJob.setAttemptCount(2);
-            fixture.callJob.setStatus(CallJobStatus.QUEUED);
-            fixture.callJob.setLastErrorCode(null);
-            fixture.callJob.setLastErrorMessage(null);
-            fixture.contact.setStatus(OperationContactStatus.CALLING);
-
-            CallAttempt retriedAttempt = fixture.buildAttempt(2, CallAttemptStatus.INITIATED, "provider-2");
-            attempts.clear();
-            attempts.add(retriedAttempt);
-            attempts.add(failedAttempt);
-            return null;
-        }).when(callJobDispatcher).dispatchPreparedJobs(any());
-
         CallJobDetailResponseDto detail = service.retryOperationCallJob(
                 fixture.company.getId(),
                 fixture.operation.getId(),
                 fixture.callJob.getId()
         );
 
-        verify(callJobDispatcher).dispatchPreparedJobs(any());
+        verify(callJobDispatcher).validateActiveProviderConfiguration();
+        verify(callJobDispatcher).requestDispatch(fixture.operation.getId());
+        assertThat(fixture.callJob.getStatus()).isEqualTo(CallJobStatus.RETRY);
+        assertThat(fixture.callJob.getPriority()).isEqualTo((short) 10);
+        assertThat(fixture.callJob.getAvailableAt()).isBeforeOrEqualTo(OffsetDateTime.now());
+        assertThat(fixture.contact.getStatus()).isEqualTo(OperationContactStatus.RETRY);
         assertThat(fixture.contact.getRetryCount()).isEqualTo(1);
-        assertThat(detail.retryable()).isFalse();
-        assertThat(detail.rawStatus()).isEqualTo(CallJobStatus.QUEUED);
-        assertThat(detail.attemptCount()).isEqualTo(2);
-        assertThat(detail.retried()).isTrue();
-        assertThat(detail.attempts()).hasSize(2);
-        assertThat(detail.attempts().get(0).attemptNumber()).isEqualTo(2);
+        assertThat(detail.rawStatus()).isEqualTo(CallJobStatus.RETRY);
+        assertThat(detail.attempts()).hasSize(1);
+    }
+
+    @Test
+    void retryOperationCallJob_keepsJobUnchangedWhenNoCallCanBePlaced() {
+        Fixture fixture = new Fixture();
+        CallAttempt failedAttempt = fixture.buildAttempt(1, CallAttemptStatus.FAILED, "provider-1");
+
+        mockJobContext(fixture);
+        when(callAttemptRepository.findTopByCallJob_IdAndDeletedAtIsNullOrderByAttemptNumberDesc(fixture.callJob.getId()))
+                .thenReturn(Optional.of(failedAttempt));
+        doThrow(new ValidationException("ElevenLabs api key is required"))
+                .when(callJobDispatcher).validateActiveProviderConfiguration();
+        CallJobStatus statusBefore = fixture.callJob.getStatus();
+
+        assertThatThrownBy(() -> service.retryOperationCallJob(
+                fixture.company.getId(),
+                fixture.operation.getId(),
+                fixture.callJob.getId()
+        ))
+                .isInstanceOf(ValidationException.class)
+                .hasMessage("ElevenLabs api key is required");
+
+        assertThat(fixture.callJob.getStatus()).isEqualTo(statusBefore);
+        verify(callJobDispatcher, never()).requestDispatch(any());
     }
 
     @Test
@@ -415,27 +427,15 @@ class CallJobServiceImplTest {
         when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(any()))
                 .thenReturn(List.of());
 
-        doAnswer(invocation -> {
-            fixture.callJob.setAttemptCount(2);
-            fixture.callJob.setStatus(CallJobStatus.QUEUED);
-            fixture.contact.setStatus(OperationContactStatus.CALLING);
-            CallAttempt retriedAttempt = fixture.buildAttempt(2, CallAttemptStatus.INITIATED, "provider-2");
-            attempts.clear();
-            attempts.add(retriedAttempt);
-            attempts.add(completedAttempt);
-            return null;
-        }).when(callJobDispatcher).dispatchPreparedJobs(any());
-
         CallJobDetailResponseDto detail = service.retryOperationCallJob(
                 fixture.company.getId(),
                 fixture.operation.getId(),
                 fixture.callJob.getId()
         );
 
-        verify(callJobDispatcher).dispatchPreparedJobs(any());
-        assertThat(detail.rawStatus()).isEqualTo(CallJobStatus.QUEUED);
-        assertThat(detail.retryable()).isFalse();
-        assertThat(detail.attemptCount()).isEqualTo(2);
+        verify(callJobDispatcher).requestDispatch(fixture.operation.getId());
+        assertThat(detail.rawStatus()).isEqualTo(CallJobStatus.RETRY);
+        assertThat(detail.attemptCount()).isEqualTo(1);
     }
 
     @Test
@@ -455,7 +455,7 @@ class CallJobServiceImplTest {
                 .isInstanceOf(ValidationException.class)
                 .hasMessage("Call job already has an active execution attempt");
 
-        verify(callJobDispatcher, never()).dispatchPreparedJobs(any());
+        verify(callJobDispatcher, never()).requestDispatch(any());
     }
 
     @Test
@@ -493,31 +493,20 @@ class CallJobServiceImplTest {
                 org.mockito.ArgumentMatchers.eq(fixture.company.getId())
         )).thenAnswer(invocation -> Optional.of(savedRedialJobRef[0]));
 
-        doAnswer(invocation -> {
-            CallJob dispatchedJob = invocation.<List<CallJob>>getArgument(0).get(0);
-            dispatchedJob.setAttemptCount(1);
-            dispatchedJob.setStatus(CallJobStatus.QUEUED);
-            fixture.contact.setStatus(OperationContactStatus.CALLING);
-            return null;
-        }).when(callJobDispatcher).dispatchPreparedJobs(any());
-
         CallJobDetailResponseDto detail = service.redialOperationCallJob(
                 fixture.company.getId(),
                 fixture.operation.getId(),
                 fixture.callJob.getId()
         );
 
-        verify(callJobDispatcher).dispatchPreparedJobs(argThat(jobs ->
-                jobs.size() == 1
-                        && savedRedialJobRef[0] != null
-                        && jobs.get(0).getId().equals(savedRedialJobRef[0].getId())
-        ));
+        verify(callJobDispatcher).validateActiveProviderConfiguration();
+        verify(callJobDispatcher).requestDispatch(fixture.operation.getId());
         assertThat(savedRedialJobRef[0]).isNotNull();
         assertThat(savedRedialJobRef[0].getOperationContact().getId()).isEqualTo(fixture.contact.getId());
         assertThat(savedRedialJobRef[0].getIdempotencyKey()).contains(":redial:");
+        assertThat(savedRedialJobRef[0].getPriority()).isEqualTo((short) 10);
         assertThat(detail.id()).isEqualTo(savedRedialJobRef[0].getId());
-        assertThat(detail.rawStatus()).isEqualTo(CallJobStatus.QUEUED);
-        assertThat(detail.redialable()).isTrue();
+        assertThat(detail.rawStatus()).isEqualTo(CallJobStatus.PENDING);
         assertThat(fixture.contact.getRetryCount()).isEqualTo(1);
     }
 
@@ -556,23 +545,15 @@ class CallJobServiceImplTest {
                 org.mockito.ArgumentMatchers.eq(fixture.company.getId())
         )).thenAnswer(invocation -> Optional.of(savedRedialJobRef[0]));
 
-        doAnswer(invocation -> {
-            CallJob dispatchedJob = invocation.<List<CallJob>>getArgument(0).get(0);
-            dispatchedJob.setAttemptCount(1);
-            dispatchedJob.setStatus(CallJobStatus.QUEUED);
-            fixture.contact.setStatus(OperationContactStatus.CALLING);
-            return null;
-        }).when(callJobDispatcher).dispatchPreparedJobs(any());
-
         CallJobDetailResponseDto detail = service.redialOperationCallJob(
                 fixture.company.getId(),
                 fixture.operation.getId(),
                 fixture.callJob.getId()
         );
 
-        verify(callJobDispatcher).dispatchPreparedJobs(any());
+        verify(callJobDispatcher).requestDispatch(fixture.operation.getId());
         assertThat(detail.id()).isEqualTo(savedRedialJobRef[0].getId());
-        assertThat(detail.rawStatus()).isEqualTo(CallJobStatus.QUEUED);
+        assertThat(detail.rawStatus()).isEqualTo(CallJobStatus.PENDING);
     }
 
     private void mockManualEditContext(

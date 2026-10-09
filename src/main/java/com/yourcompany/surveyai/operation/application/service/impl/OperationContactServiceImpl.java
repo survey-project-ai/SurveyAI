@@ -298,7 +298,7 @@ public class OperationContactServiceImpl implements OperationContactService {
         callJobRepository.saveAll(jobs);
 
         if (operation.getStatus() == OperationStatus.RUNNING) {
-            callJobDispatcher.dispatchNextPreparedJob(operation.getId());
+            callJobDispatcher.requestDispatch(operation.getId());
         }
     }
 

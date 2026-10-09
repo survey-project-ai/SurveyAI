@@ -218,7 +218,7 @@ class OperationServiceImplTest {
                     assertThat(job.getScheduledFor()).isEqualTo(response.startedAt());
                     assertThat(job.getAvailableAt()).isEqualTo(response.startedAt());
                 });
-        verify(callJobDispatcher).dispatchNextPreparedJob(operationId);
+        verify(callJobDispatcher).requestDispatch(operationId);
     }
 
     @Test

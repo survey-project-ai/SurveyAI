@@ -12,6 +12,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yourcompany.surveyai.call.application.provider.CallProviderRegistry;
 import com.yourcompany.surveyai.call.application.service.CallJobDispatcher;
 import com.yourcompany.surveyai.call.application.service.ProviderExecutionObservationService;
+import com.yourcompany.surveyai.call.application.support.CallRetryPolicy;
+import com.yourcompany.surveyai.call.configuration.CallQueueProperties;
 import com.yourcompany.surveyai.call.configuration.VoiceExecutionProperties;
 import com.yourcompany.surveyai.call.configuration.VoiceProviderMode;
 import com.yourcompany.surveyai.call.configuration.VoiceProviderConfigurationResolver;
@@ -102,7 +104,7 @@ class ProviderWebhookIngestionServiceImplTest {
         assertThat(attempt.getStatus()).isEqualTo(CallAttemptStatus.COMPLETED);
         assertThat(attempt.getCallJob().getStatus()).isEqualTo(CallJobStatus.COMPLETED);
         assertThat(attempt.getOperationContact().getStatus()).isEqualTo(OperationContactStatus.COMPLETED);
-        verify(callJobDispatcher).dispatchNextPreparedJob(attempt.getCallJob().getOperation().getId());
+        verify(callJobDispatcher).requestDispatch(attempt.getCallJob().getOperation().getId());
     }
 
     @Test
@@ -227,9 +229,11 @@ class ProviderWebhookIngestionServiceImplTest {
 
         assertThat(applied).isEqualTo(1);
         assertThat(attempt.getStatus()).isEqualTo(CallAttemptStatus.BUSY);
-        assertThat(attempt.getCallJob().getStatus()).isEqualTo(CallJobStatus.FAILED);
-        assertThat(attempt.getOperationContact().getStatus()).isEqualTo(OperationContactStatus.FAILED);
+        // First of three attempts: the contact is called again later.
+        assertThat(attempt.getCallJob().getStatus()).isEqualTo(CallJobStatus.RETRY);
+        assertThat(attempt.getOperationContact().getStatus()).isEqualTo(OperationContactStatus.RETRY);
         verify(surveyResponseIngestionService, never()).ingest(any(), any());
+        verify(callJobDispatcher).requestDispatch(attempt.getOperation().getId());
     }
 
     @Test
@@ -272,8 +276,8 @@ class ProviderWebhookIngestionServiceImplTest {
 
         assertThat(applied).isEqualTo(1);
         assertThat(attempt.getStatus()).isEqualTo(CallAttemptStatus.VOICEMAIL);
-        assertThat(attempt.getCallJob().getStatus()).isEqualTo(CallJobStatus.FAILED);
-        assertThat(attempt.getOperationContact().getStatus()).isEqualTo(OperationContactStatus.FAILED);
+        assertThat(attempt.getCallJob().getStatus()).isEqualTo(CallJobStatus.RETRY);
+        assertThat(attempt.getOperationContact().getStatus()).isEqualTo(OperationContactStatus.RETRY);
         verify(surveyResponseIngestionService, never()).ingest(any(), any());
     }
 
@@ -305,7 +309,7 @@ class ProviderWebhookIngestionServiceImplTest {
         assertThat(applied).isEqualTo(1);
         assertThat(firstAttempt.getCallJob().getStatus()).isEqualTo(CallJobStatus.FAILED);
         assertThat(firstAttempt.getOperationContact().getStatus()).isEqualTo(OperationContactStatus.FAILED);
-        verify(callJobDispatcher).dispatchNextPreparedJob(operationId);
+        verify(callJobDispatcher).requestDispatch(operationId);
     }
 
     @Test
@@ -364,7 +368,40 @@ class ProviderWebhookIngestionServiceImplTest {
         assertThat(attempt.getStatus()).isEqualTo(CallAttemptStatus.IN_PROGRESS);
         assertThat(callJob.getStatus()).isEqualTo(CallJobStatus.IN_PROGRESS);
         verify(surveyResponseIngestionService, never()).ingest(any(), any());
-        verify(callJobDispatcher, never()).dispatchNextPreparedJob(any());
+        verify(callJobDispatcher, never()).requestDispatch(any());
+    }
+
+    @Test
+    void ingest_lateWebhookForEarlierAttemptDoesNotChangeRetriedJob() {
+        CallAttempt firstAttempt = buildAttempt();
+        CallJob callJob = firstAttempt.getCallJob();
+        // The job was retried and its second attempt is ringing now.
+        callJob.setAttemptCount(2);
+        callJob.setStatus(CallJobStatus.QUEUED);
+        firstAttempt.getOperationContact().setStatus(OperationContactStatus.CALLING);
+        when(callAttemptRepository.findByProviderAndProviderCallIdAndDeletedAtIsNull(CallProvider.MOCK, firstAttempt.getProviderCallId()))
+                .thenReturn(Optional.of(firstAttempt));
+
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getHeaderNames()).thenReturn(Collections.enumeration(Collections.emptyList()));
+
+        int applied = ingestionService.ingest(
+                CallProvider.MOCK,
+                """
+                {
+                  "providerCallId": "%s",
+                  "status": "FAILED",
+                  "occurredAt": "%s"
+                }
+                """.formatted(firstAttempt.getProviderCallId(), OffsetDateTime.now()),
+                request
+        );
+
+        assertThat(applied).isEqualTo(1);
+        assertThat(firstAttempt.getStatus()).isEqualTo(CallAttemptStatus.FAILED);
+        assertThat(callJob.getStatus()).isEqualTo(CallJobStatus.QUEUED);
+        assertThat(firstAttempt.getOperationContact().getStatus()).isEqualTo(OperationContactStatus.CALLING);
+        verify(callJobDispatcher, never()).requestDispatch(any());
     }
 
     private ProviderWebhookIngestionServiceImpl createIngestionService(VoiceExecutionProperties properties) {
@@ -379,7 +416,8 @@ class ProviderWebhookIngestionServiceImplTest {
                 operationContactRepository,
                 surveyResponseIngestionService,
                 providerExecutionObservationService,
-                callJobDispatcher
+                callJobDispatcher,
+                new CallRetryPolicy(new CallQueueProperties())
         );
     }
 

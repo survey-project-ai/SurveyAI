@@ -36,7 +36,15 @@ public interface CallJobRepository extends JpaRepository<CallJob, UUID>, JpaSpec
             OffsetDateTime updatedAfter
     );
 
-    Optional<CallJob> findFirstByOperation_IdAndStatusInAndAvailableAtBeforeAndDeletedAtIsNullOrderByScheduledForAscCreatedAtAsc(
+    long countByOperation_IdAndStatusInAndDeletedAtIsNull(UUID operationId, Set<CallJobStatus> statuses);
+
+    List<CallJob> findAllByOperation_IdAndStatusInAndUpdatedAtBeforeAndDeletedAtIsNull(
+            UUID operationId,
+            Set<CallJobStatus> statuses,
+            OffsetDateTime updatedBefore
+    );
+
+    Optional<CallJob> findFirstByOperation_IdAndStatusInAndAvailableAtBeforeAndDeletedAtIsNullOrderByPriorityDescScheduledForAscCreatedAtAsc(
             UUID operationId,
             Set<CallJobStatus> statuses,
             OffsetDateTime availableAt

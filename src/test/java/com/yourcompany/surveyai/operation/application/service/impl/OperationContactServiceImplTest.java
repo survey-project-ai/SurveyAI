@@ -79,7 +79,7 @@ class OperationContactServiceImplTest {
                     && savedJobs.get(0).getOperation().getId().equals(fixture.operation.getId())
                     && savedJobs.get(0).getOperationContact().getPhoneNumber().equals("905551112233");
         }));
-        verify(callJobDispatcher).dispatchNextPreparedJob(fixture.operation.getId());
+        verify(callJobDispatcher).requestDispatch(fixture.operation.getId());
     }
 
     @Test
@@ -99,7 +99,7 @@ class OperationContactServiceImplTest {
 
         assertThat(response).hasSize(1);
         verify(callJobRepository, never()).saveAll(any());
-        verify(callJobDispatcher, never()).dispatchNextPreparedJob(any());
+        verify(callJobDispatcher, never()).requestDispatch(any());
     }
 
     @Test
@@ -137,7 +137,7 @@ class OperationContactServiceImplTest {
                     && savedJobs.stream().map(job -> job.getOperationContact().getPhoneNumber()).toList()
                     .containsAll(List.of("905551112233", "905551112244"));
         }));
-        verify(callJobDispatcher).dispatchNextPreparedJob(fixture.operation.getId());
+        verify(callJobDispatcher).requestDispatch(fixture.operation.getId());
     }
 
     @Test
@@ -179,7 +179,7 @@ class OperationContactServiceImplTest {
                     && savedJobs.stream().allMatch(job -> !job.getOperationContact().getPhoneNumber().equals("905551112233"))
                     && savedJobs.stream().allMatch(job -> job.getOperationContact().getMetadataJson().contains("\"originalPhoneNumber\":\"905551112233\""));
         }));
-        verify(callJobDispatcher).dispatchNextPreparedJob(fixture.operation.getId());
+        verify(callJobDispatcher).requestDispatch(fixture.operation.getId());
     }
 
     private static UploadOperationContactsRequest buildRequest(String name, String phoneNumber) {

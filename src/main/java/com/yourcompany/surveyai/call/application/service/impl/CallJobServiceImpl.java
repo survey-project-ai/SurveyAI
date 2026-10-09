@@ -65,6 +65,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class CallJobServiceImpl implements CallJobService {
 
     private static final AtomicLong REDIAL_SEQUENCE = new AtomicLong();
+    // Calls requested by an operator jump ahead of the regular queue (priority 5).
+    private static final short MANUAL_CALL_PRIORITY = 10;
 
     private static final Set<CallJobStatus> QUEUED_STATUSES = EnumSet.of(
             CallJobStatus.PENDING,
@@ -169,38 +171,23 @@ public class CallJobServiceImpl implements CallJobService {
                 .orElse(null);
 
         validateRetryEligibility(callJob, latestAttempt);
-
-        CallJobStatus previousStatus = callJob.getStatus();
-        String previousErrorCode = callJob.getLastErrorCode();
-        String previousErrorMessage = callJob.getLastErrorMessage();
-        OperationContactStatus previousContactStatus = contact.getStatus();
+        callJobDispatcher.validateActiveProviderConfiguration();
 
         callJob.setStatus(CallJobStatus.RETRY);
         callJob.setAvailableAt(OffsetDateTime.now());
+        callJob.setPriority(MANUAL_CALL_PRIORITY);
         callJob.setLockedAt(null);
         callJob.setLockedBy(null);
         callJobRepository.save(callJob);
 
         contact.setStatus(OperationContactStatus.RETRY);
-        contact.setNextRetryAt(null);
-        operationContactRepository.save(contact);
-
-        try {
-            callJobDispatcher.dispatchPreparedJobs(List.of(callJob));
-        } catch (RuntimeException error) {
-            callJob.setStatus(previousStatus);
-            callJob.setLastErrorCode(previousErrorCode);
-            callJob.setLastErrorMessage(previousErrorMessage);
-            callJobRepository.save(callJob);
-
-            contact.setStatus(previousContactStatus);
-            operationContactRepository.save(contact);
-            throw error;
-        }
-
         contact.setRetryCount((contact.getRetryCount() == null ? 0 : contact.getRetryCount()) + 1);
         contact.setNextRetryAt(null);
         operationContactRepository.save(contact);
+
+        // The queue places the call after this transaction commits, within calling hours and the
+        // operation's concurrency limit; in a paused operation it waits until the operation resumes.
+        callJobDispatcher.requestDispatch(operationId);
 
         return buildDetailDto(getCallJob(companyId, operationId, callJobId));
     }
@@ -215,17 +202,17 @@ public class CallJobServiceImpl implements CallJobService {
                 .orElse(null);
 
         validateRedialEligibility(sourceJob, latestAttempt);
+        callJobDispatcher.validateActiveProviderConfiguration();
 
         OperationContact contact = sourceJob.getOperationContact();
         OffsetDateTime now = OffsetDateTime.now();
-        OperationContactStatus previousContactStatus = contact.getStatus();
 
         CallJob redialJob = new CallJob();
         redialJob.setCompany(sourceJob.getCompany());
         redialJob.setOperation(sourceJob.getOperation());
         redialJob.setOperationContact(contact);
         redialJob.setStatus(CallJobStatus.PENDING);
-        redialJob.setPriority(sourceJob.getPriority() != null ? sourceJob.getPriority() : (short) 5);
+        redialJob.setPriority(MANUAL_CALL_PRIORITY);
         redialJob.setScheduledFor(now);
         redialJob.setAvailableAt(now);
         redialJob.setAttemptCount(0);
@@ -238,20 +225,11 @@ public class CallJobServiceImpl implements CallJobService {
         redialJob = callJobRepository.save(redialJob);
 
         contact.setStatus(OperationContactStatus.RETRY);
-        contact.setNextRetryAt(null);
-        operationContactRepository.save(contact);
-
-        try {
-            callJobDispatcher.dispatchPreparedJobs(List.of(redialJob));
-        } catch (RuntimeException error) {
-            contact.setStatus(previousContactStatus);
-            operationContactRepository.save(contact);
-            throw error;
-        }
-
         contact.setRetryCount((contact.getRetryCount() == null ? 0 : contact.getRetryCount()) + 1);
         contact.setNextRetryAt(null);
         operationContactRepository.save(contact);
+
+        callJobDispatcher.requestDispatch(operationId);
 
         return buildDetailDto(getCallJob(companyId, operationId, redialJob.getId()));
     }

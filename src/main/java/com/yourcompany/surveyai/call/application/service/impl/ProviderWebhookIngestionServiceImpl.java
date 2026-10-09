@@ -7,6 +7,8 @@ import com.yourcompany.surveyai.call.application.provider.VoiceExecutionProvider
 import com.yourcompany.surveyai.call.application.service.ProviderExecutionObservationService;
 import com.yourcompany.surveyai.call.application.service.ProviderWebhookIngestionService;
 import com.yourcompany.surveyai.call.application.service.CallJobDispatcher;
+import com.yourcompany.surveyai.call.application.support.CallRetryPolicy;
+import com.yourcompany.surveyai.call.application.support.CallStatusSnapshotApplier;
 import com.yourcompany.surveyai.call.configuration.VoiceProviderConfiguration;
 import com.yourcompany.surveyai.call.configuration.VoiceProviderConfigurationResolver;
 import com.yourcompany.surveyai.call.domain.entity.CallAttempt;
@@ -20,7 +22,6 @@ import com.yourcompany.surveyai.call.repository.CallJobRepository;
 import com.yourcompany.surveyai.common.exception.NotFoundException;
 import com.yourcompany.surveyai.common.exception.ValidationException;
 import com.yourcompany.surveyai.operation.domain.entity.OperationContact;
-import com.yourcompany.surveyai.operation.domain.enums.OperationContactStatus;
 import com.yourcompany.surveyai.operation.repository.OperationContactRepository;
 import com.yourcompany.surveyai.response.application.service.SurveyResponseIngestionService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -56,7 +57,13 @@ public class ProviderWebhookIngestionServiceImpl implements ProviderWebhookInges
     private final OperationContactRepository operationContactRepository;
     private final SurveyResponseIngestionService surveyResponseIngestionService;
     private final ProviderExecutionObservationService providerExecutionObservationService;
+    private static final EnumSet<CallJobStatus> ACTIVE_JOB_STATUSES = EnumSet.of(
+            CallJobStatus.QUEUED,
+            CallJobStatus.IN_PROGRESS
+    );
+
     private final CallJobDispatcher callJobDispatcher;
+    private final CallRetryPolicy callRetryPolicy;
 
     public ProviderWebhookIngestionServiceImpl(
             CallProviderRegistry callProviderRegistry,
@@ -66,7 +73,8 @@ public class ProviderWebhookIngestionServiceImpl implements ProviderWebhookInges
             OperationContactRepository operationContactRepository,
             SurveyResponseIngestionService surveyResponseIngestionService,
             ProviderExecutionObservationService providerExecutionObservationService,
-            CallJobDispatcher callJobDispatcher
+            CallJobDispatcher callJobDispatcher,
+            CallRetryPolicy callRetryPolicy
     ) {
         this.callProviderRegistry = callProviderRegistry;
         this.configurationResolver = configurationResolver;
@@ -76,6 +84,7 @@ public class ProviderWebhookIngestionServiceImpl implements ProviderWebhookInges
         this.surveyResponseIngestionService = surveyResponseIngestionService;
         this.providerExecutionObservationService = providerExecutionObservationService;
         this.callJobDispatcher = callJobDispatcher;
+        this.callRetryPolicy = callRetryPolicy;
     }
 
     @Override
@@ -176,24 +185,25 @@ public class ProviderWebhookIngestionServiceImpl implements ProviderWebhookInges
         attempt.setRawProviderPayload(event.rawPayload() != null ? event.rawPayload() : attempt.getRawProviderPayload());
         callAttemptRepository.save(attempt);
 
-        callJob.setStatus(event.jobStatus() != null ? event.jobStatus() : callJob.getStatus());
-        callJob.setLastErrorCode(event.errorCode());
-        callJob.setLastErrorMessage(event.errorMessage());
-        callJobRepository.save(callJob);
+        // Once a job has been retried, a late webhook for an earlier attempt only updates that attempt.
+        boolean currentAttempt = CallStatusSnapshotApplier.isCurrentAttempt(callJob, attempt);
+        if (currentAttempt) {
+            callRetryPolicy.applyReportedStatus(callJob, contact, event.jobStatus(), attempt.getStatus(), OffsetDateTime.now());
+            callJob.setLastErrorCode(event.errorCode());
+            callJob.setLastErrorMessage(event.errorMessage());
+            callJobRepository.save(callJob);
 
-        if (event.jobStatus() != null) {
-            contact.setStatus(mapContactStatus(event.jobStatus()));
+            if (event.occurredAt() != null) {
+                contact.setLastCallAt(event.occurredAt());
+            }
+            operationContactRepository.save(contact);
         }
-        if (event.occurredAt() != null) {
-            contact.setLastCallAt(event.occurredAt());
-        }
-        operationContactRepository.save(contact);
 
         if (shouldIngestSurveyResult(event)) {
             surveyResponseIngestionService.ingest(attempt, event);
         }
-        if (isTerminal(callJob.getStatus())) {
-            callJobDispatcher.dispatchNextPreparedJob(callJob.getOperation().getId());
+        if (currentAttempt && !ACTIVE_JOB_STATUSES.contains(callJob.getStatus())) {
+            callJobDispatcher.requestDispatch(callJob.getOperation().getId());
         }
         providerExecutionObservationService.recordWebhookOutcome(attempt, event, ProviderExecutionOutcome.ACCEPTED, "Webhook applied to internal state");
 
@@ -281,8 +291,10 @@ public class ProviderWebhookIngestionServiceImpl implements ProviderWebhookInges
             return false;
         }
 
-        int currentRank = statusRank(attempt.getCallJob().getStatus());
-        int incomingRank = statusRank(event.jobStatus());
+        // Compared on the attempt, not the job: after a retry the job has moved on (RETRY or a newer
+        // attempt) while this attempt's own webhook is still new.
+        int currentRank = statusRank(attempt.getStatus());
+        int incomingRank = statusRank(event.attemptStatus());
         if (incomingRank < currentRank) {
             return true;
         }
@@ -308,16 +320,15 @@ public class ProviderWebhookIngestionServiceImpl implements ProviderWebhookInges
         return currentTimestamp != null && event.occurredAt().isBefore(currentTimestamp);
     }
 
-    private int statusRank(CallJobStatus status) {
+    private int statusRank(CallAttemptStatus status) {
         if (status == null) {
             return -1;
         }
         return switch (status) {
-            case PENDING -> 0;
-            case QUEUED -> 1;
+            case INITIATED -> 0;
+            case RINGING -> 1;
             case IN_PROGRESS -> 2;
-            case RETRY -> 3;
-            case COMPLETED, FAILED, DEAD_LETTER, CANCELLED -> 4;
+            case COMPLETED, FAILED, NO_ANSWER, BUSY, VOICEMAIL, CANCELLED -> 4;
         };
     }
 
@@ -356,14 +367,5 @@ public class ProviderWebhookIngestionServiceImpl implements ProviderWebhookInges
             }
         }
         return null;
-    }
-
-    private OperationContactStatus mapContactStatus(CallJobStatus jobStatus) {
-        return switch (jobStatus) {
-            case PENDING, QUEUED, IN_PROGRESS -> OperationContactStatus.CALLING;
-            case COMPLETED -> OperationContactStatus.COMPLETED;
-            case RETRY -> OperationContactStatus.RETRY;
-            case FAILED, DEAD_LETTER, CANCELLED -> OperationContactStatus.FAILED;
-        };
     }
 }

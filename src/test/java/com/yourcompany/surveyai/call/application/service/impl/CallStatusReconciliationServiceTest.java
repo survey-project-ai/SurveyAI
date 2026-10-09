@@ -3,6 +3,8 @@ package com.yourcompany.surveyai.call.application.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.yourcompany.surveyai.call.application.provider.CallProviderRegistry;
@@ -14,7 +16,11 @@ import com.yourcompany.surveyai.call.application.provider.ProviderDispatchResult
 import com.yourcompany.surveyai.call.application.provider.ProviderWebhookEvent;
 import com.yourcompany.surveyai.call.application.provider.ProviderWebhookRequest;
 import com.yourcompany.surveyai.call.application.provider.VoiceExecutionProvider;
+import com.yourcompany.surveyai.call.application.service.CallJobDispatcher;
 import com.yourcompany.surveyai.call.application.service.ProviderExecutionObservationService;
+import com.yourcompany.surveyai.call.application.support.CallRetryPolicy;
+import com.yourcompany.surveyai.call.application.support.CallStatusSnapshotApplier;
+import com.yourcompany.surveyai.call.configuration.CallQueueProperties;
 import com.yourcompany.surveyai.call.configuration.VoiceExecutionProperties;
 import com.yourcompany.surveyai.call.configuration.VoiceProviderConfigurationResolver;
 import com.yourcompany.surveyai.call.domain.entity.CallAttempt;
@@ -32,8 +38,10 @@ import com.yourcompany.surveyai.operation.repository.OperationContactRepository;
 import com.yourcompany.surveyai.survey.domain.entity.Survey;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.PlatformTransactionManager;
 
 class CallStatusReconciliationServiceTest {
 
@@ -42,8 +50,62 @@ class CallStatusReconciliationServiceTest {
     private final OperationContactRepository operationContactRepository = mock(OperationContactRepository.class);
     private final ProviderExecutionObservationService providerExecutionObservationService = mock(ProviderExecutionObservationService.class);
 
+    private final CallJobDispatcher callJobDispatcher = mock(CallJobDispatcher.class);
+
     @Test
-    void reconcileOpenAttempts_marksActiveQueuedAttemptAsFailedWhenProviderReportsFailure() {
+    void reconcileOpenAttempts_schedulesRetryWhenProviderReportsNoAnswer() {
+        CallAttempt attempt = buildAttempt();
+        mockOpenAttempt(attempt);
+
+        createService().reconcileOpenAttempts();
+
+        assertThat(attempt.getStatus()).isEqualTo(CallAttemptStatus.NO_ANSWER);
+        assertThat(attempt.getEndedAt()).isNotNull();
+        assertThat(attempt.getCallJob().getStatus()).isEqualTo(CallJobStatus.RETRY);
+        assertThat(attempt.getCallJob().getAvailableAt()).isAfter(OffsetDateTime.now().plusMinutes(110));
+        assertThat(attempt.getOperationContact().getStatus()).isEqualTo(OperationContactStatus.RETRY);
+        verify(callJobDispatcher).requestDispatch(attempt.getOperation().getId());
+    }
+
+    @Test
+    void reconcileOpenAttempts_failsJobWhenLastAttemptIsNotAnswered() {
+        CallAttempt attempt = buildAttempt();
+        attempt.setAttemptNumber(3);
+        attempt.getCallJob().setAttemptCount(3);
+        mockOpenAttempt(attempt);
+
+        createService().reconcileOpenAttempts();
+
+        assertThat(attempt.getCallJob().getStatus()).isEqualTo(CallJobStatus.FAILED);
+        assertThat(attempt.getOperationContact().getStatus()).isEqualTo(OperationContactStatus.FAILED);
+    }
+
+    @Test
+    void reconcileOpenAttempts_leavesAttemptAloneWhenAWebhookAlreadyFinishedIt() {
+        CallAttempt listedAttempt = buildAttempt();
+        mockOpenAttempt(listedAttempt);
+        // Between the query and the update, the post-call webhook completed the interview.
+        listedAttempt.setStatus(CallAttemptStatus.COMPLETED);
+        listedAttempt.getCallJob().setStatus(CallJobStatus.COMPLETED);
+
+        createService().reconcileOpenAttempts();
+
+        assertThat(listedAttempt.getStatus()).isEqualTo(CallAttemptStatus.COMPLETED);
+        assertThat(listedAttempt.getCallJob().getStatus()).isEqualTo(CallJobStatus.COMPLETED);
+        verify(callJobDispatcher, never()).requestDispatch(any());
+    }
+
+    private void mockOpenAttempt(CallAttempt attempt) {
+        when(callAttemptRepository.findTop100ByProviderAndStatusInAndProviderCallIdIsNotNullAndDeletedAtIsNullAndDialedAtBeforeOrderByDialedAtAsc(
+                any(), any(), any()
+        )).thenReturn(List.of(attempt));
+        when(callAttemptRepository.findByIdAndDeletedAtIsNull(attempt.getId())).thenReturn(Optional.of(attempt));
+        when(callAttemptRepository.save(any(CallAttempt.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(callJobRepository.save(any(CallJob.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(operationContactRepository.save(any(OperationContact.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    private CallStatusReconciliationService createService() {
         VoiceExecutionProperties properties = new VoiceExecutionProperties();
         properties.setActiveProvider(CallProvider.ELEVENLABS);
         properties.getElevenlabs().setEnabled(true);
@@ -53,29 +115,20 @@ class CallStatusReconciliationServiceTest {
         properties.getElevenlabs().setAgentId("agent");
         properties.getElevenlabs().setPhoneNumberId("phone");
 
-        CallAttempt attempt = buildAttempt();
-        when(callAttemptRepository.findTop100ByProviderAndStatusInAndProviderCallIdIsNotNullAndDeletedAtIsNullAndDialedAtBeforeOrderByDialedAtAsc(
-                any(), any(), any()
-        )).thenReturn(List.of(attempt));
-        when(callAttemptRepository.save(any(CallAttempt.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(callJobRepository.save(any(CallJob.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(operationContactRepository.save(any(OperationContact.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        CallStatusReconciliationService service = new CallStatusReconciliationService(
+        return new CallStatusReconciliationService(
                 new CallProviderRegistry(List.of(new ReconciliationProvider())),
                 new VoiceProviderConfigurationResolver(properties),
                 callAttemptRepository,
-                callJobRepository,
-                operationContactRepository,
-                providerExecutionObservationService
+                providerExecutionObservationService,
+                new CallStatusSnapshotApplier(
+                        callJobRepository,
+                        callAttemptRepository,
+                        operationContactRepository,
+                        new CallRetryPolicy(new CallQueueProperties())
+                ),
+                callJobDispatcher,
+                mock(PlatformTransactionManager.class)
         );
-
-        service.reconcileOpenAttempts();
-
-        assertThat(attempt.getCallJob().getStatus()).isEqualTo(CallJobStatus.FAILED);
-        assertThat(attempt.getStatus()).isEqualTo(CallAttemptStatus.NO_ANSWER);
-        assertThat(attempt.getEndedAt()).isNotNull();
-        assertThat(attempt.getOperationContact().getStatus()).isEqualTo(OperationContactStatus.FAILED);
     }
 
     private CallAttempt buildAttempt() {

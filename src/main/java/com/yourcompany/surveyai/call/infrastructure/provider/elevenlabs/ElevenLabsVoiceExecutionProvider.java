@@ -9,6 +9,7 @@ import com.yourcompany.surveyai.call.application.provider.ProviderCallStatusResu
 import com.yourcompany.surveyai.call.application.provider.ProviderCancelRequest;
 import com.yourcompany.surveyai.call.application.provider.ProviderCancelResult;
 import com.yourcompany.surveyai.call.application.provider.ProviderConfigurationValidationResult;
+import com.yourcompany.surveyai.call.application.provider.ProviderDispatchException;
 import com.yourcompany.surveyai.call.application.provider.ProviderDispatchRequest;
 import com.yourcompany.surveyai.call.application.provider.ProviderDispatchResult;
 import com.yourcompany.surveyai.call.application.provider.ProviderWebhookEvent;
@@ -24,6 +25,9 @@ import com.yourcompany.surveyai.operation.application.support.OperationAutoEntit
 import com.yourcompany.surveyai.operation.support.OperationContactPhoneResolver;
 import com.yourcompany.surveyai.operation.support.PhoneNumberNormalizer;
 import com.yourcompany.surveyai.survey.domain.entity.SurveyQuestion;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
@@ -44,6 +48,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientResponseException;
 
 @Component
@@ -151,14 +156,25 @@ public class ElevenLabsVoiceExecutionProvider implements VoiceExecutionProvider 
                     error.getStatusCode(),
                     error.getResponseBodyAsString()
             );
-            throw new ValidationException("ElevenLabs dispatch failed: " + error.getResponseBodyAsString());
+            throw new ProviderDispatchException(
+                    "ElevenLabs dispatch failed: " + error.getResponseBodyAsString(),
+                    isRetryableStatus(error.getStatusCode().value()),
+                    error
+            );
+        } catch (ResourceAccessException error) {
+            log.warn(
+                    "ElevenLabs outbound call failed. callJobId={} message={}",
+                    request.callJob().getId(),
+                    error.getMessage()
+            );
+            throw new ProviderDispatchException("ElevenLabs dispatch failed: " + error.getMessage(), isConnectionFailure(error), error);
         } catch (Exception error) {
             log.warn(
                     "ElevenLabs outbound call failed. callJobId={} message={}",
                     request.callJob().getId(),
                     error.getMessage()
             );
-            throw new ValidationException("ElevenLabs dispatch failed: " + error.getMessage());
+            throw new ProviderDispatchException("ElevenLabs dispatch failed: " + error.getMessage(), false, error);
         }
     }
 
@@ -507,6 +523,24 @@ public class ElevenLabsVoiceExecutionProvider implements VoiceExecutionProvider 
                 request.survey().getName(),
                 request.callAttempt().getId()
         ).trim();
+    }
+
+    // Only responses that prove ElevenLabs did not start the call are retryable: rate limiting and an
+    // unavailable gateway. Other 5xx errors may come after the call was placed.
+    private boolean isRetryableStatus(int statusCode) {
+        return statusCode == 429 || statusCode == 502 || statusCode == 503;
+    }
+
+    // A refused or unresolvable connection means the request never reached ElevenLabs. A read timeout
+    // does not: the call may already be ringing.
+    private boolean isConnectionFailure(ResourceAccessException error) {
+        Throwable cause = error.getCause();
+        if (cause instanceof ConnectException || cause instanceof UnknownHostException) {
+            return true;
+        }
+        return cause instanceof SocketTimeoutException
+                && cause.getMessage() != null
+                && cause.getMessage().toLowerCase(Locale.ROOT).contains("connect");
     }
 
     // The agent represents the research company that owns the operation (the tenant), not SurveyAI.

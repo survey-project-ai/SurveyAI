@@ -28,6 +28,12 @@ spring:
       max-file-size: 25MB
       max-request-size: 25MB
 
+  task:
+    scheduling:
+      pool:
+        # Call dispatch and status reconciliation run on separate threads.
+        size: 2
+
 server:
   port: ${PORT:8080}
 
@@ -62,6 +68,23 @@ surveyai:
     provider-result-simulator-enabled: false
     allow-duplicate-operation-contact-phone-numbers: ${SURVEYAI_DEV_ALLOW_DUPLICATE_OPERATION_CONTACT_PHONE_NUMBERS:false}
   calling:
+    queue:
+      scheduler-enabled: ${SURVEYAI_CALLING_QUEUE_SCHEDULER_ENABLED:true}
+      dispatch-interval-ms: ${SURVEYAI_CALLING_QUEUE_DISPATCH_INTERVAL_MS:15000}
+      max-concurrent-calls-per-operation: ${SURVEYAI_CALLING_MAX_CONCURRENT_CALLS_PER_OPERATION:1}
+      # Wait before calling again after no answer, busy or voicemail (up to the job's max attempts).
+      retry-delay: ${SURVEYAI_CALLING_RETRY_DELAY:2h}
+      # Wait before trying again when the provider could not take the call (rate limit, outage).
+      dispatch-retry-delay: ${SURVEYAI_CALLING_DISPATCH_RETRY_DELAY:5m}
+      # A call with no status update for this long is failed so it no longer blocks the operation.
+      stale-active-call-after: ${SURVEYAI_CALLING_STALE_ACTIVE_CALL_AFTER:1h}
+      # New calls start only inside this window, in the company's timezone. A company can override
+      # it with a "callingHours" object in its metadata_json.
+      calling-hours:
+        start: ${SURVEYAI_CALLING_HOURS_START:10:00}
+        end: ${SURVEYAI_CALLING_HOURS_END:20:00}
+        days: ${SURVEYAI_CALLING_DAYS:MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY,SATURDAY,SUNDAY}
+        default-timezone: ${SURVEYAI_CALLING_DEFAULT_TIMEZONE:Europe/Istanbul}
     active-provider: ${SURVEYAI_CALLING_ACTIVE_PROVIDER:MOCK}
     mock:
       enabled: ${SURVEYAI_CALLING_MOCK_ENABLED:true}

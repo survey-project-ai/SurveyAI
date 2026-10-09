@@ -344,14 +344,16 @@ public class OperationServiceImpl implements OperationService {
             newJobs.add(job);
         }
 
+        // Starting fails fast when no call could be placed; the calls themselves run after commit.
+        callJobDispatcher.validateActiveProviderConfiguration();
         operation.setStartedAt(startedAt);
         operation.setStatus(OperationStatus.RUNNING);
         Operation savedOperation = operationRepository.save(operation);
 
         if (!newJobs.isEmpty()) {
             callJobRepository.saveAll(newJobs);
-            callJobDispatcher.dispatchNextPreparedJob(operationId);
         }
+        callJobDispatcher.requestDispatch(operationId);
 
         return toDto(savedOperation, contactCount, newJobs);
     }
@@ -381,9 +383,10 @@ public class OperationServiceImpl implements OperationService {
             throw new ValidationException("Yalnizca duraklatilmis operasyon devam ettirilebilir.");
         }
 
+        callJobDispatcher.validateActiveProviderConfiguration();
         operation.setStatus(OperationStatus.RUNNING);
         Operation savedOperation = operationRepository.save(operation);
-        callJobDispatcher.dispatchNextPreparedJob(operationId);
+        callJobDispatcher.requestDispatch(operationId);
         return toDto(savedOperation, contactCount, List.of());
     }
 

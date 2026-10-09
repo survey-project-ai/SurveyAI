@@ -4,28 +4,30 @@ import com.yourcompany.surveyai.call.application.provider.CallProviderRegistry;
 import com.yourcompany.surveyai.call.application.provider.ProviderCallStatusRequest;
 import com.yourcompany.surveyai.call.application.provider.ProviderCallStatusResult;
 import com.yourcompany.surveyai.call.application.provider.VoiceExecutionProvider;
+import com.yourcompany.surveyai.call.application.service.CallJobDispatcher;
 import com.yourcompany.surveyai.call.application.service.ProviderExecutionObservationService;
+import com.yourcompany.surveyai.call.application.support.CallStatusSnapshotApplier;
 import com.yourcompany.surveyai.call.configuration.VoiceProviderConfiguration;
 import com.yourcompany.surveyai.call.configuration.VoiceProviderConfigurationResolver;
 import com.yourcompany.surveyai.call.domain.entity.CallAttempt;
-import com.yourcompany.surveyai.call.domain.entity.CallJob;
 import com.yourcompany.surveyai.call.domain.enums.CallAttemptStatus;
 import com.yourcompany.surveyai.call.domain.enums.CallJobStatus;
-import com.yourcompany.surveyai.operation.domain.entity.OperationContact;
-import com.yourcompany.surveyai.operation.domain.enums.OperationContactStatus;
-import com.yourcompany.surveyai.operation.repository.OperationContactRepository;
 import com.yourcompany.surveyai.call.repository.CallAttemptRepository;
-import com.yourcompany.surveyai.call.repository.CallJobRepository;
 import java.time.OffsetDateTime;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
+// Polls the provider for attempts that have not reported a final status. Each provider request runs
+// outside any transaction and each attempt is updated in its own short transaction.
 @Service
 public class CallStatusReconciliationService {
 
@@ -39,31 +41,34 @@ public class CallStatusReconciliationService {
     private final CallProviderRegistry callProviderRegistry;
     private final VoiceProviderConfigurationResolver configurationResolver;
     private final CallAttemptRepository callAttemptRepository;
-    private final CallJobRepository callJobRepository;
-    private final OperationContactRepository operationContactRepository;
     private final ProviderExecutionObservationService providerExecutionObservationService;
+    private final CallStatusSnapshotApplier callStatusSnapshotApplier;
+    private final CallJobDispatcher callJobDispatcher;
+    private final TransactionTemplate transactionTemplate;
 
     public CallStatusReconciliationService(
             CallProviderRegistry callProviderRegistry,
             VoiceProviderConfigurationResolver configurationResolver,
             CallAttemptRepository callAttemptRepository,
-            CallJobRepository callJobRepository,
-            OperationContactRepository operationContactRepository,
-            ProviderExecutionObservationService providerExecutionObservationService
+            ProviderExecutionObservationService providerExecutionObservationService,
+            CallStatusSnapshotApplier callStatusSnapshotApplier,
+            CallJobDispatcher callJobDispatcher,
+            PlatformTransactionManager transactionManager
     ) {
         this.callProviderRegistry = callProviderRegistry;
         this.configurationResolver = configurationResolver;
         this.callAttemptRepository = callAttemptRepository;
-        this.callJobRepository = callJobRepository;
-        this.operationContactRepository = operationContactRepository;
         this.providerExecutionObservationService = providerExecutionObservationService;
+        this.callStatusSnapshotApplier = callStatusSnapshotApplier;
+        this.callJobDispatcher = callJobDispatcher;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
     @Scheduled(
             fixedDelayString = "${surveyai.calling.status-reconciliation.fixed-delay-ms:30000}",
             initialDelayString = "${surveyai.calling.status-reconciliation.initial-delay-ms:15000}"
     )
-    @Transactional
     public void reconcileOpenAttempts() {
         VoiceProviderConfiguration configuration = configurationResolver.getActiveConfiguration();
         if (!configuration.enabled() || configuration.mockMode()) {
@@ -89,81 +94,65 @@ public class CallStatusReconciliationService {
             VoiceProviderConfiguration configuration,
             CallAttempt attempt
     ) {
+        ProviderCallStatusResult statusResult;
         try {
-            ProviderCallStatusResult statusResult = provider.fetchCallStatus(new ProviderCallStatusRequest(attempt), configuration);
-            providerExecutionObservationService.recordStatusSnapshot(
-                    attempt.getCallJob(),
-                    attempt,
-                    provider.getProvider(),
-                    statusResult,
-                    "Periodic provider status reconciliation"
-            );
-            applySnapshot(attempt, statusResult);
+            statusResult = provider.fetchCallStatus(new ProviderCallStatusRequest(attempt), configuration);
         } catch (RuntimeException error) {
-            providerExecutionObservationService.recordStatusSnapshotFailure(
-                    attempt.getCallJob(),
-                    attempt,
-                    provider.getProvider(),
-                    error.getMessage()
-            );
+            transactionTemplate.executeWithoutResult(status -> callAttemptRepository.findById(attempt.getId()).ifPresent(current ->
+                    providerExecutionObservationService.recordStatusSnapshotFailure(
+                            current.getCallJob(),
+                            current,
+                            provider.getProvider(),
+                            error.getMessage()
+                    )));
             log.warn(
-                    "Provider status reconciliation failed. provider={} callJobId={} callAttemptId={} providerCallId={} message={}",
+                    "Provider status reconciliation failed. provider={} callAttemptId={} providerCallId={} message={}",
                     provider.getProvider(),
-                    attempt.getCallJob().getId(),
                     attempt.getId(),
                     attempt.getProviderCallId(),
                     error.getMessage()
             );
-        }
-    }
-
-    private void applySnapshot(CallAttempt attempt, ProviderCallStatusResult statusResult) {
-        if (statusResult == null || statusResult.jobStatus() == null) {
             return;
         }
 
-        CallJob callJob = attempt.getCallJob();
-        CallJobStatus previousJobStatus = callJob.getStatus();
+        UUID operationToAdvance = transactionTemplate.execute(status -> applySnapshot(provider, attempt.getId(), statusResult));
+        if (operationToAdvance != null) {
+            callJobDispatcher.requestDispatch(operationToAdvance);
+        }
+    }
+
+    // Returns the operation whose queue can move on when the snapshot finished the attempt.
+    private UUID applySnapshot(VoiceExecutionProvider provider, UUID attemptId, ProviderCallStatusResult statusResult) {
+        CallAttempt attempt = callAttemptRepository.findByIdAndDeletedAtIsNull(attemptId).orElse(null);
+        if (attempt == null) {
+            return null;
+        }
+        providerExecutionObservationService.recordStatusSnapshot(
+                attempt.getCallJob(),
+                attempt,
+                provider.getProvider(),
+                statusResult,
+                "Periodic provider status reconciliation"
+        );
+
+        CallJobStatus previousJobStatus = attempt.getCallJob().getStatus();
         CallAttemptStatus previousAttemptStatus = attempt.getStatus();
+        boolean finished = callStatusSnapshotApplier.apply(attempt, statusResult);
 
-        callJob.setStatus(statusResult.jobStatus());
-        if (statusResult.attemptStatus() != null) {
-            attempt.setStatus(statusResult.attemptStatus());
-        }
-        if (statusResult.rawPayload() != null) {
-            attempt.setRawProviderPayload(statusResult.rawPayload());
-        }
-        if (statusResult.occurredAt() != null && attempt.getConnectedAt() == null
-                && statusResult.attemptStatus() == CallAttemptStatus.IN_PROGRESS) {
-            attempt.setConnectedAt(statusResult.occurredAt());
-        }
-        if (isTerminal(statusResult.jobStatus())) {
-            attempt.setEndedAt(statusResult.occurredAt() != null ? statusResult.occurredAt() : OffsetDateTime.now());
-        }
-
-        callJobRepository.save(callJob);
-        callAttemptRepository.save(attempt);
-
-        OperationContact contact = attempt.getOperationContact();
-        contact.setStatus(mapContactStatus(statusResult.jobStatus()));
-        if (statusResult.occurredAt() != null) {
-            contact.setLastCallAt(statusResult.occurredAt());
-        }
-        operationContactRepository.save(contact);
-
-        if (previousJobStatus != callJob.getStatus() || previousAttemptStatus != attempt.getStatus()) {
+        if (previousJobStatus != attempt.getCallJob().getStatus() || previousAttemptStatus != attempt.getStatus()) {
             log.info(
                     "Provider status reconciliation applied. provider={} callJobId={} callAttemptId={} providerCallId={} previousJobStatus={} newJobStatus={} previousAttemptStatus={} newAttemptStatus={}",
                     attempt.getProvider(),
-                    callJob.getId(),
+                    attempt.getCallJob().getId(),
                     attempt.getId(),
                     attempt.getProviderCallId(),
                     previousJobStatus,
-                    callJob.getStatus(),
+                    attempt.getCallJob().getStatus(),
                     previousAttemptStatus,
                     attempt.getStatus()
             );
         }
+        return finished ? attempt.getOperation().getId() : null;
     }
 
     private long resolveGracePeriodSeconds(VoiceProviderConfiguration configuration) {
@@ -176,21 +165,5 @@ public class CallStatusReconciliationService {
         } catch (NumberFormatException ignored) {
             return 20L;
         }
-    }
-
-    private boolean isTerminal(CallJobStatus status) {
-        return status == CallJobStatus.COMPLETED
-                || status == CallJobStatus.FAILED
-                || status == CallJobStatus.DEAD_LETTER
-                || status == CallJobStatus.CANCELLED;
-    }
-
-    private OperationContactStatus mapContactStatus(CallJobStatus jobStatus) {
-        return switch (jobStatus) {
-            case PENDING, QUEUED, IN_PROGRESS -> OperationContactStatus.CALLING;
-            case COMPLETED -> OperationContactStatus.COMPLETED;
-            case RETRY -> OperationContactStatus.RETRY;
-            case FAILED, DEAD_LETTER, CANCELLED -> OperationContactStatus.FAILED;
-        };
     }
 }

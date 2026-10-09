@@ -37,7 +37,8 @@ public class MockVoiceExecutionProvider implements VoiceExecutionProvider {
 
     @Override
     public ProviderDispatchResult dispatchCallJob(ProviderDispatchRequest request, VoiceProviderConfiguration configuration) {
-        String providerCallId = "mock-" + request.callJob().getId();
+        // One id per attempt: retries of a job must not collide on UNIQUE (provider, provider_call_id).
+        String providerCallId = "mock-" + request.callAttempt().getId();
         OffsetDateTime now = OffsetDateTime.now();
         String rawPayload = "{\"provider\":\"MOCK\",\"providerCallId\":\"" + providerCallId + "\",\"status\":\"QUEUED\"}";
         return new ProviderDispatchResult(
