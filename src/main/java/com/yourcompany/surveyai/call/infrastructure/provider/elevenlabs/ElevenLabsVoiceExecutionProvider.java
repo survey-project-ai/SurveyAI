@@ -459,7 +459,7 @@ public class ElevenLabsVoiceExecutionProvider implements VoiceExecutionProvider 
 
     private String buildAgentPrompt(ProviderDispatchRequest request) {
         return """
-                You are a live phone survey interviewer for Ayna Arastirma.
+                You are a live phone survey interviewer for %s.
                 SurveyAI is only the backend platform and is the source of truth for flow, prompts, retries, skip logic, and completion.
 
                 Identity and tone:
@@ -502,10 +502,17 @@ public class ElevenLabsVoiceExecutionProvider implements VoiceExecutionProvider 
                 Survey: %s
                 Call attempt id: %s
                 """.formatted(
+                resolveCallerCompanyName(request),
                 request.operation().getName(),
                 request.survey().getName(),
                 request.callAttempt().getId()
         ).trim();
+    }
+
+    // The agent represents the research company that owns the operation (the tenant), not SurveyAI.
+    private String resolveCallerCompanyName(ProviderDispatchRequest request) {
+        String companyName = request.operation().getCompany() == null ? null : request.operation().getCompany().getName();
+        return companyName == null || companyName.isBlank() ? "the research company running this survey" : companyName.trim();
     }
 
     private String buildFirstMessage(ProviderDispatchRequest request) {

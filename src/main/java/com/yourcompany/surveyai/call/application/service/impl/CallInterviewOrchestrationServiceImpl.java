@@ -14,6 +14,7 @@ import com.yourcompany.surveyai.call.application.service.CallInterviewOrchestrat
 import com.yourcompany.surveyai.call.domain.entity.CallAttempt;
 import com.yourcompany.surveyai.call.domain.enums.CallProvider;
 import com.yourcompany.surveyai.call.repository.CallAttemptRepository;
+import com.yourcompany.surveyai.common.domain.entity.Company;
 import com.yourcompany.surveyai.common.exception.NotFoundException;
 import com.yourcompany.surveyai.common.exception.ValidationException;
 import com.yourcompany.surveyai.operation.application.support.OperationAutoEntityLexiconService;
@@ -2970,10 +2971,11 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
 
     private String buildOpeningConsentIdentityPrompt(SessionContext context) {
         String introPrompt = trimToNull(context.survey().getIntroPrompt());
+        String companyName = resolveCallerCompanyName(context);
         String operationName = trimToNull(context.callAttempt().getOperation().getName());
         String explanation = isTurkish(context.survey())
-                ? buildTurkishIdentityPrompt(operationName, null)
-                : buildEnglishIdentityPrompt(operationName, null);
+                ? buildTurkishIdentityPrompt(companyName, operationName, null)
+                : buildEnglishIdentityPrompt(companyName, operationName, null);
         if (introPrompt != null) {
             return explanation + " " + introPrompt;
         }
@@ -2981,43 +2983,53 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     }
 
     private String buildInSurveyIdentityPrompt(SessionContext context) {
+        String companyName = resolveCallerCompanyName(context);
         String operationName = trimToNull(context.callAttempt().getOperation().getName());
         String surveyName = trimToNull(context.survey().getName());
 
         if (isTurkish(context.survey())) {
-            return buildTurkishIdentityPrompt(operationName, surveyName);
+            return buildTurkishIdentityPrompt(companyName, operationName, surveyName);
         }
 
-        return buildEnglishIdentityPrompt(operationName, surveyName);
+        return buildEnglishIdentityPrompt(companyName, operationName, surveyName);
     }
 
-    private String buildTurkishIdentityPrompt(String operationName, String surveyName) {
+    // The callee hears the name of the research company that owns the operation (the tenant),
+    // not the SurveyAI platform.
+    private String resolveCallerCompanyName(SessionContext context) {
+        Company company = context.callAttempt().getOperation().getCompany();
+        return company == null ? null : trimToNull(company.getName());
+    }
+
+    private String buildTurkishIdentityPrompt(String companyName, String operationName, String surveyName) {
+        String caller = companyName != null ? "Ben " + companyName + " adina " : "Ben ";
         if (operationName != null && surveyName != null) {
-            return "Ben Ayna Arastirma adina " + operationName
+            return caller + operationName
                     + " kapsamindaki " + surveyName
                     + " anketi icin ariyorum.";
         }
         if (operationName != null) {
-            return "Ben Ayna Arastirma adina " + operationName + " arastirmasi icin ariyorum.";
+            return caller + operationName + " arastirmasi icin ariyorum.";
         }
         if (surveyName != null) {
-            return "Ben Ayna Arastirma adina " + surveyName + " anketi icin ariyorum.";
+            return caller + surveyName + " anketi icin ariyorum.";
         }
-        return "Ben Ayna Arastirma adina kisa bir anket calismasi icin ariyorum.";
+        return caller + "kisa bir anket calismasi icin ariyorum.";
     }
 
-    private String buildEnglishIdentityPrompt(String operationName, String surveyName) {
+    private String buildEnglishIdentityPrompt(String companyName, String operationName, String surveyName) {
+        String caller = companyName != null ? "I am calling on behalf of " + companyName + " " : "I am calling ";
         if (operationName != null && surveyName != null) {
-            return "I am calling on behalf of Ayna Research for the " + operationName
+            return caller + "for the " + operationName
                     + " study and the " + surveyName + " survey.";
         }
         if (operationName != null) {
-            return "I am calling on behalf of Ayna Research for the " + operationName + " study.";
+            return caller + "for the " + operationName + " study.";
         }
         if (surveyName != null) {
-            return "I am calling on behalf of Ayna Research for the " + surveyName + " survey.";
+            return caller + "for the " + surveyName + " survey.";
         }
-        return "I am calling on behalf of Ayna Research for a short survey study.";
+        return caller + "for a short survey study.";
     }
 
     private String buildConsentDeclinedClosingPrompt(Survey survey) {

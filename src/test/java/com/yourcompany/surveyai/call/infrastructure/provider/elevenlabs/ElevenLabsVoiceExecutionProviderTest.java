@@ -166,7 +166,8 @@ class ElevenLabsVoiceExecutionProviderTest {
                 .asText();
 
         assertThat(prompt).hasSizeLessThan(4_000);
-        assertThat(prompt).contains("live phone survey interviewer for Ayna Arastirma");
+        assertThat(prompt).contains("live phone survey interviewer for Acme Research");
+        assertThat(prompt).doesNotContain("Ayna");
         assertThat(prompt).contains("SurveyAI is only the backend platform");
         assertThat(prompt).contains("source of truth for flow, prompts, retries, skip logic, and completion");
         assertThat(prompt).contains("Sound warm, calm, natural, and concise");
@@ -636,6 +637,7 @@ class ElevenLabsVoiceExecutionProviderTest {
     private ProviderDispatchRequest buildRequest() {
         Company company = new Company();
         company.setId(UUID.randomUUID());
+        company.setName("Acme Research");
 
         Survey survey = new Survey();
         survey.setId(UUID.randomUUID());

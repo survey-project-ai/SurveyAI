@@ -160,6 +160,8 @@ class CallInterviewOrchestrationServiceImplTest {
 
     @Test
     void identityRequest_explainsReasonForCallAndRepeatsCurrentQuestion() {
+        fixture.company.setName("Acme Research");
+
         InterviewOrchestrationResponse response = service.submitAnswer(
                 new InterviewAnswerRequest(
                         fixture.callAttempt.getId(),
@@ -172,7 +174,8 @@ class CallInterviewOrchestrationServiceImplTest {
 
         assertThat(response.question()).isNotNull();
         assertThat(response.question().code()).isEqualTo("satisfied");
-        assertThat(response.prompt()).contains("Ayna");
+        assertThat(response.prompt()).contains("Acme Research");
+        assertThat(response.prompt()).doesNotContain("Ayna");
         assertThat(response.prompt()).contains("April CSAT Wave");
         assertThat(response.prompt()).contains("CSAT");
         assertThat(response.prompt()).contains("Memnun musunuz?");
