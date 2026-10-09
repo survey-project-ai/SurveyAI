@@ -280,7 +280,9 @@ public class ImportedSurveyOperationServiceImpl implements ImportedSurveyOperati
             attempt.setOperationContact(savedContact);
             attempt.setAttemptNumber(1);
             attempt.setProvider(CallProvider.MANUAL);
-            attempt.setProviderCallId("import-" + savedContact.getExternalRef());
+            // No provider call exists for imported rows. A synthetic id collided with the global
+            // UNIQUE (provider, provider_call_id) on every later import; NULLs do not collide.
+            attempt.setProviderCallId(null);
             attempt.setStatus(CallAttemptStatus.COMPLETED);
             attempt.setDialedAt(startedAt);
             attempt.setConnectedAt(startedAt);
