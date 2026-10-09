@@ -3,7 +3,9 @@ package com.yourcompany.surveyai.operation.application.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -278,6 +280,27 @@ class OperationServiceImplTest {
         assertThat(surveyResponse.getDeletedAt()).isAfter(beforeDelete);
         assertThat(surveyAnswer.getDeletedAt()).isAfter(beforeDelete);
         verify(operationRepository).save(operation);
+    }
+
+    @Test
+    void deleteOperation_rejectsPausedOperationWhileACallIsStillLive() {
+        Operation operation = buildOperation(OperationStatus.PAUSED, SurveyStatus.PUBLISHED);
+        UUID companyId = operation.getCompany().getId();
+        UUID operationId = operation.getId();
+
+        when(operationRepository.findByIdAndCompany_IdAndDeletedAtIsNull(operationId, companyId))
+                .thenReturn(Optional.of(operation));
+        when(callJobRepository.existsByOperation_IdAndStatusInAndUpdatedAtAfterAndDeletedAtIsNull(
+                eq(operationId),
+                eq(java.util.EnumSet.of(CallJobStatus.QUEUED, CallJobStatus.IN_PROGRESS)),
+                any(OffsetDateTime.class)
+        )).thenReturn(true);
+
+        assertThatThrownBy(() -> operationService.deleteOperation(companyId, operationId))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining("Devam eden bir arama var");
+
+        verify(operationRepository, never()).save(any(Operation.class));
     }
 
     @Test

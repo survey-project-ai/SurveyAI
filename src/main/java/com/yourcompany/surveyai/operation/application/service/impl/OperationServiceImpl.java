@@ -55,6 +55,7 @@ import jakarta.validation.Validator;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.Normalizer;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -93,6 +94,13 @@ public class OperationServiceImpl implements OperationService {
             CallJobStatus.IN_PROGRESS,
             CallJobStatus.RETRY
     );
+
+    private static final Set<CallJobStatus> LIVE_CALL_JOB_STATUSES = EnumSet.of(
+            CallJobStatus.QUEUED,
+            CallJobStatus.IN_PROGRESS
+    );
+
+    private static final Duration LIVE_CALL_MAX_AGE = Duration.ofHours(1);
 
     private static final Set<String> OPEN_ENDED_STOP_WORDS = Set.of(
             "ve", "veya", "ile", "icin", "ama", "fakat", "gibi", "cok", "daha", "bir", "iki", "uc",
@@ -390,6 +398,16 @@ public class OperationServiceImpl implements OperationService {
         );
         if (operation.getStatus() == OperationStatus.RUNNING && hasOpenCallJobs) {
             throw new ValidationException("Yurutulen operasyon silinemez. Once duraklatin.");
+        }
+        // Pausing stops new dispatches but not a call that is already placed. Deleting now would
+        // soft-delete the rows that call's tool requests and post-call webhook still need. Jobs that
+        // have not changed for a long time are treated as stuck so they cannot block deletion forever.
+        if (callJobRepository.existsByOperation_IdAndStatusInAndUpdatedAtAfterAndDeletedAtIsNull(
+                operationId,
+                LIVE_CALL_JOB_STATUSES,
+                OffsetDateTime.now().minus(LIVE_CALL_MAX_AGE)
+        )) {
+            throw new ValidationException("Devam eden bir arama var. Arama bittikten sonra operasyonu silebilirsiniz.");
         }
 
         OffsetDateTime deletedAt = OffsetDateTime.now();

@@ -30,6 +30,12 @@ public interface CallJobRepository extends JpaRepository<CallJob, UUID>, JpaSpec
 
     boolean existsByOperation_IdAndStatusInAndDeletedAtIsNull(UUID operationId, Set<CallJobStatus> statuses);
 
+    boolean existsByOperation_IdAndStatusInAndUpdatedAtAfterAndDeletedAtIsNull(
+            UUID operationId,
+            Set<CallJobStatus> statuses,
+            OffsetDateTime updatedAfter
+    );
+
     Optional<CallJob> findFirstByOperation_IdAndStatusInAndAvailableAtBeforeAndDeletedAtIsNullOrderByScheduledForAscCreatedAtAsc(
             UUID operationId,
             Set<CallJobStatus> statuses,
