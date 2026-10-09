@@ -44,7 +44,9 @@ management:
 surveyai:
   web:
     allowed-origins: ${SURVEYAI_WEB_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001}
-    allowed-origin-patterns: ${SURVEYAI_WEB_ALLOWED_ORIGIN_PATTERNS:https://*.up.railway.app}
+    # Credentialed CORS: list exact frontend origins. A wildcard on a shared host such as
+    # *.up.railway.app would let any site deployed there call the API as the signed-in user.
+    allowed-origin-patterns: ${SURVEYAI_WEB_ALLOWED_ORIGIN_PATTERNS:}
   auth:
     cookie:
       secure: ${SURVEYAI_AUTH_COOKIE_SECURE:false}

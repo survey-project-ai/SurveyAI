@@ -2,8 +2,10 @@ package com.yourcompany.surveyai.survey.api;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -27,6 +29,7 @@ import com.yourcompany.surveyai.survey.application.dto.response.SurveyResponseDt
 import com.yourcompany.surveyai.survey.application.service.GoogleFormsImportService;
 import com.yourcompany.surveyai.survey.application.service.SurveyService;
 import com.yourcompany.surveyai.survey.domain.enums.SurveyStatus;
+import java.net.URI;
 import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.Optional;
@@ -49,6 +52,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class SurveyCorsIntegrationTest {
 
     private static final String FRONTEND_ORIGIN = "http://localhost:3000";
+    private static final UUID FOREIGN_COMPANY_ID = UUID.fromString("f4fa1991-3fb3-3236-97eb-076f69115099");
 
     @Autowired
     private MockMvc mockMvc;
@@ -94,6 +98,18 @@ class SurveyCorsIntegrationTest {
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, org.hamcrest.Matchers.containsString("PUT")))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS, org.hamcrest.Matchers.containsString("content-type")));
+    }
+
+    @Test
+    void preflightFromUnlistedRailwayOriginIsRejectedByDefault() throws Exception {
+        UUID companyId = UUID.randomUUID();
+
+        mockMvc.perform(options("/api/v1/companies/{companyId}/surveys", companyId)
+                        .header(HttpHeaders.ORIGIN, "https://attacker-site.up.railway.app")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "content-type"))
+                .andExpect(status().isForbidden())
+                .andExpect(header().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
     }
 
     @Test
@@ -189,6 +205,33 @@ class SurveyCorsIntegrationTest {
                                 """.formatted(userId)))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    void listSurveysReturnsForbiddenWhenForeignCompanyPathSegmentCarriesPathParameter() throws Exception {
+        UUID authenticatedCompanyId = UUID.randomUUID();
+        authService.setResolvedUser(Optional.of(authenticatedUser(authenticatedCompanyId, UUID.randomUUID())));
+
+        mockMvc.perform(get("/api/v1/companies/{companyId};x/surveys", FOREIGN_COMPANY_ID)
+                        .cookie(new Cookie(AuthCookieService.SESSION_COOKIE_NAME, "session-token")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        verify(surveyService, never()).listSurveysByCompany(any());
+    }
+
+    @Test
+    void listSurveysReturnsForbiddenWhenForeignCompanyPathSegmentIsPercentEncoded() throws Exception {
+        UUID authenticatedCompanyId = UUID.randomUUID();
+        authService.setResolvedUser(Optional.of(authenticatedUser(authenticatedCompanyId, UUID.randomUUID())));
+        String encodedForeignCompanyId = "%66" + FOREIGN_COMPANY_ID.toString().substring(1);
+
+        mockMvc.perform(get(URI.create("/api/v1/companies/" + encodedForeignCompanyId + "/surveys"))
+                        .cookie(new Cookie(AuthCookieService.SESSION_COOKIE_NAME, "session-token")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        verify(surveyService, never()).listSurveysByCompany(any());
     }
 
     @Test

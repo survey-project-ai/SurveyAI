@@ -9,17 +9,15 @@ import com.yourcompany.surveyai.common.exception.UnauthorizedException;
 import com.yourcompany.surveyai.common.exception.ValidationException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.util.Map;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.servlet.HandlerMapping;
 
 @Component
 public class AuthInterceptor implements HandlerInterceptor {
-
-    private static final Pattern COMPANY_PATH_PATTERN = Pattern.compile("/api/v1/companies/([0-9a-fA-F-]{36})(?:/.*)?");
 
     private final AuthService authService;
     private final AuthCookieService authCookieService;
@@ -56,13 +54,20 @@ public class AuthInterceptor implements HandlerInterceptor {
             throw new CompanyIsolationException("Requested company does not match authenticated company");
         }
 
-        Matcher matcher = COMPANY_PATH_PATTERN.matcher(request.getRequestURI());
-        if (matcher.matches()) {
-            UUID pathCompanyId = parseCompanyId(matcher.group(1));
-            if (!authenticatedCompanyId.equals(pathCompanyId)) {
-                throw new CompanyIsolationException("Requested company does not match authenticated company");
-            }
+        // Check the {companyId} value Spring MVC binds to the controller. Matching the raw request URI
+        // misses variants of the same segment such as ";x" path parameters or percent-encoded characters.
+        String pathCompanyId = resolveCompanyIdUriVariable(request);
+        if (pathCompanyId != null && !authenticatedCompanyId.equals(parseCompanyId(pathCompanyId))) {
+            throw new CompanyIsolationException("Requested company does not match authenticated company");
         }
+    }
+
+    private String resolveCompanyIdUriVariable(HttpServletRequest request) {
+        if (request.getAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE) instanceof Map<?, ?> uriVariables) {
+            Object companyId = uriVariables.get("companyId");
+            return companyId == null ? null : companyId.toString();
+        }
+        return null;
     }
 
     private UUID parseCompanyId(String rawCompanyId) {

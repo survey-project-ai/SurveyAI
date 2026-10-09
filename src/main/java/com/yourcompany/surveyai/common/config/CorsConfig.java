@@ -24,7 +24,7 @@ public class CorsConfig implements WebMvcConfigurer {
 
     public CorsConfig(
             @Value("${surveyai.web.allowed-origins:http://localhost:3000,http://localhost:3001}") String allowedOrigins,
-            @Value("${surveyai.web.allowed-origin-patterns:https://*.up.railway.app}") String allowedOriginPatterns
+            @Value("${surveyai.web.allowed-origin-patterns:}") String allowedOriginPatterns
     ) {
         this.allowedOrigins = parseCsv(allowedOrigins);
         this.allowedOriginPatterns = parseCsv(allowedOriginPatterns);
