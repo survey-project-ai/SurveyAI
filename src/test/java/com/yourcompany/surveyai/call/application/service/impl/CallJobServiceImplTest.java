@@ -267,6 +267,86 @@ class CallJobServiceImplTest {
     }
 
     @Test
+    void updateOperationCallJobSurveyResponse_leavesUnchangedAnswersAndTheirThemesUntouched() {
+        Fixture fixture = new Fixture();
+        CallAttempt completedAttempt = fixture.buildAttempt(1, CallAttemptStatus.COMPLETED, "provider-1");
+        SurveyResponse surveyResponse = fixture.buildSurveyResponse(completedAttempt, SurveyResponseStatus.PARTIAL);
+
+        SurveyAnswer commentAnswer = fixture.buildAnswer(surveyResponse, true);
+        commentAnswer.setSurveyQuestion(fixture.commentQuestion);
+        commentAnswer.setAnswerText("Ulasim cok pahali");
+        commentAnswer.setRawInputText("ulasim cok pahali");
+        commentAnswer.setAnswerJson("{\"codedThemes\":[\"ulasim\"]}");
+
+        SurveyAnswer sentimentAnswer = fixture.buildAnswer(surveyResponse, false);
+        sentimentAnswer.setSurveyQuestion(fixture.sentimentQuestion);
+        sentimentAnswer.setAnswerType(QuestionType.SINGLE_CHOICE);
+        sentimentAnswer.setAnswerText("Belirsiz");
+
+        mockManualEditContext(fixture, completedAttempt, surveyResponse, List.of(commentAnswer, sentimentAnswer));
+
+        // The editor sends every question; only the sentiment answer was changed by the analyst.
+        UpdateCallJobSurveyResponseAnswerRequest commentUnchanged = new UpdateCallJobSurveyResponseAnswerRequest();
+        commentUnchanged.setQuestionId(fixture.commentQuestion.getId());
+        commentUnchanged.setAnswerText("Ulasim cok pahali");
+        commentUnchanged.setSelectedOptionIds(List.of());
+
+        UpdateCallJobSurveyResponseAnswerRequest sentimentUpdate = new UpdateCallJobSurveyResponseAnswerRequest();
+        sentimentUpdate.setQuestionId(fixture.sentimentQuestion.getId());
+        sentimentUpdate.setSelectedOptionId(fixture.positiveOption.getId());
+        sentimentUpdate.setSelectedOptionIds(List.of(fixture.positiveOption.getId()));
+
+        UpdateCallJobSurveyResponseRequest request = new UpdateCallJobSurveyResponseRequest();
+        request.setAnswers(List.of(commentUnchanged, sentimentUpdate));
+
+        CallJobDetailResponseDto detail = service.updateOperationCallJobSurveyResponse(
+                fixture.company.getId(),
+                fixture.operation.getId(),
+                fixture.callJob.getId(),
+                request
+        );
+
+        assertThat(commentAnswer.getAnswerJson()).isEqualTo("{\"codedThemes\":[\"ulasim\"]}");
+        assertThat(commentAnswer.getRawInputText()).isEqualTo("ulasim cok pahali");
+        verify(surveyAnswerRepository, never()).save(commentAnswer);
+        assertThat(sentimentAnswer.getSelectedOption()).isEqualTo(fixture.positiveOption);
+        assertThat(detail.surveyResponse().answers())
+                .extracting(answer -> answer.questionCode() + ":" + answer.manuallyEdited())
+                .containsExactlyInAnyOrder("Q1:false", "Q2:true");
+    }
+
+    @Test
+    void updateOperationCallJobSurveyResponse_keepsCodedThemesWhenEditedTextComesWithoutThemes() {
+        Fixture fixture = new Fixture();
+        CallAttempt completedAttempt = fixture.buildAttempt(1, CallAttemptStatus.COMPLETED, "provider-1");
+        SurveyResponse surveyResponse = fixture.buildSurveyResponse(completedAttempt, SurveyResponseStatus.COMPLETED);
+
+        SurveyAnswer commentAnswer = fixture.buildAnswer(surveyResponse, true);
+        commentAnswer.setSurveyQuestion(fixture.commentQuestion);
+        commentAnswer.setAnswerText("Ulasim cok pahli");
+        commentAnswer.setAnswerJson("{\"codedThemes\":[\"ulasim\"]}");
+
+        mockManualEditContext(fixture, completedAttempt, surveyResponse, List.of(commentAnswer));
+
+        UpdateCallJobSurveyResponseAnswerRequest commentUpdate = new UpdateCallJobSurveyResponseAnswerRequest();
+        commentUpdate.setQuestionId(fixture.commentQuestion.getId());
+        commentUpdate.setAnswerText("Ulasim cok pahali");
+
+        UpdateCallJobSurveyResponseRequest request = new UpdateCallJobSurveyResponseRequest();
+        request.setAnswers(List.of(commentUpdate));
+
+        service.updateOperationCallJobSurveyResponse(
+                fixture.company.getId(),
+                fixture.operation.getId(),
+                fixture.callJob.getId(),
+                request
+        );
+
+        assertThat(commentAnswer.getAnswerText()).isEqualTo("Ulasim cok pahali");
+        assertThat(commentAnswer.getAnswerJson()).contains("\"manualEdit\":true", "\"codedThemes\":[\"ulasim\"]");
+    }
+
+    @Test
     void retryOperationCallJob_dispatchesNewAttemptForEligibleFailedJob() {
         Fixture fixture = new Fixture();
         CallAttempt failedAttempt = fixture.buildAttempt(1, CallAttemptStatus.FAILED, "provider-1");
@@ -493,6 +573,23 @@ class CallJobServiceImplTest {
         verify(callJobDispatcher).dispatchPreparedJobs(any());
         assertThat(detail.id()).isEqualTo(savedRedialJobRef[0].getId());
         assertThat(detail.rawStatus()).isEqualTo(CallJobStatus.QUEUED);
+    }
+
+    private void mockManualEditContext(
+            Fixture fixture,
+            CallAttempt attempt,
+            SurveyResponse surveyResponse,
+            List<SurveyAnswer> answers
+    ) {
+        mockJobContext(fixture);
+        when(callAttemptRepository.findAllByCallJob_IdOrderByCreatedAtDesc(fixture.callJob.getId()))
+                .thenReturn(List.of(attempt));
+        when(surveyResponseRepository.findAllByCallAttempt_IdInAndDeletedAtIsNull(List.of(attempt.getId())))
+                .thenReturn(List.of(surveyResponse));
+        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(List.of(surveyResponse.getId())))
+                .thenReturn(List.copyOf(answers));
+        when(surveyAnswerRepository.findAllBySurveyResponse_IdAndDeletedAtIsNull(surveyResponse.getId()))
+                .thenAnswer(invocation -> List.copyOf(answers));
     }
 
     private void mockJobContext(Fixture fixture) {

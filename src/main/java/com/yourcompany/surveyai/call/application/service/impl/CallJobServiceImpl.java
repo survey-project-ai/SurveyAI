@@ -301,8 +301,17 @@ public class CallJobServiceImpl implements CallJobService {
                 throw new ValidationException("Question does not belong to the call job survey: " + answerRequest.getQuestionId());
             }
 
-            SurveyAnswer answer = answersByQuestionId.computeIfAbsent(question.getId(), ignored -> createManualAnswer(companyId, surveyResponse, question));
-            applyManualAnswer(answer, question, optionsByQuestionId.getOrDefault(question.getId(), List.of()), answerRequest);
+            List<SurveyQuestionOption> questionOptions = optionsByQuestionId.getOrDefault(question.getId(), List.of());
+            SurveyAnswer existingAnswer = answersByQuestionId.get(question.getId());
+            // The editor sends every question. Rewriting an untouched answer would mark it as a manual
+            // edit, drop its AI theme coding and turn a valid special answer into an invalid one.
+            if (!changesAnswer(question, existingAnswer, questionOptions, answerRequest)) {
+                continue;
+            }
+
+            SurveyAnswer answer = existingAnswer != null ? existingAnswer : createManualAnswer(companyId, surveyResponse, question);
+            answersByQuestionId.put(question.getId(), answer);
+            applyManualAnswer(answer, question, questionOptions, answerRequest);
             surveyAnswerRepository.save(answer);
         }
 
@@ -733,6 +742,31 @@ public class CallJobServiceImpl implements CallJobService {
                 .orElse(null);
     }
 
+    private boolean changesAnswer(
+            SurveyQuestion question,
+            SurveyAnswer existingAnswer,
+            List<SurveyQuestionOption> options,
+            UpdateCallJobSurveyResponseAnswerRequest request
+    ) {
+        if (request.getCodedThemes() != null) {
+            return true;
+        }
+
+        // Compare against the values the editor received for this answer.
+        CallJobSurveyResponseAnswerDto current = toAnswerDetail(question, existingAnswer, options);
+        Set<UUID> requestedOptionIds = request.getSelectedOptionIds() == null
+                ? Set.of()
+                : request.getSelectedOptionIds().stream().filter(Objects::nonNull).collect(java.util.stream.Collectors.toSet());
+        return !Objects.equals(trimToNull(current.answerText()), trimToNull(request.getAnswerText()))
+                || !sameNumber(current.answerNumber(), request.getAnswerNumber())
+                || !Objects.equals(current.selectedOptionId(), request.getSelectedOptionId())
+                || !Set.copyOf(current.selectedOptionIds()).equals(requestedOptionIds);
+    }
+
+    private boolean sameNumber(BigDecimal left, BigDecimal right) {
+        return left == null ? right == null : right != null && left.compareTo(right) == 0;
+    }
+
     private SurveyAnswer createManualAnswer(UUID companyId, SurveyResponse surveyResponse, SurveyQuestion question) {
         SurveyAnswer answer = new SurveyAnswer();
         answer.setCompany(surveyResponse.getCompany());
@@ -821,9 +855,12 @@ public class CallJobServiceImpl implements CallJobService {
             String originalRawText
     ) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        List<String> codedThemes = question.getQuestionType() == QuestionType.OPEN_ENDED
-                ? normalizeCodedThemes(request.getCodedThemes())
-                : List.of();
+        // Themes left out of the request are kept; answer still holds the previous JSON at this point.
+        List<String> codedThemes = question.getQuestionType() != QuestionType.OPEN_ENDED
+                ? List.of()
+                : request.getCodedThemes() != null
+                        ? normalizeCodedThemes(request.getCodedThemes())
+                        : extractCodedThemes(answer.getAnswerJson());
         payload.put("questionType", question.getQuestionType());
         payload.put("manualEdit", true);
         payload.put("updatedAt", OffsetDateTime.now().toString());
@@ -842,6 +879,28 @@ public class CallJobServiceImpl implements CallJobService {
             return objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException error) {
             return "{}";
+        }
+    }
+
+    private List<String> extractCodedThemes(String answerJson) {
+        if (answerJson == null || answerJson.isBlank()) {
+            return List.of();
+        }
+        try {
+            JsonNode themesNode = objectMapper.readTree(answerJson).path("codedThemes");
+            if (!themesNode.isArray()) {
+                return List.of();
+            }
+            List<String> themes = new ArrayList<>();
+            themesNode.forEach(node -> {
+                String theme = trimToNull(node.asText(null));
+                if (theme != null) {
+                    themes.add(theme);
+                }
+            });
+            return themes;
+        } catch (JsonProcessingException error) {
+            return List.of();
         }
     }
 
