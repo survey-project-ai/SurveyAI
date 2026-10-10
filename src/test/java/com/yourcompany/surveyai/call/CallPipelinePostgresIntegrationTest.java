@@ -3,9 +3,16 @@ package com.yourcompany.surveyai.call;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.yourcompany.surveyai.call.application.dto.request.InterviewAnswerRequest;
+import com.yourcompany.surveyai.call.application.dto.request.InterviewConversationSignal;
+import com.yourcompany.surveyai.call.application.service.CallInterviewOrchestrationService;
 import com.yourcompany.surveyai.call.application.service.CallJobDispatcher;
+import com.yourcompany.surveyai.call.domain.entity.CallAttempt;
 import com.yourcompany.surveyai.call.domain.entity.CallJob;
+import com.yourcompany.surveyai.call.domain.enums.CallAttemptStatus;
 import com.yourcompany.surveyai.call.domain.enums.CallJobStatus;
+import com.yourcompany.surveyai.call.domain.enums.CallProvider;
+import com.yourcompany.surveyai.call.repository.CallAttemptRepository;
 import com.yourcompany.surveyai.call.repository.CallJobRepository;
 import com.yourcompany.surveyai.common.domain.entity.Company;
 import com.yourcompany.surveyai.common.domain.enums.CompanyStatus;
@@ -59,7 +66,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
         "surveyai.calling.queue.calling-hours.end=00:00"
 })
 @Testcontainers(disabledWithoutDocker = true)
-class CallQueuePostgresIntegrationTest {
+class CallPipelinePostgresIntegrationTest {
 
     @Container
     @ServiceConnection
@@ -85,6 +92,12 @@ class CallQueuePostgresIntegrationTest {
 
     @Autowired
     private CallJobDispatcher callJobDispatcher;
+
+    @Autowired
+    private CallAttemptRepository callAttemptRepository;
+
+    @Autowired
+    private CallInterviewOrchestrationService callInterviewOrchestrationService;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -185,6 +198,97 @@ class CallQueuePostgresIntegrationTest {
         assertThat(count("SELECT COUNT(*) FROM call_attempt WHERE operation_id = ?", operationId)).isEqualTo(1);
         assertThat(count("SELECT COUNT(*) FROM call_job WHERE operation_id = ? AND status = 'QUEUED'", operationId)).isEqualTo(1);
         assertThat(count("SELECT COUNT(*) FROM call_job WHERE operation_id = ? AND status = 'PENDING'", operationId)).isEqualTo(2);
+    }
+
+    @Test
+    void concurrentToolCallsForOneCallAreSerializedAndTheRepeatedAnswerIsAppliedOnce() throws Exception {
+        UUID callAttemptId = createLiveElevenLabsAttemptWithOpenQuestions();
+        int requestCount = 2;
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService toolCalls = Executors.newFixedThreadPool(requestCount);
+        try {
+            List<Future<?>> results = new ArrayList<>();
+            for (int index = 0; index < requestCount; index++) {
+                results.add(toolCalls.submit(() -> {
+                    start.await();
+                    return callInterviewOrchestrationService.submitAnswer(new InterviewAnswerRequest(
+                            callAttemptId, null, null, "Fiyatlar uygun", InterviewConversationSignal.ANSWER));
+                }));
+            }
+            start.countDown();
+            for (Future<?> result : results) {
+                // Without the row lock both requests create the survey response and one fails on its unique key.
+                result.get(30, SECONDS);
+            }
+        } finally {
+            toolCalls.shutdownNow();
+        }
+
+        assertThat(count("SELECT COUNT(*) FROM survey_response WHERE call_attempt_id = ?", callAttemptId)).isEqualTo(1);
+        assertThat(count(
+                "SELECT COUNT(*) FROM survey_answer a JOIN survey_response r ON r.id = a.survey_response_id WHERE r.call_attempt_id = ?",
+                callAttemptId
+        )).isEqualTo(1);
+    }
+
+    private UUID createLiveElevenLabsAttemptWithOpenQuestions() {
+        return transactionTemplate.execute(status -> {
+            Company company = createCompany();
+            Survey survey = createSurvey(company);
+            // Without an intro prompt the interview starts directly with the questions (no greeting or consent step).
+            survey.setIntroPrompt(null);
+            surveyRepository.save(survey);
+            for (int order = 1; order <= 2; order++) {
+                SurveyQuestion question = new SurveyQuestion();
+                question.setCompany(company);
+                question.setSurvey(survey);
+                question.setCode("q" + order);
+                question.setQuestionOrder(order);
+                question.setQuestionType(QuestionType.OPEN_ENDED);
+                question.setTitle(order == 1 ? "Neyi begendiniz?" : "Neyi gelistirelim?");
+                question.setRequired(true);
+                question.setBranchConditionJson("{}");
+                question.setSettingsJson("{}");
+                surveyQuestionRepository.save(question);
+            }
+            Operation operation = createOperation(company, survey, OperationStatus.RUNNING);
+
+            OperationContact contact = new OperationContact();
+            contact.setCompany(company);
+            contact.setOperation(operation);
+            contact.setPhoneNumber("905321234599");
+            contact.setStatus(OperationContactStatus.CALLING);
+            contact.setRetryCount(0);
+            contact.setMetadataJson("{}");
+            contact = operationContactRepository.save(contact);
+
+            CallJob job = new CallJob();
+            job.setCompany(company);
+            job.setOperation(operation);
+            job.setOperationContact(contact);
+            job.setStatus(CallJobStatus.IN_PROGRESS);
+            job.setPriority((short) 5);
+            job.setScheduledFor(OffsetDateTime.now());
+            job.setAvailableAt(OffsetDateTime.now());
+            job.setAttemptCount(1);
+            job.setMaxAttempts(3);
+            job.setIdempotencyKey(operation.getId() + ":" + contact.getId());
+            job = callJobRepository.save(job);
+
+            CallAttempt attempt = new CallAttempt();
+            attempt.setCompany(company);
+            attempt.setCallJob(job);
+            attempt.setOperation(operation);
+            attempt.setOperationContact(contact);
+            attempt.setAttemptNumber(1);
+            attempt.setProvider(CallProvider.ELEVENLABS);
+            attempt.setProviderCallId("conv-" + UUID.randomUUID());
+            attempt.setStatus(CallAttemptStatus.IN_PROGRESS);
+            attempt.setDialedAt(OffsetDateTime.now());
+            attempt.setConnectedAt(OffsetDateTime.now());
+            attempt.setRawProviderPayload("{}");
+            return callAttemptRepository.save(attempt).getId();
+        });
     }
 
     private UUID createRunningOperationWithJobs(int jobCount) {

@@ -77,7 +77,7 @@ class CallInterviewOrchestrationServiceImplTest {
         );
         runtimeEntries = List.of();
 
-        when(callAttemptRepository.findByIdAndDeletedAtIsNull(fixture.callAttempt.getId()))
+        when(callAttemptRepository.findAndLockById(fixture.callAttempt.getId()))
                 .thenReturn(Optional.of(fixture.callAttempt));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
                 .thenReturn(List.of(fixture.yesNoQuestion, fixture.openQuestion));
@@ -872,6 +872,63 @@ class CallInterviewOrchestrationServiceImplTest {
         assertThat(answers.getFirst().getSelectedOption()).isNull();
         assertThat(answers.getFirst().getAnswerJson()).contains("\"specialAnswerCode\":\"reddetti\"");
         assertThat(response.question()).isNotNull();
+        assertThat(response.question().code()).isEqualTo("why");
+    }
+
+    @Test
+    void submitAnswer_appliesAnAnswerSubmittedTwiceInARowOnlyOnce() {
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        InterviewOrchestrationResponse first = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "evet", InterviewConversationSignal.ANSWER));
+        // A doubled or retried tool call repeats the same utterance right away.
+        InterviewOrchestrationResponse second = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "evet", InterviewConversationSignal.ANSWER));
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        List<SurveyAnswer> answers = answersByResponseId.get(savedResponse.getId());
+
+        assertThat(answers).hasSize(1);
+        assertThat(answers.getFirst().getSurveyQuestion()).isEqualTo(fixture.yesNoQuestion);
+        assertThat(first.question().code()).isEqualTo("why");
+        assertThat(second.question().code()).isEqualTo("why");
+    }
+
+    @Test
+    void submitAnswer_appliesTheSameWordsAgainOnceTheRepeatWindowHasPassed() {
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "evet", InterviewConversationSignal.ANSWER));
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        savedResponse.setTranscriptJson(savedResponse.getTranscriptJson()
+                .replaceAll("\"receivedAtEpochMillis\":\\d+", "\"receivedAtEpochMillis\":0"));
+
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "evet", InterviewConversationSignal.ANSWER));
+
+        assertThat(answersByResponseId.get(savedResponse.getId()))
+                .extracting(answer -> answer.getSurveyQuestion().getCode())
+                .containsExactlyInAnyOrder(fixture.yesNoQuestion.getCode(), "why");
+    }
+
+    @Test
+    void submitAnswer_ignoresAnswerForAQuestionThatIsNoLongerCurrent() {
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "evet", InterviewConversationSignal.ANSWER));
+
+        InterviewOrchestrationResponse response = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(),
+                null,
+                null,
+                "Fiyatlar uygun",
+                InterviewConversationSignal.ANSWER,
+                fixture.yesNoQuestion.getId()
+        ));
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        assertThat(answersByResponseId.get(savedResponse.getId())).hasSize(1);
         assertThat(response.question().code()).isEqualTo("why");
     }
 

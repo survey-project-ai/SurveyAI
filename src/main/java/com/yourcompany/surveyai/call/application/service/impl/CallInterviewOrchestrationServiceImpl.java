@@ -34,6 +34,7 @@ import com.yourcompany.surveyai.operation.support.OperationContactPhoneResolver;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.Normalizer;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -48,6 +49,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,6 +68,9 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     private static final String CONSENT_STATE_KEY = "openingConsentState";
     private static final String CONSENT_PROMPT_DELIVERED_KEY = "openingConsentPromptDelivered";
     private static final String GREETING_RECEIVED_KEY = "openingGreetingReceived";
+    private static final String LAST_ANSWER_SUBMISSION_KEY = "lastAnswerSubmission";
+    private static final Duration REPEATED_SUBMISSION_WINDOW = Duration.ofSeconds(3);
+    private static final Logger log = LoggerFactory.getLogger(CallInterviewOrchestrationServiceImpl.class);
     private static final String CONSENT_PENDING = "PENDING";
     private static final String CONSENT_GRANTED = "GRANTED";
     private static final String CONSENT_DECLINED = "DECLINED";
@@ -409,6 +415,16 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             );
         }
 
+        if (isStaleOrRepeatedSubmission(request, response, cursor.question())) {
+            log.warn(
+                    "Ignoring a stale or repeated answer submission. callAttemptId={} currentQuestionId={} requestQuestionId={}",
+                    context.callAttempt().getId(),
+                    cursor.question().getId(),
+                    request.questionId()
+            );
+            return buildProgressResponse(context, response, null, currentFlowState);
+        }
+
         SurveyAnswer answer = context.answersByQuestionId().get(cursor.question().getId());
         if (answer == null) {
             answer = createSurveyAnswer(response, cursor.question());
@@ -422,6 +438,7 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         );
 
         applyNormalizedAnswer(answer, cursor.question(), normalizedAnswer, cursor.retryCount() + 1);
+        recordAnswerSubmission(response, request.utteranceText());
         SurveyAnswer savedAnswer = surveyAnswerRepository.save(answer);
         context.answersByQuestionId().put(cursor.question().getId(), savedAnswer);
         FlowState postAnswerFlowState = resolveFlowState(context);
@@ -503,11 +520,11 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
 
     private CallAttempt resolveCallAttempt(UUID callAttemptId, String providerCallId) {
         if (callAttemptId != null) {
-            return callAttemptRepository.findByIdAndDeletedAtIsNull(callAttemptId)
+            return callAttemptRepository.findAndLockById(callAttemptId)
                     .orElseThrow(() -> new NotFoundException("Call attempt not found: " + callAttemptId));
         }
         if (providerCallId != null && !providerCallId.isBlank()) {
-            return callAttemptRepository.findByProviderAndProviderCallIdAndDeletedAtIsNull(CallProvider.ELEVENLABS, providerCallId.trim())
+            return callAttemptRepository.findAndLockByProviderCallId(CallProvider.ELEVENLABS, providerCallId.trim())
                     .orElseThrow(() -> new NotFoundException("Call attempt not found for provider call: " + providerCallId));
         }
         throw new ValidationException("callAttemptId or providerCallId is required");
@@ -2802,6 +2819,42 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             return false;
         }
         return true;
+    }
+
+    // A submission for a question that is no longer current, or the same utterance again within a few
+    // seconds, comes from a retried or doubled tool call. Applying it would answer the next question.
+    // A genuine next answer cannot arrive that fast, because the agent first has to ask the question.
+    private boolean isStaleOrRepeatedSubmission(InterviewAnswerRequest request, SurveyResponse response, SurveyQuestion currentQuestion) {
+        if (request.questionId() != null && !request.questionId().equals(currentQuestion.getId())) {
+            return true;
+        }
+        String utterance = normalize(request.utteranceText());
+        if (utterance.isBlank()) {
+            return false;
+        }
+        try {
+            JsonNode lastSubmission = readTranscriptJson(response.getTranscriptJson()).path(LAST_ANSWER_SUBMISSION_KEY);
+            return lastSubmission.isObject()
+                    && utterance.equals(lastSubmission.path("text").asText(null))
+                    && System.currentTimeMillis() - lastSubmission.path("receivedAtEpochMillis").asLong(0)
+                            <= REPEATED_SUBMISSION_WINDOW.toMillis();
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private void recordAnswerSubmission(SurveyResponse response, String utteranceText) {
+        try {
+            JsonNode root = readTranscriptJson(response.getTranscriptJson());
+            Map<String, Object> payload = objectMapper.convertValue(root, Map.class);
+            Map<String, Object> submission = new LinkedHashMap<>();
+            submission.put("text", normalize(utteranceText));
+            submission.put("receivedAtEpochMillis", System.currentTimeMillis());
+            payload.put(LAST_ANSWER_SUBMISSION_KEY, submission);
+            response.setTranscriptJson(objectMapper.writeValueAsString(payload));
+        } catch (Exception ignored) {
+            // Duplicate detection is best effort; the row lock already serializes the tool calls.
+        }
     }
 
     private boolean isOpeningGreetingReceived(SurveyResponse response) {
