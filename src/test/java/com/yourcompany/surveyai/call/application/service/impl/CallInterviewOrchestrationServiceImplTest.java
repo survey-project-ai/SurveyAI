@@ -1621,6 +1621,45 @@ class CallInterviewOrchestrationServiceImplTest {
     }
 
     @Test
+    void recoverFailedAnswer_asksTheQuestionAgainAndMovesOnOnceTheRetriesAreUsed() {
+        fixture.survey.setLanguageCode("tr");
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        InterviewOrchestrationResponse firstFailure = service.recoverFailedAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Evet memnunum", InterviewConversationSignal.ANSWER));
+
+        assertThat(firstFailure.endCall()).isFalse();
+        assertThat(firstFailure.question().code()).isEqualTo("satisfied");
+        assertThat(firstFailure.prompt()).startsWith("Kusura bakmayın, cevabınızı tam anlayamadım.").contains("Memnun musunuz?");
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        SurveyAnswer failedAnswer = answersByResponseId.get(savedResponse.getId()).getFirst();
+        assertThat(failedAnswer.isValid()).isFalse();
+        assertThat(failedAnswer.getRetryCount()).isEqualTo(1);
+        assertThat(failedAnswer.getRawInputText()).isEqualTo("Evet memnunum");
+
+        // The same failure again uses up the retries, so the interview moves on instead of looping.
+        InterviewOrchestrationResponse secondFailure = service.recoverFailedAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Evet, memnunum dedim", InterviewConversationSignal.ANSWER));
+
+        assertThat(secondFailure.question().code()).isNotEqualTo("satisfied");
+    }
+
+    @Test
+    void recoverFailedAnswer_duringTheConsentPhaseRepeatsTheConsentQuestion() {
+        fixture.survey.setIntroPrompt("Kisa bir anketimize katilmak ister miydiniz?");
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Alo", InterviewConversationSignal.ANSWER));
+
+        InterviewOrchestrationResponse response = service.recoverFailedAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Evet", InterviewConversationSignal.ANSWER));
+
+        assertThat(response.question()).isNull();
+        assertThat(response.prompt()).contains("Kisa bir anketimize katilmak ister miydiniz?");
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        assertThat(answersByResponseId.getOrDefault(savedResponse.getId(), List.of())).isEmpty();
+    }
+
+    @Test
     void startAndFinish_doNotReopenAnInterviewWhoseConsentWasDeclined() {
         fixture.survey.setIntroPrompt("Kisa bir anketimize katilmak ister miydiniz?");
         service.submitAnswer(new InterviewAnswerRequest(

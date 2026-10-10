@@ -13,5 +13,8 @@ public interface CallInterviewOrchestrationService {
 
     InterviewOrchestrationResponse submitAnswer(InterviewAnswerRequest request);
 
+    // Called when submitAnswer failed: records the failed attempt and returns what the agent says next.
+    InterviewOrchestrationResponse recoverFailedAnswer(InterviewAnswerRequest request);
+
     InterviewOrchestrationResponse finishInterview(InterviewFinishRequest request);
 }

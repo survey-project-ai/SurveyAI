@@ -88,7 +88,7 @@ public class ElevenLabsInterviewToolController {
                     "signal=" + request.signal()
             );
         } catch (RuntimeException error) {
-            response = recoverCurrentQuestion(request, error);
+            response = recoverFailedAnswer(request, error);
         }
         return ResponseEntity.ok(response);
     }
@@ -175,23 +175,23 @@ public class ElevenLabsInterviewToolController {
         return builder.toString();
     }
 
-    private InterviewOrchestrationResponse recoverCurrentQuestion(InterviewAnswerRequest request, RuntimeException originalError) {
-        log.warn(
-                "ElevenLabs answer tool failed; attempting current-question recovery. callAttemptId={} providerCallId={} signal={} error={}",
+    // The agent cannot act on a server error mid-call, so a failed answer is recorded as an unclear
+    // answer and the agent gets the next thing to say. The failure is logged with its stack trace,
+    // since it is otherwise invisible: the call goes on.
+    private InterviewOrchestrationResponse recoverFailedAnswer(InterviewAnswerRequest request, RuntimeException originalError) {
+        log.error(
+                "ElevenLabs answer tool failed; recording it as an unclear answer. callAttemptId={} providerCallId={} signal={}",
                 request.callAttemptId(),
                 request.providerCallId(),
                 request.signal(),
-                originalError.getMessage()
+                originalError
         );
         try {
             return timedToolCall(
-                    "current-question-recovery",
+                    "answer-recovery",
                     request.callAttemptId(),
                     request.providerCallId(),
-                    () -> callInterviewOrchestrationService.getCurrentQuestion(
-                            new InterviewSessionRequest(request.callAttemptId(), request.providerCallId(), null)
-                    ),
-                    "recoveryFrom=answer",
+                    () -> callInterviewOrchestrationService.recoverFailedAnswer(request),
                     "signal=" + request.signal()
             );
         } catch (RuntimeException recoveryError) {

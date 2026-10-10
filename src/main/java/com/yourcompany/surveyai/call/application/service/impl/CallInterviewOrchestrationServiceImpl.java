@@ -77,6 +77,7 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     // No clear yes or no after the consent question was asked again as often as a survey question is retried.
     private static final String CONSENT_UNCLEAR = "UNCLEAR";
     private static final String CONSENT_CLARIFICATION_COUNT_KEY = "openingConsentClarificationCount";
+    private static final String ANSWER_PROCESSING_FAILED_REASON = "Answer could not be processed";
     private static final List<String> CONSENT_DECLINE_PHRASES = List.of(
             "katilmam", "katilmak istemiyorum", "katilmak istemem", "katilmayacagim",
             "istemiyorum", "istemem", "ilgilenmiyorum", "ilgilenmem",
@@ -318,6 +319,10 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         SessionContext context = loadSessionContext(request.callAttemptId(), request.providerCallId());
         SurveyResponse response = ensureSurveyResponse(context.callAttempt());
         initializeOpeningConsentState(response, context.survey());
+        return buildCurrentStepResponse(context, response);
+    }
+
+    private InterviewOrchestrationResponse buildCurrentStepResponse(SessionContext context, SurveyResponse response) {
         if (isTerminalResponse(response)) {
             surveyResponseRepository.save(response);
             return buildTerminalResponse(context, response, resolveTerminalClosingPrompt(context, response));
@@ -426,8 +431,53 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
                 answer
         );
 
+        return applyAnswerAndContinue(context, response, cursor, answer, normalizedAnswer, request.utteranceText());
+    }
+
+    // submitAnswer failed and its transaction was rolled back. The attempt counts as an unclear answer to
+    // the current question: the agent apologizes and asks it again, and a failure that keeps coming back
+    // moves the interview on once the retries are used up, instead of repeating the same question until
+    // the callee hangs up.
+    @Override
+    public InterviewOrchestrationResponse recoverFailedAnswer(InterviewAnswerRequest request) {
+        SessionContext context = loadSessionContext(request.callAttemptId(), request.providerCallId());
+        SurveyResponse response = ensureSurveyResponse(context.callAttempt());
+        initializeOpeningConsentState(response, context.survey());
+        boolean answeringQuestions = !isTerminalResponse(response)
+                && !(requiresOpeningGreeting(context.survey()) && !isOpeningGreetingReceived(response))
+                && !isOpeningConsentPending(context.survey(), response);
+        boolean answerSignal = request.signal() == null
+                || request.signal() == InterviewConversationSignal.ANSWER
+                || request.signal() == InterviewConversationSignal.NO_INPUT;
+        QuestionCursor cursor = answeringQuestions ? resolveFlowState(context).cursor() : null;
+        if (!answerSignal || cursor == null || cursor.question() == null) {
+            return buildCurrentStepResponse(context, response);
+        }
+
+        SurveyAnswer answer = context.answersByQuestionId().get(cursor.question().getId());
+        if (answer == null) {
+            answer = createSurveyAnswer(response, cursor.question());
+        }
+        NormalizedAnswer failedAnswer = NormalizedAnswer.invalidWithClarification(
+                ANSWER_PROCESSING_FAILED_REASON,
+                trimToNull(request.utteranceText()),
+                localized(context.survey(),
+                        "Kusura bakmayın, cevabınızı tam anlayamadım.",
+                        "Sorry, I did not quite catch your answer.")
+        );
+        return applyAnswerAndContinue(context, response, cursor, answer, failedAnswer, request.utteranceText());
+    }
+
+    private InterviewOrchestrationResponse applyAnswerAndContinue(
+            SessionContext context,
+            SurveyResponse response,
+            QuestionCursor cursor,
+            SurveyAnswer answer,
+            NormalizedAnswer normalizedAnswer,
+            String utteranceText
+    ) {
         applyNormalizedAnswer(answer, cursor.question(), normalizedAnswer, cursor.retryCount() + 1);
-        recordAnswerSubmission(response, request.utteranceText());
+        recordAnswerSubmission(response, utteranceText);
         SurveyAnswer savedAnswer = surveyAnswerRepository.save(answer);
         context.answersByQuestionId().put(cursor.question().getId(), savedAnswer);
         FlowState postAnswerFlowState = resolveFlowState(context);

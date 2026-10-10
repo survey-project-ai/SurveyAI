@@ -6,7 +6,6 @@ import static org.mockito.Mockito.when;
 
 import com.yourcompany.surveyai.call.application.dto.request.InterviewAnswerRequest;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewConversationSignal;
-import com.yourcompany.surveyai.call.application.dto.request.InterviewSessionRequest;
 import com.yourcompany.surveyai.call.application.dto.response.InterviewOrchestrationResponse;
 import com.yourcompany.surveyai.call.application.service.CallInterviewOrchestrationService;
 import com.yourcompany.surveyai.call.configuration.VoiceProviderConfigurationResolver;
@@ -46,7 +45,7 @@ class ElevenLabsInterviewToolControllerTest {
     }
 
     @Test
-    void submitAnswer_recoversWithCurrentQuestionWhenAnswerProcessingFails() {
+    void submitAnswer_recordsAFailedAnswerAndReturnsWhatToSayNext() {
         UUID callAttemptId = UUID.randomUUID();
         InterviewAnswerRequest request = new InterviewAnswerRequest(
                 callAttemptId,
@@ -76,7 +75,7 @@ class ElevenLabsInterviewToolControllerTest {
         );
 
         when(orchestrationService.submitAnswer(request)).thenThrow(new IllegalStateException("tool failure"));
-        when(orchestrationService.getCurrentQuestion(new InterviewSessionRequest(callAttemptId, "provider-call-id", null)))
+        when(orchestrationService.recoverFailedAnswer(request))
                 .thenReturn(recoveryResponse);
 
         ResponseEntity<InterviewOrchestrationResponse> response = controller.submitAnswer(TOOL_SECRET, request);
