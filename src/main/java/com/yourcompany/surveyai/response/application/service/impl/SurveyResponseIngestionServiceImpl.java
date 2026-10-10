@@ -79,6 +79,11 @@ public class SurveyResponseIngestionServiceImpl implements SurveyResponseIngesti
             SurveyResponse response = surveyResponseRepository.findByCallAttempt_IdAndDeletedAtIsNull(callAttempt.getId())
                     .orElseGet(() -> createSurveyResponse(callAttempt));
 
+            if (isOutcomeDecided(response)) {
+                attachTranscript(callAttempt, event, response, mappedResult);
+                return;
+            }
+
             response.setStatus(mappedResult.responseStatus());
             response.setCompletionPercent(defaultCompletion(mappedResult.completionPercent()));
             response.setStartedAt(firstNonNull(mappedResult.startedAt(), callAttempt.getConnectedAt(), callAttempt.getDialedAt(), OffsetDateTime.now()));
@@ -188,6 +193,40 @@ public class SurveyResponseIngestionServiceImpl implements SurveyResponseIngesti
             );
             throw error;
         }
+    }
+
+    // The live interview, or an operator's edit, already completed or abandoned this response. Its
+    // status, completion and answers follow the survey's skip logic and the consent decision, which the
+    // provider's post-call data does not know about, so only the transcript and summary are added.
+    private boolean isOutcomeDecided(SurveyResponse response) {
+        return response.getStatus() == SurveyResponseStatus.COMPLETED || response.getStatus() == SurveyResponseStatus.ABANDONED;
+    }
+
+    private void attachTranscript(CallAttempt callAttempt, ProviderWebhookEvent event, SurveyResponse response, IngestedSurveyResult mappedResult) {
+        if (mappedResult.transcriptText() != null && !mappedResult.transcriptText().isBlank()) {
+            response.setTranscriptText(mappedResult.transcriptText());
+        }
+        if (mappedResult.aiSummaryText() != null && !mappedResult.aiSummaryText().isBlank()) {
+            response.setAiSummaryText(mappedResult.aiSummaryText());
+        }
+        response.setTranscriptJson(mergeTopLevelJsonObjects(response.getTranscriptJson(), mappedResult.transcriptJson()));
+        SurveyResponse persistedResponse = surveyResponseRepository.save(response);
+        providerExecutionObservationService.recordSurveyResult(
+                callAttempt,
+                event,
+                persistedResponse,
+                0,
+                0,
+                "Transcript attached to the response decided during the call"
+        );
+        log.info(
+                "Transcript attached to a decided survey response. provider={} eventType={} callAttemptId={} surveyResponseId={} status={}",
+                callAttempt.getProvider(),
+                event.eventType(),
+                callAttempt.getId(),
+                persistedResponse.getId(),
+                persistedResponse.getStatus()
+        );
     }
 
     private SurveyResponse createSurveyResponse(CallAttempt callAttempt) {
@@ -373,9 +412,10 @@ public class SurveyResponseIngestionServiceImpl implements SurveyResponseIngesti
         }
     }
 
+    // Keeps the existing top-level keys (such as the interview's consent state) readable where they are.
     private String mergeTranscriptJson(String transcriptJson, String providerMetadataJson, List<String> unmappedFields) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("transcript", parseOrFallback(transcriptJson));
+        mergeJsonObjectInto(payload, transcriptJson);
         payload.put("providerMetadata", parseOrFallback(providerMetadataJson));
         payload.put("unmappedFields", unmappedFields);
         try {

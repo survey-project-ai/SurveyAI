@@ -90,7 +90,7 @@ public class ElevenLabsSurveyResultMapper implements ProviderSurveyResultMapper 
             candidate.fields().forEachRemaining(entry -> {
                 String key = entry.getKey();
                 JsonNode value = entry.getValue();
-                if (isNonAnswerField(key)) {
+                if (isNonAnswerField(key) || !hasAnswerValue(value)) {
                     return;
                 }
                 answers.add(buildAnswerFromEntry(key, value));
@@ -107,7 +107,7 @@ public class ElevenLabsSurveyResultMapper implements ProviderSurveyResultMapper 
                         text(item, "questionTitle"),
                         text(item, "field")
                 );
-                if (isNonAnswerField(key)) {
+                if (isNonAnswerField(key) || !hasAnswerValue(item)) {
                     continue;
                 }
                 answers.add(buildAnswerFromEntry(key, item));
@@ -185,7 +185,7 @@ public class ElevenLabsSurveyResultMapper implements ProviderSurveyResultMapper 
                 .toList();
         List<String> unmapped = new ArrayList<>();
         candidate.fieldNames().forEachRemaining(fieldName -> {
-            if (isNonAnswerField(fieldName)) {
+            if (isNonAnswerField(fieldName) || !hasAnswerValue(candidate.get(fieldName))) {
                 return;
             }
             if (!mappedKeys.contains(fieldName)) {
@@ -193,6 +193,30 @@ public class ElevenLabsSurveyResultMapper implements ProviderSurveyResultMapper 
             }
         });
         return unmapped;
+    }
+
+    // ElevenLabs lists every data-collection item, with a null value for questions that were not
+    // answered (not asked, or the call ended first). Those are not answers.
+    private boolean hasAnswerValue(JsonNode value) {
+        if (value == null || value.isNull() || value.isMissingNode()) {
+            return false;
+        }
+        if (value.isValueNode()) {
+            return !value.asText().isBlank();
+        }
+        for (String field : List.of("value", "answer", "result", "text", "raw", "number")) {
+            JsonNode node = value.get(field);
+            if (node != null && !node.isNull() && !(node.isTextual() && node.asText().isBlank())) {
+                return true;
+            }
+        }
+        for (String field : List.of("values", "selected_options")) {
+            JsonNode node = value.get(field);
+            if (node != null && node.isArray() && !node.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isNonAnswerField(String key) {

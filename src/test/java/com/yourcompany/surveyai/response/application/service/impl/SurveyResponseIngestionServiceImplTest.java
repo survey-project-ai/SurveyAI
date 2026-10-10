@@ -228,7 +228,7 @@ class SurveyResponseIngestionServiceImplTest {
     }
 
     @Test
-    void ingest_preservesExistingOpeningConsentStateInsideTranscriptJson() {
+    void ingest_keepsTheAbandonedOutcomeOfADeclinedConsentAndOnlyAddsTheTranscript() {
         TestFixture fixture = buildFixture();
         SurveyResponse existingResponse = new SurveyResponse();
         existingResponse.setId(UUID.randomUUID());
@@ -261,8 +261,107 @@ class SurveyResponseIngestionServiceImplTest {
         service.ingest(fixture.callAttempt(), fixture.completedWebhook());
 
         SurveyResponse savedResponse = savedResponses.getLast();
+        assertThat(savedResponse.getStatus()).isEqualTo(SurveyResponseStatus.ABANDONED);
+        assertThat(savedResponse.getCompletionPercent()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(savedResponse.getTranscriptText()).contains("agent: Hello");
+        assertThat(savedResponse.getAiSummaryText()).isNotBlank();
         assertThat(savedResponse.getTranscriptJson()).contains("\"openingConsentState\":\"DECLINED\"");
         assertThat(savedResponse.getTranscriptJson()).contains("\"providerCallId\":\"conv_123\"");
+        assertThat(savedAnswers).isEmpty();
+    }
+
+    @Test
+    void ingest_keepsTheStatusAndCompletionOfAnInterviewCompletedDuringTheCall() {
+        TestFixture fixture = buildFixture();
+        SurveyResponse existingResponse = new SurveyResponse();
+        existingResponse.setId(UUID.randomUUID());
+        existingResponse.setCompany(fixture.company());
+        existingResponse.setSurvey(fixture.survey());
+        existingResponse.setOperation(fixture.operation());
+        existingResponse.setOperationContact(fixture.contact());
+        existingResponse.setCallAttempt(fixture.callAttempt());
+        existingResponse.setStatus(SurveyResponseStatus.COMPLETED);
+        // Branching skipped the second question, so the live interview completed at 100%.
+        existingResponse.setCompletionPercent(BigDecimal.valueOf(100));
+        OffsetDateTime completedAt = OffsetDateTime.now().minusMinutes(1);
+        existingResponse.setCompletedAt(completedAt);
+        existingResponse.setStartedAt(OffsetDateTime.now().minusMinutes(3));
+        existingResponse.setTranscriptJson("{}");
+
+        when(surveyResponseRepository.findByCallAttempt_IdAndDeletedAtIsNull(fixture.callAttempt().getId())).thenReturn(Optional.of(existingResponse));
+
+        service.ingest(fixture.callAttempt(), fixture.completedWebhook());
+
+        SurveyResponse savedResponse = savedResponses.getLast();
+        assertThat(savedResponse.getStatus()).isEqualTo(SurveyResponseStatus.COMPLETED);
+        assertThat(savedResponse.getCompletionPercent()).isEqualByComparingTo(BigDecimal.valueOf(100));
+        assertThat(savedResponse.getCompletedAt()).isEqualTo(completedAt);
+        assertThat(savedResponse.getTranscriptText()).contains("agent: Hello");
+        assertThat(savedAnswers).isEmpty();
+    }
+
+    @Test
+    void ingest_ignoresDataCollectionItemsWithoutAValue() {
+        TestFixture fixture = buildFixture();
+        when(surveyResponseRepository.findByCallAttempt_IdAndDeletedAtIsNull(fixture.callAttempt().getId())).thenReturn(Optional.empty());
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey().getId()))
+                .thenReturn(List.of(fixture.choiceQuestion(), fixture.ratingQuestion()));
+        when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdAndDeletedAtIsNullOrderByOptionOrderAsc(fixture.choiceQuestion().getId()))
+                .thenReturn(List.of(fixture.yesOption(), fixture.noOption()));
+        when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdAndDeletedAtIsNullOrderByOptionOrderAsc(fixture.ratingQuestion().getId()))
+                .thenReturn(List.of());
+        when(surveyAnswerRepository.findBySurveyResponse_IdAndSurveyQuestion_IdAndDeletedAtIsNull(any(), any()))
+                .thenReturn(Optional.empty());
+        when(surveyAnswerRepository.findAllBySurveyResponse_IdAndDeletedAtIsNull(any())).thenAnswer(invocation -> List.copyOf(savedAnswers));
+
+        service.ingest(fixture.callAttempt(), elevenLabsWebhook(fixture, """
+                {
+                  "survey_question_1_response": {"data_collection_id": "survey_question_1_response", "value": "yes"},
+                  "survey_question_2_response": {"data_collection_id": "survey_question_2_response", "value": null, "rationale": "Not asked"}
+                }
+                """));
+
+        assertThat(savedAnswers).hasSize(1);
+        assertThat(savedAnswers.getFirst().getSurveyQuestion().getQuestionOrder()).isEqualTo(1);
+        SurveyResponse savedResponse = savedResponses.getLast();
+        assertThat(savedResponse.getStatus()).isEqualTo(SurveyResponseStatus.PARTIAL);
+        assertThat(savedResponse.getTranscriptJson()).doesNotContain("unmappedFields\":[\"survey_question_2_response");
+    }
+
+    private ProviderWebhookEvent elevenLabsWebhook(TestFixture fixture, String dataCollectionResults) {
+        return new ProviderWebhookEvent(
+                CallProvider.ELEVENLABS,
+                "conv_123",
+                "op:contact",
+                "post_call_transcription",
+                CallJobStatus.COMPLETED,
+                CallAttemptStatus.COMPLETED,
+                OffsetDateTime.now(),
+                45,
+                new ProviderCorrelationMetadata(
+                        fixture.operation().getId(),
+                        fixture.contact().getId(),
+                        fixture.callJob().getId(),
+                        fixture.callAttempt().getId()
+                ),
+                null,
+                null,
+                "inline://elevenlabs/conversations/conv_123",
+                "agent: Hello\nuser: Hi",
+                """
+                {
+                  "type": "post_call_transcription",
+                  "data": {
+                    "conversation_id": "conv_123",
+                    "status": "done",
+                    "analysis": {
+                      "transcript_summary": "Summary",
+                      "data_collection_results": %s
+                    }
+                  }
+                }
+                """.formatted(dataCollectionResults)
+        );
     }
 
     @Test
