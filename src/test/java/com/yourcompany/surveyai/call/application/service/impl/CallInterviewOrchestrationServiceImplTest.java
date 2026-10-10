@@ -22,6 +22,7 @@ import com.yourcompany.surveyai.operation.domain.entity.Operation;
 import com.yourcompany.surveyai.operation.domain.entity.OperationContact;
 import com.yourcompany.surveyai.response.domain.entity.SurveyAnswer;
 import com.yourcompany.surveyai.response.domain.entity.SurveyResponse;
+import com.yourcompany.surveyai.response.domain.enums.SurveyResponseStatus;
 import com.yourcompany.surveyai.response.repository.SurveyAnswerRepository;
 import com.yourcompany.surveyai.response.repository.SurveyResponseRepository;
 import com.yourcompany.surveyai.survey.application.support.TurkeyGeoDataService;
@@ -1553,6 +1554,66 @@ class CallInterviewOrchestrationServiceImplTest {
 
         assertThat(response.prompt()).isEqualTo("Peki, tesekkur ederim. Iyi gunler dilerim.");
         assertThat(response.closingMessage()).isEqualTo("Peki, tesekkur ederim. Iyi gunler dilerim.");
+    }
+
+    @Test
+    void startAndFinish_doNotReopenAnInterviewWhoseConsentWasDeclined() {
+        fixture.survey.setIntroPrompt("Kisa bir anketimize katilmak ister miydiniz?");
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Alo", InterviewConversationSignal.ANSWER));
+        InterviewOrchestrationResponse declined = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Katilmak istemiyorum", InterviewConversationSignal.ANSWER));
+        assertThat(declined.surveyStatus()).isEqualTo(SurveyResponseStatus.ABANDONED);
+
+        InterviewOrchestrationResponse restarted = service.startInterview(
+                new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+        InterviewOrchestrationResponse finished = service.finishInterview(
+                new com.yourcompany.surveyai.call.application.dto.request.InterviewFinishRequest(
+                        fixture.callAttempt.getId(), null, null, null, null));
+
+        assertThat(restarted.endCall()).isTrue();
+        assertThat(restarted.question()).isNull();
+        assertThat(restarted.surveyStatus()).isEqualTo(SurveyResponseStatus.ABANDONED);
+        assertThat(finished.surveyStatus()).isEqualTo(SurveyResponseStatus.ABANDONED);
+        assertThat(finished.closingMessage()).isEqualTo(declined.closingMessage());
+        assertThat(responsesByAttemptId.get(fixture.callAttempt.getId()).getStatus()).isEqualTo(SurveyResponseStatus.ABANDONED);
+    }
+
+    @Test
+    void finishInterview_doesNotTurnACompletedInterviewIntoAbandoned() {
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+        InterviewOrchestrationResponse response = null;
+        for (String utterance : List.of("Evet", "4", "Ulasim daha iyi olsun")) {
+            response = service.submitAnswer(new InterviewAnswerRequest(
+                    fixture.callAttempt.getId(), null, null, utterance, InterviewConversationSignal.ANSWER));
+        }
+        assertThat(response.surveyStatus()).isEqualTo(SurveyResponseStatus.COMPLETED);
+
+        InterviewOrchestrationResponse finished = service.finishInterview(
+                new com.yourcompany.surveyai.call.application.dto.request.InterviewFinishRequest(
+                        fixture.callAttempt.getId(), null, null, SurveyResponseStatus.ABANDONED, true));
+
+        assertThat(finished.surveyStatus()).isEqualTo(SurveyResponseStatus.COMPLETED);
+        assertThat(finished.closingMessage()).isNull();
+        assertThat(responsesByAttemptId.get(fixture.callAttempt.getId()).getStatus()).isEqualTo(SurveyResponseStatus.COMPLETED);
+    }
+
+    @Test
+    void getCurrentQuestion_beforeTheGreetingRecordsTheOpeningSoTheNextReplyAnswersTheQuestion() {
+        fixture.survey.setIntroPrompt("Izmir Gundem Arastirmasi icin sizi ariyorum.");
+
+        InterviewOrchestrationResponse opening = service.getCurrentQuestion(
+                new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+        InterviewOrchestrationResponse next = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Evet", InterviewConversationSignal.ANSWER));
+
+        assertThat(opening.prompt()).contains("Izmir Gundem Arastirmasi icin sizi ariyorum.").contains("Memnun musunuz?");
+        assertThat(next.prompt()).doesNotContain("Izmir Gundem Arastirmasi icin sizi ariyorum.");
+        assertThat(next.question().code()).isNotEqualTo("satisfied");
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        SurveyAnswer answer = answersByResponseId.get(savedResponse.getId()).getFirst();
+        assertThat(answer.getSurveyQuestion().getCode()).isEqualTo("satisfied");
+        assertThat(answer.isValid()).isTrue();
     }
 
     @Test

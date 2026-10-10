@@ -280,8 +280,13 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     public InterviewOrchestrationResponse startInterview(InterviewSessionRequest request) {
         SessionContext context = loadSessionContext(request.callAttemptId(), request.providerCallId());
         SurveyResponse response = ensureSurveyResponse(context.callAttempt());
-        response.setStatus(SurveyResponseStatus.PARTIAL);
         initializeOpeningConsentState(response, context.survey());
+        // A repeated start must not reopen an interview that has already ended (finished, stopped or declined).
+        if (isTerminalResponse(response)) {
+            surveyResponseRepository.save(response);
+            return buildTerminalResponse(context, response, resolveTerminalClosingPrompt(context, response));
+        }
+        response.setStatus(SurveyResponseStatus.PARTIAL);
         surveyResponseRepository.save(response);
         if (requiresOpeningGreeting(context.survey()) && !isOpeningGreetingReceived(response)) {
             return buildConsentPhaseResponse(context, response, null);
@@ -301,16 +306,20 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             surveyResponseRepository.save(response);
             return buildTerminalResponse(context, response, resolveTerminalClosingPrompt(context, response));
         }
-        surveyResponseRepository.save(response);
+        // The agent asked what to say before the callee's greeting reached the backend. The opening
+        // returned here gets spoken, so it is recorded as delivered: the callee's next words are then
+        // read as the reply to it, instead of as the greeting, which would repeat the opening and drop them.
         if (requiresOpeningGreeting(context.survey()) && !isOpeningGreetingReceived(response)) {
-            if (isOpeningConsentPending(context.survey(), response)) {
-                return buildConsentPhaseResponse(context, response, buildOpeningConsentRepeatPrompt(context.survey()));
-            }
-            return buildProgressResponse(context, response, buildOpeningLeadIn(context), resolveFlowState(context));
+            InterviewOrchestrationResponse openingResponse = deliverOpening(context, response);
+            surveyResponseRepository.save(response);
+            return openingResponse;
         }
         if (isOpeningConsentPending(context.survey(), response)) {
+            updateOpeningConsentPromptDelivered(response, true);
+            surveyResponseRepository.save(response);
             return buildConsentPhaseResponse(context, response, buildOpeningConsentRepeatPrompt(context.survey()));
         }
+        surveyResponseRepository.save(response);
         return buildProgressResponse(context, response, null, resolveFlowState(context));
     }
 
@@ -433,12 +442,20 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     public InterviewOrchestrationResponse finishInterview(InterviewFinishRequest request) {
         SessionContext context = loadSessionContext(request.callAttemptId(), request.providerCallId());
         SurveyResponse response = ensureSurveyResponse(context.callAttempt());
+        boolean suppressClosingMessage = Boolean.TRUE.equals(request.suppressClosingMessage());
+        // An interview that already ended keeps its outcome: finishing a declined or stopped interview
+        // must not turn it into PARTIAL or COMPLETED, nor a completed one into ABANDONED.
+        if (isTerminalResponse(response)) {
+            return buildTerminalResponse(
+                    context,
+                    response,
+                    suppressClosingMessage ? null : resolveTerminalClosingPrompt(context, response)
+            );
+        }
         FlowState flowState = resolveFlowState(context);
         finalizeResponse(response, context, request.requestedStatus(), flowState);
         surveyResponseRepository.save(response);
-        String closingMessage = Boolean.TRUE.equals(request.suppressClosingMessage())
-                ? null
-                : buildClosingPrompt(context.survey());
+        String closingMessage = suppressClosingMessage ? null : buildClosingPrompt(context.survey());
         return buildTerminalResponse(context, response, closingMessage, flowState);
     }
 
@@ -568,7 +585,12 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         if (!isOpeningGreetingLike(request)) {
             return buildConsentPhaseResponse(context, response, null);
         }
+        return deliverOpening(context, response);
+    }
 
+    // Returns the opening (the consent question, or the intro and the first question) and records
+    // that the greeting phase is over.
+    private InterviewOrchestrationResponse deliverOpening(SessionContext context, SurveyResponse response) {
         updateOpeningGreetingReceived(response, true);
         if (isOpeningConsentPending(context.survey(), response)) {
             updateOpeningConsentPromptDelivered(response, true);
