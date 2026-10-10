@@ -441,6 +441,45 @@ class OperationServiceImplTest {
     }
 
     @Test
+    void getOperationAnalytics_countsAnInterviewEndedWithoutAClearConsentAsUnclear() {
+        Operation operation = buildOperation(OperationStatus.RUNNING, SurveyStatus.PUBLISHED);
+        UUID companyId = operation.getCompany().getId();
+        UUID operationId = operation.getId();
+
+        SurveyResponse unclearResponse = buildSurveyResponse(
+                operation,
+                SurveyResponseStatus.ABANDONED,
+                "905551112266",
+                0,
+                OffsetDateTime.now().minusMinutes(10)
+        );
+        unclearResponse.setTranscriptJson("{\"openingConsentState\":\"UNCLEAR\"}");
+
+        when(operationRepository.findByIdAndCompany_IdAndDeletedAtIsNull(operationId, companyId))
+                .thenReturn(Optional.of(operation));
+        when(operationContactRepository.countByOperation_IdAndCompany_IdAndDeletedAtIsNull(operationId, companyId))
+                .thenReturn(1L);
+        when(callJobRepository.countGroupedByStatusForOperation(operationId))
+                .thenReturn(List.<Object[]>of(new Object[]{CallJobStatus.COMPLETED, 1L}));
+        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
+                .thenReturn(List.of(unclearResponse));
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
+                .thenReturn(List.of());
+        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(List.of(unclearResponse.getId())))
+                .thenReturn(List.of());
+
+        OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
+
+        assertThat(response.consentBreakdown())
+                .extracting(item -> item.label() + ":" + item.count())
+                .containsExactly(
+                        "Katilmayi kabul etti:0",
+                        "Katilmayi reddetti:0",
+                        "Belirsiz / yanitsiz:1"
+                );
+    }
+
+    @Test
     void getOperationAnalytics_recoversChoiceDistributionFromLegacyInvalidAnswers() {
         Operation operation = buildOperation(OperationStatus.RUNNING, SurveyStatus.PUBLISHED);
         UUID companyId = operation.getCompany().getId();

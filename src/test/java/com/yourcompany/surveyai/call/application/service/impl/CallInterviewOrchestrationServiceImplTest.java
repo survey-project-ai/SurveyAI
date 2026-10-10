@@ -1556,6 +1556,70 @@ class CallInterviewOrchestrationServiceImplTest {
         assertThat(response.closingMessage()).isEqualTo("Peki, tesekkur ederim. Iyi gunler dilerim.");
     }
 
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "Hayır, ilgilenmiyorum | DECLINED",
+            "Şu an müsait değilim | DECLINED",
+            "Evet ama şimdi olmaz | DECLINED",
+            "Hayır, sorun değil, buyurun | ACCEPTED",
+            "Tabii ki | ACCEPTED",
+            "Olur | ACCEPTED",
+            "Evet | ACCEPTED",
+            // A bare no depends on how the intro was phrased, so the question is asked again.
+            "Hayır | UNCLEAR",
+            "Yok | UNCLEAR",
+            "Kim olursunuz | UNCLEAR"
+    })
+    void submitAnswer_readsTheConsentDecision(String utterance, String expected) {
+        fixture.survey.setIntroPrompt("Kisa bir anketimize katilmak ister miydiniz?");
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Alo", InterviewConversationSignal.ANSWER));
+
+        InterviewOrchestrationResponse response = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, utterance, InterviewConversationSignal.ANSWER));
+
+        switch (expected) {
+            case "ACCEPTED" -> {
+                assertThat(response.endCall()).isFalse();
+                assertThat(response.question().code()).isEqualTo("satisfied");
+            }
+            case "DECLINED" -> {
+                assertThat(response.endCall()).isTrue();
+                assertThat(response.surveyStatus()).isEqualTo(SurveyResponseStatus.ABANDONED);
+                assertThat(responsesByAttemptId.get(fixture.callAttempt.getId()).getTranscriptJson())
+                        .contains("\"openingConsentState\":\"DECLINED\"");
+            }
+            default -> {
+                assertThat(response.endCall()).isFalse();
+                assertThat(response.question()).isNull();
+                assertThat(response.prompt()).contains("Kisa bir anketimize katilmak ister miydiniz?");
+            }
+        }
+    }
+
+    @Test
+    void submitAnswer_endsTheCallWhenConsentStaysUnclearAfterTheRetries() {
+        fixture.survey.setIntroPrompt("Kisa bir anketimize katilmak ister miydiniz?");
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Alo", InterviewConversationSignal.ANSWER));
+
+        List<InterviewOrchestrationResponse> replies = new ArrayList<>();
+        for (String utterance : List.of("Hayir", "Efendim, anlamadim", "Ne dediniz")) {
+            replies.add(service.submitAnswer(new InterviewAnswerRequest(
+                    fixture.callAttempt.getId(), null, null, utterance, InterviewConversationSignal.ANSWER)));
+        }
+
+        assertThat(replies.get(0).endCall()).isFalse();
+        assertThat(replies.get(0).question()).isNull();
+        assertThat(replies.get(0).prompt()).contains("Kisa bir anketimize katilmak ister miydiniz?");
+        assertThat(replies.get(1).endCall()).isFalse();
+        assertThat(replies.get(2).endCall()).isTrue();
+        assertThat(replies.get(2).surveyStatus()).isEqualTo(SurveyResponseStatus.ABANDONED);
+        assertThat(replies.get(2).closingMessage()).isNotBlank();
+        assertThat(responsesByAttemptId.get(fixture.callAttempt.getId()).getTranscriptJson())
+                .contains("\"openingConsentState\":\"UNCLEAR\"");
+    }
+
     @Test
     void startAndFinish_doNotReopenAnInterviewWhoseConsentWasDeclined() {
         fixture.survey.setIntroPrompt("Kisa bir anketimize katilmak ister miydiniz?");

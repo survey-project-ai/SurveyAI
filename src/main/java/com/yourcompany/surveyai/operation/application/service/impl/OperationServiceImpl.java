@@ -137,6 +137,7 @@ public class OperationServiceImpl implements OperationService {
     private static final String CONSENT_STATE_KEY = "openingConsentState";
     private static final String CONSENT_GRANTED = "GRANTED";
     private static final String CONSENT_DECLINED = "DECLINED";
+    private static final String CONSENT_UNCLEAR = "UNCLEAR";
 
     private static final Map<String, String> OPEN_ENDED_THEME_BY_KEYWORD = Map.ofEntries(
             Map.entry("ulasim", "Ulasim"),
@@ -1722,7 +1723,10 @@ public class OperationServiceImpl implements OperationService {
 
         for (SurveyResponse response : responses) {
             String consentState = readConsentState(response);
-            if (CONSENT_DECLINED.equals(consentState) || inferConsentDeclined(response)) {
+            // The interview ended without a clear answer; its ABANDONED status is not a refusal.
+            if (CONSENT_UNCLEAR.equals(consentState)) {
+                counts.computeIfPresent("Belirsiz / yanitsiz", (key, value) -> value + 1L);
+            } else if (CONSENT_DECLINED.equals(consentState) || inferConsentDeclined(response)) {
                 counts.computeIfPresent("Katilmayi reddetti", (key, value) -> value + 1L);
             } else if (CONSENT_GRANTED.equals(consentState) || inferConsentAccepted(response)) {
                 counts.computeIfPresent("Katilmayi kabul etti", (key, value) -> value + 1L);

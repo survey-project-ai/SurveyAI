@@ -74,6 +74,22 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     private static final String CONSENT_PENDING = "PENDING";
     private static final String CONSENT_GRANTED = "GRANTED";
     private static final String CONSENT_DECLINED = "DECLINED";
+    // No clear yes or no after the consent question was asked again as often as a survey question is retried.
+    private static final String CONSENT_UNCLEAR = "UNCLEAR";
+    private static final String CONSENT_CLARIFICATION_COUNT_KEY = "openingConsentClarificationCount";
+    private static final List<String> CONSENT_DECLINE_PHRASES = List.of(
+            "katilmam", "katilmak istemiyorum", "katilmak istemem", "katilmayacagim",
+            "istemiyorum", "istemem", "ilgilenmiyorum", "ilgilenmem",
+            "uygun degil", "uygun degilim", "musait degil", "musait degilim", "mesgulum",
+            "simdi olmaz", "olmaz", "zamanim yok", "vaktim yok",
+            "rahatsiz etmeyin", "aramayin", "beni aramayin",
+            "not now", "not interested", "no thanks", "no thank you", "do not call", "dont call"
+    );
+    private static final List<String> CONSENT_ACCEPT_PHRASES = List.of(
+            "sorabilirsiniz", "sorabilirsin", "buyurun", "buyrun", "dinliyorum", "olur", "uygunum", "musaitim",
+            "sorun degil", "sorun yok", "tabii", "tabi", "elbette", "tamam", "peki", "neden olmasin",
+            "go ahead", "you can ask", "sure", "ok", "okay"
+    );
     private static final Map<String, Integer> RATING_SEMANTIC_TR_1_5 = Map.ofEntries(
             Map.entry("hic onemli degil", 1),
             Map.entry("onemsiz", 1),
@@ -558,7 +574,7 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         String rawInput = trimToNull(request.utteranceText());
         String sanitizedInput = sanitizeUtterance(rawInput);
         if (request.signal() == InterviewConversationSignal.NO_INPUT || sanitizedInput == null || isLikelyAsrArtifact(rawInput, sanitizedInput)) {
-            return buildConsentPhaseResponse(context, response, buildOpeningConsentClarificationPrompt(context.survey()));
+            return askForConsentAgainOrClose(context, response);
         }
 
         ConsentDecision decision = classifyOpeningConsentDecision(sanitizedInput);
@@ -574,6 +590,22 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             updateCompletionPercent(response, context, flowState.eligibleQuestions());
             return buildTerminalResponse(context, response, buildConsentDeclinedClosingPrompt(context.survey()), flowState);
         }
+        return askForConsentAgainOrClose(context, response);
+    }
+
+    // After an unclear reply the consent question is asked again, but only as often as a survey question
+    // is retried. Then the call ends politely instead of repeating it until the callee hangs up.
+    private InterviewOrchestrationResponse askForConsentAgainOrClose(SessionContext context, SurveyResponse response) {
+        int clarificationCount = readConsentClarificationCount(response);
+        if (clarificationCount >= context.maxRetryCount()) {
+            FlowState flowState = resolveFlowState(context);
+            updateOpeningConsentState(response, CONSENT_UNCLEAR);
+            response.setStatus(SurveyResponseStatus.ABANDONED);
+            response.setCompletedAt(OffsetDateTime.now());
+            updateCompletionPercent(response, context, flowState.eligibleQuestions());
+            return buildTerminalResponse(context, response, buildConsentUnclearClosingPrompt(context.survey()), flowState);
+        }
+        updateConsentClarificationCount(response, clarificationCount + 1);
         return buildConsentPhaseResponse(context, response, buildOpeningConsentClarificationPrompt(context.survey()));
     }
 
@@ -2911,40 +2943,44 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
                 || containsSurveyParticipationIntent;
     }
 
+    // Matches whole words, so "olur" does not match inside "olursunuz". A refusal phrase wins over an
+    // acceptance phrase ("evet ama simdi olmaz"). A bare "hayir" or "yok" stays unclear: whether it
+    // refuses depends on how the intro asks ("sorabilir miyim?" or "rahatsiz ediyor muyum?").
     private ConsentDecision classifyOpeningConsentDecision(String rawText) {
         String normalized = normalize(rawText);
         if (normalized.isBlank()) {
             return ConsentDecision.UNCLEAR;
         }
-        if (containsAnyPhrase(
-                normalized,
-                "katilmam",
-                "katilmak istemiyorum",
-                "ankete katilmam",
-                "ankete katilmak istemiyorum",
-                "istemiyorum",
-                "uygun degil",
-                "musait degil",
-                "simdi olmaz",
-                "rahatsiz etmeyin",
-                "aramayin",
-                "beni aramayin",
-                "not now",
-                "do not call again",
-                "dont call again"
-        )) {
+        if (CONSENT_DECLINE_PHRASES.stream().anyMatch(phrase -> containsWords(normalized, phrase))) {
             return ConsentDecision.DECLINED;
         }
-        if (containsAnyPhrase(normalized, "sorabilirsiniz", "buyurun", "dinliyorum", "olur", "uygunum", "sorun degil", "go ahead", "you can ask")) {
+        if (CONSENT_ACCEPT_PHRASES.stream().anyMatch(phrase -> containsWords(normalized, phrase))) {
             return ConsentDecision.ACCEPTED;
         }
-
-        for (String token : normalized.split("\\s+")) {
-            if (YES_WORDS.contains(token)) {
-                return ConsentDecision.ACCEPTED;
-            }
+        List<String> tokens = List.of(normalized.split("\\s+"));
+        if (tokens.stream().anyMatch(YES_WORDS::contains)) {
+            return ConsentDecision.ACCEPTED;
         }
         return ConsentDecision.UNCLEAR;
+    }
+
+    private int readConsentClarificationCount(SurveyResponse response) {
+        try {
+            return readTranscriptJson(response.getTranscriptJson()).path(CONSENT_CLARIFICATION_COUNT_KEY).asInt(0);
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    private void updateConsentClarificationCount(SurveyResponse response, int count) {
+        try {
+            JsonNode root = readTranscriptJson(response.getTranscriptJson());
+            Map<String, Object> payload = objectMapper.convertValue(root, Map.class);
+            payload.put(CONSENT_CLARIFICATION_COUNT_KEY, count);
+            response.setTranscriptJson(objectMapper.writeValueAsString(payload));
+        } catch (Exception ignored) {
+            response.setTranscriptJson("{\"" + CONSENT_CLARIFICATION_COUNT_KEY + "\":" + count + "}");
+        }
     }
 
     private boolean containsAnyPhrase(String normalizedText, String... phrases) {
@@ -3093,6 +3129,16 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
                 : "Understood, thank you for your time. Goodbye.";
     }
 
+    private String buildConsentUnclearClosingPrompt(Survey survey) {
+        String surveyClosing = trimToNull(survey.getClosingPrompt());
+        if (surveyClosing != null) {
+            return surveyClosing;
+        }
+        return isTurkish(survey)
+                ? "Sizi şu an net anlayamadım, rahatsız ettiğim için kusura bakmayın. İyi günler dilerim."
+                : "I could not hear you clearly, sorry for the trouble. Goodbye.";
+    }
+
     private String buildConsentAcceptedLeadIn(Survey survey) {
         return localized(
                 survey,
@@ -3111,6 +3157,9 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         String consentState = readOpeningConsentState(response);
         if (CONSENT_DECLINED.equals(consentState)) {
             return buildConsentDeclinedClosingPrompt(context.survey());
+        }
+        if (CONSENT_UNCLEAR.equals(consentState)) {
+            return buildConsentUnclearClosingPrompt(context.survey());
         }
         return buildClosingPrompt(context.survey());
     }
