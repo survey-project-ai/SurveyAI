@@ -949,6 +949,76 @@ class CallInterviewOrchestrationServiceImplTest {
         assertThat(answer.getAnswerNumber()).isEqualByComparingTo(String.valueOf(expectedRating));
     }
 
+    @ParameterizedTest
+    @CsvSource({
+            "on beş, 15",
+            "on sekiz yaşındayım, 18",
+            "yüz elli, 150",
+            "1985, 1985",
+            "bin dokuz yüz seksen beş, 1985"
+    })
+    void submitAnswer_readsSpokenNumbers(String utterance, int expected) {
+        fixture.yesNoQuestion.setQuestionType(QuestionType.NUMBER);
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, utterance, InterviewConversationSignal.ANSWER));
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        SurveyAnswer answer = answersByResponseId.get(savedResponse.getId()).getFirst();
+        assertThat(answer.isValid()).isTrue();
+        assertThat(answer.getAnswerNumber()).isEqualByComparingTo(String.valueOf(expected));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "10 üzerinden 8, 10, 8",
+            "on üzerinden yedi, 10, 7",
+            "bir dört diyelim, 5, 4"
+    })
+    void submitAnswer_readsScoresGivenOutOfAScale(String utterance, int max, int expected) {
+        fixture.ratingQuestion.setSettingsJson("{\"min\":1,\"max\":" + max + "}");
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
+                .thenReturn(List.of(fixture.ratingQuestion, fixture.openQuestion));
+        questionOptionsByQuestionId.put(fixture.ratingQuestion.getId(), List.of());
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, utterance, InterviewConversationSignal.ANSWER));
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        SurveyAnswer answer = answersByResponseId.get(savedResponse.getId()).getFirst();
+        assertThat(answer.isValid()).isTrue();
+        assertThat(answer.getAnswerNumber()).isEqualByComparingTo(String.valueOf(expected));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "yetmiş yaşındayım, 65+",
+            "65, 65+",
+            "altmış, 55-64",
+            "yirmi beş, 25-34"
+    })
+    void submitAnswer_placesAgeInTheRightBucket(String utterance, String expectedLabel) {
+        fixture.yesNoQuestion.setCode("age_group");
+        fixture.yesNoQuestion.setTitle("Kaç yaşındasınız?");
+        List<String> buckets = List.of("18-24", "25-34", "35-44", "45-54", "55-64", "65+");
+        List<SurveyQuestionOption> options = new ArrayList<>();
+        for (int index = 0; index < buckets.size(); index++) {
+            options.add(buildOption(fixture.yesNoQuestion, index + 1, "option_" + (index + 1), buckets.get(index)));
+        }
+        questionOptionsByQuestionId.put(fixture.yesNoQuestion.getId(), options);
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, utterance, InterviewConversationSignal.ANSWER));
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        SurveyAnswer answer = answersByResponseId.get(savedResponse.getId()).getFirst();
+        assertThat(answer.isValid()).isTrue();
+        assertThat(answer.getSelectedOption().getLabel()).isEqualTo(expectedLabel);
+    }
+
     @Test
     void submitAnswer_treatsNoThatOneAsRejectionOfTheClarification() {
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))

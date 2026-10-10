@@ -8,6 +8,7 @@ import com.yourcompany.surveyai.call.application.dto.request.InterviewConversati
 import com.yourcompany.surveyai.call.application.dto.request.InterviewFinishRequest;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewSessionRequest;
 import com.yourcompany.surveyai.call.application.dto.response.InterviewOrchestrationResponse;
+import com.yourcompany.surveyai.call.application.support.SpokenNumberParser;
 import com.yourcompany.surveyai.call.application.dto.response.InterviewQuestionOptionPayload;
 import com.yourcompany.surveyai.call.application.dto.response.InterviewQuestionPayload;
 import com.yourcompany.surveyai.call.application.service.CallInterviewOrchestrationService;
@@ -48,7 +49,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,7 +59,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrchestrationService {
 
-    private static final Pattern NUMBER_PATTERN = Pattern.compile("(?<!\\d)(\\d{1,2})(?!\\d)");
     private static final Pattern TRANSCRIPT_MARKUP_PATTERN = Pattern.compile("<[^>]+>");
     private static final Pattern VOICE_DIRECTION_PATTERN = Pattern.compile("\\[(?:[a-zA-Z_\\-]{2,20})]|\\((?:[a-zA-Z_\\-]{2,20})\\)");
     private static final Set<String> SEMANTIC_FILLER_TOKENS = Set.of(
@@ -75,44 +74,6 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     private static final String CONSENT_PENDING = "PENDING";
     private static final String CONSENT_GRANTED = "GRANTED";
     private static final String CONSENT_DECLINED = "DECLINED";
-    private static final Map<String, Integer> NUMBER_WORDS = Map.ofEntries(
-            Map.entry("bir", 1),
-            Map.entry("one", 1),
-            Map.entry("iki", 2),
-            Map.entry("two", 2),
-            Map.entry("uc", 3),
-            Map.entry("three", 3),
-            Map.entry("dort", 4),
-            Map.entry("four", 4),
-            Map.entry("bes", 5),
-            Map.entry("five", 5),
-            Map.entry("alti", 6),
-            Map.entry("six", 6),
-            Map.entry("yedi", 7),
-            Map.entry("seven", 7),
-            Map.entry("sekiz", 8),
-            Map.entry("eight", 8),
-            Map.entry("dokuz", 9),
-            Map.entry("nine", 9),
-            Map.entry("on", 10),
-            Map.entry("ten", 10),
-            Map.entry("yirmi", 20),
-            Map.entry("twenty", 20),
-            Map.entry("otuz", 30),
-            Map.entry("thirty", 30),
-            Map.entry("kirk", 40),
-            Map.entry("forty", 40),
-            Map.entry("elli", 50),
-            Map.entry("fifty", 50),
-            Map.entry("altmis", 60),
-            Map.entry("sixty", 60),
-            Map.entry("yetmis", 70),
-            Map.entry("seventy", 70),
-            Map.entry("seksen", 80),
-            Map.entry("eighty", 80),
-            Map.entry("doksan", 90),
-            Map.entry("ninety", 90)
-    );
     private static final Map<String, Integer> RATING_SEMANTIC_TR_1_5 = Map.ofEntries(
             Map.entry("hic onemli degil", 1),
             Map.entry("onemsiz", 1),
@@ -1657,59 +1618,7 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     }
 
     private Integer extractNumber(String raw) {
-        Matcher matcher = NUMBER_PATTERN.matcher(raw);
-        if (matcher.find()) {
-            return Integer.parseInt(matcher.group(1));
-        }
-        String normalized = normalize(raw);
-        Integer compoundValue = extractCompoundNumber(normalized);
-        if (compoundValue != null) {
-            return compoundValue;
-        }
-        for (String token : normalized.split("\\s+")) {
-            Integer value = NUMBER_WORDS.get(token);
-            if (value != null) {
-                return value;
-            }
-        }
-        return null;
-    }
-
-    private Integer extractCompoundNumber(String normalized) {
-        if (normalized == null || normalized.isBlank()) {
-            return null;
-        }
-
-        String[] tokens = normalized.split("\\s+");
-        if (tokens.length >= 2) {
-            Integer tens = NUMBER_WORDS.get(tokens[0]);
-            Integer ones = NUMBER_WORDS.get(tokens[1]);
-            if (tens != null && tens >= 20 && ones != null && ones >= 0 && ones <= 9) {
-                return tens + ones;
-            }
-        }
-
-        for (Map.Entry<String, Integer> entry : NUMBER_WORDS.entrySet()) {
-            Integer tens = entry.getValue();
-            if (tens == null || tens < 20) {
-                continue;
-            }
-            if (!normalized.startsWith(entry.getKey())) {
-                continue;
-            }
-
-            String suffix = normalized.substring(entry.getKey().length()).trim();
-            if (suffix.isBlank()) {
-                return tens;
-            }
-
-            Integer ones = NUMBER_WORDS.get(suffix);
-            if (ones != null && ones >= 0 && ones <= 9) {
-                return tens + ones;
-            }
-        }
-
-        return null;
+        return SpokenNumberParser.parse(normalize(raw));
     }
 
     private SurveyQuestionOption matchContextualSingleChoice(
@@ -1761,31 +1670,29 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
                 || normalizedTitle.contains("yas");
     }
 
+    // Reads the bucket from the numbers in the option text: "25-34" is a range, "65+" or "65 ve uzeri"
+    // is open-ended upwards, "18 yas alti" downwards. The label is preferred; codes like "option_1"
+    // carry unrelated digits.
     private boolean matchesAgeBucket(SurveyQuestionOption option, int age) {
-        String normalized = normalize(option.getLabel() + " " + option.getOptionCode() + " " + option.getValue());
-        if (normalized.contains("18 24")) {
-            return age >= 18 && age <= 24;
-        }
-        if (normalized.contains("25 34")) {
-            return age >= 25 && age <= 34;
-        }
-        if (normalized.contains("35 49")) {
-            return age >= 35 && age <= 49;
-        }
-        if (normalized.contains("35 44")) {
-            return age >= 35 && age <= 44;
-        }
-        if (normalized.contains("45 54")) {
-            return age >= 45 && age <= 54;
-        }
-        if (normalized.contains("50 64")) {
-            return age >= 50 && age <= 64;
-        }
-        if (normalized.contains("55")) {
-            return age >= 55;
-        }
-        if (normalized.contains("65")) {
-            return age >= 65;
+        for (String text : java.util.Arrays.asList(option.getLabel(), option.getValue(), option.getOptionCode())) {
+            String normalized = normalize(text);
+            List<Integer> bounds = java.util.Arrays.stream(normalized.split("\\s+"))
+                    .filter(token -> !token.isEmpty() && token.length() <= 3 && token.chars().allMatch(Character::isDigit))
+                    .map(Integer::parseInt)
+                    .toList();
+            if (bounds.size() >= 2) {
+                return age >= bounds.get(0) && age <= bounds.get(1);
+            }
+            if (bounds.size() == 1) {
+                int bound = bounds.getFirst();
+                if (text.contains("+") || containsAnyWords(normalized, "uzeri", "ustu", "yukari", "over", "plus", "above")) {
+                    return age >= bound;
+                }
+                if (containsAnyWords(normalized, "alti", "altinda", "under", "below")) {
+                    return age < bound;
+                }
+                return age == bound;
+            }
         }
         return false;
     }
