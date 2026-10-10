@@ -47,6 +47,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -139,6 +140,8 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     );
     private static final Set<String> YES_WORDS = Set.of("evet", "olur", "tabii", "tabi", "yes", "yeah", "yep", "dogru", "buyurun", "sorabilirsiniz", "dinliyorum", "uygun");
     private static final Set<String> NO_WORDS = Set.of("hayir", "yok", "istemiyorum", "no", "nope", "degil", "uygun degil", "mesgul", "musait degil");
+    private static final Set<String> EXPLICIT_YES_WORDS = Set.of("evet", "yes", "yeah", "yep");
+    private static final Set<String> EXPLICIT_NO_WORDS = Set.of("hayir", "yok", "istemiyorum", "no", "nope");
     private static final Set<String> CIVIC_OPEN_ENDED_HINTS = Set.of(
             "sehir", "kent", "izmir", "belediye", "milletvekili", "milletvekillerinden",
             "sorun", "sorunlari", "beklenti", "oncelik", "oncelikli", "ulasim", "trafik", "altyapi", "hizmet"
@@ -685,7 +688,12 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             return NormalizedAnswer.invalid("No clear answer captured from the caller", rawInput);
         }
 
-        SpecialAnswerMatch specialAnswer = matchSpecialAnswer(question, raw);
+        // On a yes/no question answered with an explicit yes or no, a special-answer alias that is itself a
+        // yes/no word does not turn it into a refusal: "hayir istemiyorum" means no. A bare "istemiyorum" stays a refusal.
+        boolean answeredYesOrNo = question.getQuestionType() == QuestionType.SINGLE_CHOICE
+                && looksLikeYesNo(options)
+                && containsAnyWords(normalize(raw), "evet", "hayir", "yok", "yes", "no");
+        SpecialAnswerMatch specialAnswer = matchSpecialAnswer(question, raw, answeredYesOrNo);
         if (specialAnswer != null) {
             return NormalizedAnswer.validSpecial(raw, specialAnswer.code(), specialAnswer.label());
         }
@@ -693,17 +701,18 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         if (question.getQuestionType() == QuestionType.OPEN_ENDED) {
             String clarificationLabel = extractSingleClarificationLabel(existingAnswer);
             if (clarificationLabel != null) {
-                if (looksLikeClarificationAffirmation(raw)) {
-                    return NormalizedAnswer.validText(raw, clarificationLabel, List.of(clarificationLabel));
-                }
+                // Rejection is checked first: "Hayir, o degil" also contains the affirmation word "o".
                 if (looksLikeClarificationRejection(raw)) {
                     return NormalizedAnswer.invalidWithClarification(
-                            "Named entity answer requires clarification",
+                            "Clarified answer was rejected",
                             raw,
                             isTurkish(question.getSurvey())
-                                    ? "Hayirsa lütfen kisinin adini tekrar soyleyin."
-                                    : "If no, please say the person's name again."
+                                    ? "Değilse lütfen cevabınızı tekrar söyleyin."
+                                    : "If not, please say your answer again."
                     );
+                }
+                if (looksLikeClarificationAffirmation(raw)) {
+                    return NormalizedAnswer.validText(raw, clarificationLabel, List.of(clarificationLabel));
                 }
             }
         }
@@ -718,16 +727,10 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     }
 
     private boolean looksLikeClarificationAffirmation(String raw) {
-        String normalized = normalize(raw);
-        if (normalized.isBlank()) {
-            return false;
-        }
-        return containsAnyPhrase(normalized,
+        return containsAnyWords(normalize(raw),
                 "evet",
                 "aynen",
                 "dogru",
-                "dogru o",
-                "evet o",
                 "o",
                 "begeniyorum",
                 "beniyorum",
@@ -735,17 +738,22 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     }
 
     private boolean looksLikeClarificationRejection(String raw) {
-        String normalized = normalize(raw);
-        if (normalized.isBlank()) {
-            return false;
-        }
-        return containsAnyPhrase(normalized,
+        return containsAnyWords(normalize(raw),
                 "hayir",
+                "yok",
                 "degil",
-                "o degil",
                 "begenmiyorum",
                 "benmiyorum",
                 "sevmiyorum");
+    }
+
+    private boolean containsAnyWords(String normalizedText, String... phrases) {
+        for (String phrase : phrases) {
+            if (containsWords(normalizedText, phrase)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String extractSingleClarificationLabel(SurveyAnswer answer) {
@@ -1062,24 +1070,57 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     }
 
     private SurveyQuestionOption matchYesNoOption(List<SurveyQuestionOption> options, String raw) {
-        String normalized = normalize(raw);
-        for (String token : normalized.split("\\s+")) {
-            if (YES_WORDS.contains(token)) {
-                return options.stream().filter(this::isYesOption).findFirst().orElse(null);
+        Boolean polarity = resolveYesNoPolarity(normalize(raw));
+        if (polarity == null) {
+            return null;
+        }
+        Predicate<SurveyQuestionOption> matchesPolarity = polarity ? this::isYesOption : this::isNoOption;
+        return options.stream().filter(matchesPolarity).findFirst().orElse(null);
+    }
+
+    // TRUE for yes, FALSE for no, null when unclear. Explicit words ("evet", "hayir") outweigh softer
+    // ones ("tabii", "dogru", "uygun"), and a soft yes followed by "degil" counts as no, so
+    // "tabii ki hayir" and "dogru degil" are no answers. Explicit yes and no together is unclear.
+    private Boolean resolveYesNoPolarity(String normalized) {
+        String[] tokens = normalized.split("\\s+");
+        boolean explicitYes = false;
+        boolean explicitNo = false;
+        boolean softYes = false;
+        boolean softNo = false;
+        for (int index = 0; index < tokens.length; index++) {
+            String token = tokens[index];
+            boolean negatedByNextWord = index + 1 < tokens.length && tokens[index + 1].startsWith("degil");
+            if (EXPLICIT_YES_WORDS.contains(token)) {
+                explicitYes = true;
+            } else if (EXPLICIT_NO_WORDS.contains(token)) {
+                explicitNo = true;
+            } else if (YES_WORDS.contains(token)) {
+                if (negatedByNextWord) {
+                    softNo = true;
+                } else {
+                    softYes = true;
+                }
+            } else if (NO_WORDS.contains(token) || token.startsWith("degil")) {
+                softNo = true;
             }
-            if (NO_WORDS.contains(token)) {
-                return options.stream().filter(this::isNoOption).findFirst().orElse(null);
-            }
+        }
+        if (explicitYes != explicitNo) {
+            return explicitYes;
+        }
+        if (explicitYes) {
+            return null;
+        }
+        if (softYes != softNo) {
+            return softYes;
         }
         return null;
     }
 
     private SurveyQuestionOption matchImplicitBinaryChoice(List<SurveyQuestionOption> options, String raw) {
         String normalized = normalize(raw);
-        boolean hasPositiveSignal = normalized.split("\\s+").length > 0
-                && java.util.Arrays.stream(normalized.split("\\s+")).anyMatch(YES_WORDS::contains);
-        boolean hasNegativeSignal = normalized.split("\\s+").length > 0
-                && java.util.Arrays.stream(normalized.split("\\s+")).anyMatch(NO_WORDS::contains);
+        Boolean polarity = resolveYesNoPolarity(normalized);
+        boolean hasPositiveSignal = Boolean.TRUE.equals(polarity);
+        boolean hasNegativeSignal = Boolean.FALSE.equals(polarity);
         if (!hasPositiveSignal && !hasNegativeSignal) {
             return null;
         }
@@ -1135,9 +1176,18 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         return null;
     }
 
+    // Picks the most specific option instead of the first one that overlaps: an exact match wins, then
+    // the longest option text said within the answer ("cok memnunum" -> "Cok memnunum", not "Memnunum"),
+    // then the option closest in length to an answer that is only part of it ("memnun degilim" ->
+    // "Memnun degilim", not "Hic memnun degilim").
     private SurveyQuestionOption matchOption(SurveyQuestion question, List<SurveyQuestionOption> options, String raw) {
         String normalizedCandidate = normalize(raw);
+        if (normalizedCandidate.isBlank()) {
+            return null;
+        }
         Map<String, List<String>> aliasesByOptionKey = extractOptionAliases(question);
+        SurveyQuestionOption bestOption = null;
+        int bestScore = Integer.MIN_VALUE;
         for (SurveyQuestionOption option : options) {
             List<String> candidates = new ArrayList<>();
             candidates.add(option.getLabel());
@@ -1146,14 +1196,26 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             candidates.addAll(resolveAliasesForOption(option, aliasesByOptionKey));
             for (String candidate : candidates) {
                 String normalizedOption = normalize(candidate);
-                if (normalizedCandidate.equals(normalizedOption)
-                        || normalizedCandidate.contains(normalizedOption)
-                        || normalizedOption.contains(normalizedCandidate)) {
-                    return option;
+                if (normalizedOption.isBlank()) {
+                    continue;
+                }
+                int score;
+                if (normalizedCandidate.equals(normalizedOption)) {
+                    score = 3_000_000;
+                } else if (normalizedCandidate.contains(normalizedOption)) {
+                    score = 2_000_000 + normalizedOption.length();
+                } else if (normalizedOption.contains(normalizedCandidate)) {
+                    score = 1_000_000 - (normalizedOption.length() - normalizedCandidate.length());
+                } else {
+                    continue;
+                }
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestOption = option;
                 }
             }
         }
-        return null;
+        return bestOption;
     }
 
     private Map<String, List<String>> extractOptionAliases(SurveyQuestion question) {
@@ -1195,13 +1257,16 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         }
     }
 
-    private SpecialAnswerMatch matchSpecialAnswer(SurveyQuestion question, String raw) {
+    private SpecialAnswerMatch matchSpecialAnswer(SurveyQuestion question, String raw, boolean ignoreYesNoWords) {
         String normalizedCandidate = normalize(raw);
         Map<String, List<String>> specialAnswers = extractSpecialAnswers(question);
         for (Map.Entry<String, List<String>> entry : specialAnswers.entrySet()) {
             for (String alias : entry.getValue()) {
                 String normalizedAlias = normalize(alias);
                 if (normalizedAlias.isBlank()) {
+                    continue;
+                }
+                if (ignoreYesNoWords && (YES_WORDS.contains(normalizedAlias) || NO_WORDS.contains(normalizedAlias))) {
                     continue;
                 }
                 if (containsWords(normalizedCandidate, normalizedAlias)) {
@@ -1517,20 +1582,24 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     private Integer extractSemanticRating(SurveyQuestion question, String raw, Integer min, Integer max) {
         String normalized = normalize(raw);
         Integer matchedValue = null;
-        int matchedLength = -1;
+        String matchedKey = null;
         for (Map<String, Integer> semanticMap : List.of(RATING_SEMANTIC_TR_1_5, RATING_SEMANTIC_EN_1_5)) {
             for (Map.Entry<String, Integer> entry : semanticMap.entrySet()) {
                 if (!normalized.contains(entry.getKey())) {
                     continue;
                 }
-                if (entry.getKey().length() > matchedLength) {
+                if (matchedKey == null || entry.getKey().length() > matchedKey.length()) {
                     matchedValue = entry.getValue();
-                    matchedLength = entry.getKey().length();
+                    matchedKey = entry.getKey();
                 }
             }
         }
         if (matchedValue == null) {
             return null;
+        }
+        // "onemli degil" and "cok onemli degil" negate a positive phrase: treat them as "not important".
+        if (matchedValue >= 3 && containsWords(normalized, matchedKey + " degil")) {
+            matchedValue = 2;
         }
         if (max != null && max == 10) {
             return switch (matchedValue) {

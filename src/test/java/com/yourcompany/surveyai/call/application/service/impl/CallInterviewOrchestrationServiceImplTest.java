@@ -40,6 +40,8 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class CallInterviewOrchestrationServiceImplTest {
 
@@ -873,6 +875,105 @@ class CallInterviewOrchestrationServiceImplTest {
         assertThat(answers.getFirst().getAnswerJson()).contains("\"specialAnswerCode\":\"reddetti\"");
         assertThat(response.question()).isNotNull();
         assertThat(response.question().code()).isEqualTo("why");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "tabii ki hayır, false",
+            "doğru değil, false",
+            "uygun değil, false",
+            "hayır istemiyorum, false",
+            "tabii, true",
+            "evet doğru, true"
+    })
+    void submitAnswer_readsNegationInYesNoAnswers(String utterance, boolean expectYes) {
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, utterance, InterviewConversationSignal.ANSWER));
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        SurveyAnswer answer = answersByResponseId.get(savedResponse.getId()).getFirst();
+        assertThat(answer.getAnswerJson()).contains("\"specialAnswerCode\":null");
+        assertThat(answer.getSelectedOption()).isEqualTo(expectYes ? fixture.yesOption : fixture.noOption);
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "pek memnun değilim, Memnun değilim",
+            "ben çok memnunum, Çok memnunum",
+            "memnunum, Memnunum",
+            "hiç memnun değilim, Hiç memnun değilim"
+    })
+    void submitAnswer_picksTheMostSpecificScaleOption(String utterance, String expectedLabel) {
+        fixture.yesNoQuestion.setTitle("Hizmetten ne kadar memnunsunuz?");
+        List<SurveyQuestionOption> scale = List.of(
+                buildOption(fixture.yesNoQuestion, 1, "option_1", "Hiç memnun değilim"),
+                buildOption(fixture.yesNoQuestion, 2, "option_2", "Memnun değilim"),
+                buildOption(fixture.yesNoQuestion, 3, "option_3", "Kararsızım"),
+                buildOption(fixture.yesNoQuestion, 4, "option_4", "Memnunum"),
+                buildOption(fixture.yesNoQuestion, 5, "option_5", "Çok memnunum")
+        );
+        questionOptionsByQuestionId.put(fixture.yesNoQuestion.getId(), scale);
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, utterance, InterviewConversationSignal.ANSWER));
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        SurveyAnswer answer = answersByResponseId.get(savedResponse.getId()).getFirst();
+        assertThat(answer.isValid()).isTrue();
+        assertThat(answer.getSelectedOption().getLabel()).isEqualTo(expectedLabel);
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "önemli değil, 2",
+            "çok önemli değil, 2",
+            "çok önemli, 5",
+            "hiç önemli değil, 1"
+    })
+    void submitAnswer_readsNegatedImportanceRatings(String utterance, int expectedRating) {
+        fixture.ratingQuestion.setSettingsJson("{\"min\":1,\"max\":5}");
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
+                .thenReturn(List.of(fixture.ratingQuestion, fixture.openQuestion));
+        questionOptionsByQuestionId.put(fixture.ratingQuestion.getId(), List.of());
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, utterance, InterviewConversationSignal.ANSWER));
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        SurveyAnswer answer = answersByResponseId.get(savedResponse.getId()).getFirst();
+        assertThat(answer.isValid()).isTrue();
+        assertThat(answer.getAnswerNumber()).isEqualByComparingTo(String.valueOf(expectedRating));
+    }
+
+    @Test
+    void submitAnswer_treatsNoThatOneAsRejectionOfTheClarification() {
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
+                .thenReturn(List.of(fixture.openQuestion));
+        fixture.openQuestion.setRequired(true);
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+
+        SurveyAnswer pendingClarification = new SurveyAnswer();
+        pendingClarification.setId(UUID.randomUUID());
+        pendingClarification.setCompany(fixture.company);
+        pendingClarification.setSurveyResponse(savedResponse);
+        pendingClarification.setSurveyQuestion(fixture.openQuestion);
+        pendingClarification.setAnswerType(QuestionType.OPEN_ENDED);
+        pendingClarification.setValid(false);
+        pendingClarification.setRetryCount(1);
+        pendingClarification.setAnswerJson("{\"clarificationPrompt\":\"Mansur Yavaş mi demek istediniz?\"}");
+        answersByResponseId.get(savedResponse.getId()).add(pendingClarification);
+
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Hayır, o değil", InterviewConversationSignal.ANSWER));
+
+        SurveyAnswer answer = answersByResponseId.get(savedResponse.getId()).getFirst();
+        assertThat(answer.isValid()).isFalse();
+        assertThat(answer.getAnswerText()).isNotEqualTo("Mansur Yavaş");
     }
 
     @Test
