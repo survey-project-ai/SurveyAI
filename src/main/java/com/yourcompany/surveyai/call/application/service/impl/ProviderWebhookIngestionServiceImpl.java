@@ -299,6 +299,12 @@ public class ProviderWebhookIngestionServiceImpl implements ProviderWebhookInges
             return true;
         }
 
+        // Reconciliation can finish an attempt before the post-call webhook arrives, recording the poll
+        // time as its end. That webhook still carries the only transcript, so it is never stale.
+        if (incomingRank == currentRank && carriesFirstTranscript(attempt, event)) {
+            return false;
+        }
+
         if (incomingRank == currentRank && isOlderThanRecordedAttempt(attempt, event)) {
             return true;
         }
@@ -309,6 +315,10 @@ public class ProviderWebhookIngestionServiceImpl implements ProviderWebhookInges
                 && sameText(attempt.getTranscriptStorageKey(), event.transcriptStorageKey())
                 && sameText(attempt.getFailureReason(), event.errorMessage())
                 && sameInteger(attempt.getDurationSeconds(), event.durationSeconds());
+    }
+
+    private boolean carriesFirstTranscript(CallAttempt attempt, ProviderWebhookEvent event) {
+        return normalizeText(event.transcriptText()) != null && normalizeText(attempt.getTranscriptStorageKey()) == null;
     }
 
     private boolean isOlderThanRecordedAttempt(CallAttempt attempt, ProviderWebhookEvent event) {

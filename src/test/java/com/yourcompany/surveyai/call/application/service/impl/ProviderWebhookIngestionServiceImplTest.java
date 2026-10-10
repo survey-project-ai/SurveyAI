@@ -143,6 +143,59 @@ class ProviderWebhookIngestionServiceImplTest {
     }
 
     @Test
+    void ingest_appliesPostCallWebhookAfterReconciliationAlreadyFinishedTheAttempt() {
+        CallAttempt attempt = buildAttempt();
+        attempt.setProvider(CallProvider.ELEVENLABS);
+        attempt.setProviderCallId("conv_polled");
+        // Reconciliation saw "done" first and recorded the poll time as the end.
+        attempt.setStatus(CallAttemptStatus.COMPLETED);
+        attempt.setConnectedAt(OffsetDateTime.parse("2026-04-10T09:58:00Z"));
+        attempt.setEndedAt(OffsetDateTime.parse("2026-04-10T10:00:06Z"));
+        attempt.setRawProviderPayload("{\"status\":\"done\"}");
+        attempt.getCallJob().setStatus(CallJobStatus.COMPLETED);
+        attempt.getOperationContact().setStatus(OperationContactStatus.COMPLETED);
+
+        when(callAttemptRepository.findByIdAndDeletedAtIsNull(attempt.getId()))
+                .thenReturn(Optional.of(attempt));
+
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getHeaderNames()).thenReturn(Collections.enumeration(Collections.emptyList()));
+
+        int applied = ingestionService.ingest(
+                CallProvider.ELEVENLABS,
+                """
+                {
+                  "type": "post_call_transcription",
+                  "event_timestamp": "2026-04-10T10:00:05Z",
+                  "data": {
+                    "conversation_id": "conv_polled",
+                    "status": "done",
+                    "conversation_initiation_client_data": {
+                      "dynamic_variables": {
+                        "call_attempt_id": "%s",
+                        "call_job_id": "%s",
+                        "idempotency_key": "%s"
+                      }
+                    },
+                    "transcript": [
+                      {"role": "user", "message": "Alo"},
+                      {"role": "agent", "message": "Merhaba, kisa bir anket icin ariyorum."},
+                      {"role": "user", "message": "Buyurun"},
+                      {"role": "agent", "message": "Tesekkur ederim."}
+                    ]
+                  }
+                }
+                """.formatted(attempt.getId(), attempt.getCallJob().getId(), attempt.getCallJob().getIdempotencyKey()),
+                request
+        );
+
+        assertThat(applied).isEqualTo(1);
+        assertThat(attempt.getTranscriptStorageKey()).isEqualTo("inline://elevenlabs/conversations/conv_polled");
+        assertThat(attempt.getEndedAt()).isEqualTo(OffsetDateTime.parse("2026-04-10T10:00:05Z"));
+        verify(surveyResponseIngestionService).ingest(any(), any());
+    }
+
+    @Test
     void ingest_matchesElevenLabsWebhookByCallAttemptIdWhenProviderCallIdIsMissing() {
         CallAttempt attempt = buildAttempt();
         attempt.setProvider(CallProvider.ELEVENLABS);
