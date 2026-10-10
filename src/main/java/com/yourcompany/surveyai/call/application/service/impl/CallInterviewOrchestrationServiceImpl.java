@@ -130,6 +130,9 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     private static final Set<String> SUSPICIOUS_CIVIC_ASR_TOKENS = Set.of(
             "sehzadin", "sehradin", "sehzade", "şehirin", "sehirin"
     );
+    private static final Locale TURKISH = Locale.forLanguageTag("tr");
+    // The "I am" ending of a Turkish noun: ogretmen-im, emekli-yim, memur-um, sofor-um.
+    private static final Pattern PERSONAL_ENDING = Pattern.compile("y?[ıiuü]m$");
     private static final Set<String> OCCUPATION_OPEN_ENDED_HINTS = Set.of(
             "meslek", "mesleginiz", "ne is yapiyorsunuz", "calisma durumu",
             "is durumu", "is hayati", "meslegi", "meslegini", "occupation", "job"
@@ -198,39 +201,6 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             "serbest meslek", "serbest calisiyor", "kendi hesabima",
             "emekli isci", "emekli memur",
             "ev hizmetcisi", "gundelikci"
-    );
-    // Tek token olarak cevap içinde geçtiğinde meslek işareti sayılan kök kelimeler.
-    // Token startsWith kontrolü Turkish morfolojik ekleri kapsar (ör. "ogretmenim" → "ogretmen")
-    private static final Set<String> OCCUPATION_INDICATOR_TOKENS = Set.of(
-            "calisiyor", "calisiyorum", "calisan", "calistigim",
-            "emekli", "emekliyim",
-            "ogrenci", "ogrenciyim",
-            "issiz",
-            "serbest",
-            "memur",
-            "mudur",
-            "muhendis",
-            "ogretmen",
-            "doktor",
-            "hemsire",
-            "avukat",
-            "esnaf",
-            "isci",
-            "uzman",
-            "mimar",
-            "teknisyen",
-            "girisimci",
-            "yonetici",
-            "danisman",
-            "sekreter",
-            "sofor", "surucu",
-            "berber", "kuafor",
-            "eczaci",
-            "gazeteci",
-            "polis",
-            "asker",
-            "ciftci",
-            "programci", "yazilimci"
     );
     // Checked in declaration order. Map.ofEntries has no stable iteration order, which made the
     // matched special answer differ between JVM runs.
@@ -1013,46 +983,36 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         return NormalizedAnswer.validText(raw, sanitizedCandidate, normalizedValues.stream().distinct().toList());
     }
 
+    // Any answer is kept: no fixed list holds every occupation ("veterinerim", "kasiyerim"). The list
+    // only turns a recognized occupation into a clean label ("ogretmenim" -> "Ogretmen").
     private NormalizedAnswer normalizeOccupationOpenEnded(SurveyQuestion question, String raw, String correctedRaw) {
-        String normalized = normalize(correctedRaw);
-        if (normalized.isBlank()) {
+        String answerText = trimToNull(correctedRaw);
+        if (answerText == null || normalize(answerText).isBlank()) {
             return occupationNotRecognized(question, raw);
         }
-
-        // 1. Birebir eşleşme
-        if (KNOWN_OCCUPATIONS_NORMALIZED.contains(normalized)) {
-            return NormalizedAnswer.validText(raw, correctedRaw, List.of(correctedRaw));
+        String occupationLabel = recognizeOccupationLabel(answerText);
+        if (occupationLabel != null) {
+            return NormalizedAnswer.validText(raw, occupationLabel, List.of(occupationLabel));
         }
+        return buildOpenEndedFreeTextAnswer(raw, answerText);
+    }
 
-        // 2. Bilinen meslek içeriyorsa geçerli say
-        //    ("ev hanimiyim" → "ev hanimi" içeriyor; "ogretmenim" → "ogretmen" içeriyor)
-        boolean containsKnown = KNOWN_OCCUPATIONS_NORMALIZED.stream()
-                .anyMatch(normalized::contains);
-        if (containsKnown) {
-            return NormalizedAnswer.validText(raw, correctedRaw, List.of(correctedRaw));
+    // Returns the occupation in the respondent's own spelling, without the "I am" ending
+    // ("ogretmenim", "emekliyim", "ev hanimiyim"), when it is one of the known occupations.
+    private String recognizeOccupationLabel(String answerText) {
+        String spoken = answerText.toLowerCase(TURKISH)
+                .replaceAll("[^\\p{L}\\p{N}\\s]", " ")
+                .replaceAll("\\s+", " ")
+                .trim()
+                .replaceAll("^ben\\s+", "")
+                .replaceAll("\\s+ben$", "");
+        // Without the ending first: the list also holds "emekliyim", but the label is "Emekli".
+        for (String candidate : List.of(PERSONAL_ENDING.matcher(spoken).replaceFirst(""), spoken)) {
+            if (!candidate.isBlank() && KNOWN_OCCUPATIONS_NORMALIZED.contains(normalize(candidate))) {
+                return candidate.substring(0, 1).toUpperCase(TURKISH) + candidate.substring(1);
+            }
         }
-
-        // 3. Fuzzy eşleşme: bilinen meslekle yüksek benzerlik
-        double bestFuzzy = KNOWN_OCCUPATIONS_NORMALIZED.stream()
-                .mapToDouble(occ -> scorePhraseSimilarity(normalized, occ))
-                .max()
-                .orElse(0d);
-        if (bestFuzzy >= 0.80d) {
-            return NormalizedAnswer.validText(raw, correctedRaw, List.of(correctedRaw));
-        }
-
-        // 4. Token göstergesi: herhangi bir token, bilinen bir gösterge ile başlıyorsa geçerli say
-        //    Turkish morfolojisi: "ogretmenim".startsWith("ogretmen") → geçerli
-        Set<String> tokens = semanticTokens(normalized);
-        boolean hasIndicator = tokens.stream()
-                .anyMatch(token -> OCCUPATION_INDICATOR_TOKENS.stream()
-                        .anyMatch(indicator -> token.equals(indicator) || token.startsWith(indicator)));
-        if (hasIndicator) {
-            return NormalizedAnswer.validText(raw, correctedRaw, List.of(correctedRaw));
-        }
-
-        // Hiçbir kontrolü geçemedi → meslek değil, tekrar sor
-        return occupationNotRecognized(question, raw);
+        return null;
     }
 
     private NormalizedAnswer occupationNotRecognized(SurveyQuestion question, String raw) {
@@ -1117,8 +1077,14 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         return containsAnyPhrase(normalize(buildOpenEndedContext(question)), TRANSPORT_OPEN_ENDED_HINTS.toArray(String[]::new));
     }
 
+    // Only the question itself decides. The survey name used to count too, so in a survey named
+    // "Meslek ve Yasam Memnuniyeti" every open-ended question was treated as an occupation question.
     private boolean isOccupationOpenEndedContext(SurveyQuestion question) {
-        return containsAnyPhrase(normalize(buildOpenEndedContext(question)), OCCUPATION_OPEN_ENDED_HINTS.toArray(String[]::new));
+        StringBuilder builder = new StringBuilder();
+        appendPromptSentence(builder, question.getCode());
+        appendPromptSentence(builder, question.getTitle());
+        appendPromptSentence(builder, question.getDescription());
+        return containsAnyPhrase(normalize(builder.toString()), OCCUPATION_OPEN_ENDED_HINTS.toArray(String[]::new));
     }
 
     private String buildOpenEndedContext(SurveyQuestion question) {

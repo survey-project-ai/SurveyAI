@@ -595,8 +595,10 @@ public class OperationAutoEntityLexiconService {
         return contextualSurvey;
     }
 
+    // Only the question itself decides. With the survey name and description included, a survey about
+    // occupations gave every question, choice questions too, the occupation dictionary.
     private boolean isOccupationQuestion(Survey survey, SurveyQuestion question) {
-        return containsAnyPhrase(buildQuestionContext(survey, question), OCCUPATION_HINTS);
+        return containsAnyPhrase(buildQuestionContext(null, question), OCCUPATION_HINTS);
     }
 
     private boolean isPoliticalPersonQuestion(Survey survey, SurveyQuestion question) {

@@ -109,6 +109,44 @@ class OperationAutoEntityLexiconServiceTest {
     }
 
     @Test
+    void doesNotGiveEveryQuestionTheOccupationLexiconBecauseOfTheSurveyName() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        TurkeyGeoDataService geoDataService = new TurkeyGeoDataService(objectMapper);
+        var loadMethod = TurkeyGeoDataService.class.getDeclaredMethod("load");
+        loadMethod.setAccessible(true);
+        loadMethod.invoke(geoDataService);
+        SurveyQuestionAutoLexiconService surveyQuestionAutoLexiconService =
+                new SurveyQuestionAutoLexiconService(objectMapper, geoDataService);
+        OperationAutoEntityLexiconService service =
+                new OperationAutoEntityLexiconService(objectMapper, surveyQuestionAutoLexiconService, geoDataService);
+
+        Survey survey = new Survey();
+        survey.setId(UUID.randomUUID());
+        survey.setName("Meslek ve yasam memnuniyeti");
+
+        SurveyQuestion question = new SurveyQuestion();
+        question.setId(UUID.randomUUID());
+        question.setCode("district_problem");
+        question.setTitle("Ilcenizin en onemli sorunu nedir?");
+        question.setSettingsJson("{}");
+
+        String payload = service.buildSourcePayloadJson(
+                survey,
+                "Mayis dalgasi",
+                List.of(question),
+                Map.of(question.getId(), List.of()),
+                null
+        );
+
+        JsonNode lexicon = objectMapper.readTree(payload)
+                .path("autoEntityLexiconPreview")
+                .path("questionSuggestions")
+                .get(0)
+                .path("lexicon");
+        assertTrue(!"occupation".equals(lexicon.path("domain").asText()));
+    }
+
+    @Test
     void combinesQuestionResearchAndSurveyPersonNamesForOpenEndedPoliticalQuestions() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         TurkeyGeoDataService geoDataService = new TurkeyGeoDataService(objectMapper);

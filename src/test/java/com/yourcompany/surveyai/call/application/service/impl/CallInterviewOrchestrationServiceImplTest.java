@@ -2192,6 +2192,50 @@ class CallInterviewOrchestrationServiceImplTest {
         assertThat(afterAli.totalQuestionCount()).isEqualTo(3);
     }
 
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "Öğretmenim | Öğretmen",
+            "Ben emekliyim | Emekli",
+            "Ev hanımıyım | Ev hanımı",
+            "Doktor | Doktor",
+            // Not in the known list, but still an occupation: kept as said.
+            "Veterinerim | Veterinerim",
+            "Kasiyer olarak çalışıyorum | Kasiyer olarak çalışıyorum"
+    })
+    void submitAnswer_acceptsAnyOccupationAndCleansUpKnownOnes(String utterance, String expectedText) {
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
+                .thenReturn(List.of(fixture.openQuestion));
+        fixture.openQuestion.setCode("occupation");
+        fixture.openQuestion.setTitle("Mesleğiniz nedir?");
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, utterance, InterviewConversationSignal.ANSWER));
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        SurveyAnswer answer = answersByResponseId.get(savedResponse.getId()).getFirst();
+        assertThat(answer.isValid()).isTrue();
+        assertThat(answer.getAnswerText()).isEqualTo(expectedText);
+    }
+
+    @Test
+    void submitAnswer_doesNotTreatOpenQuestionsAsOccupationBecauseOfTheSurveyName() {
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
+                .thenReturn(List.of(fixture.openQuestion));
+        fixture.survey.setName("Meslek ve Yaşam Memnuniyeti");
+        fixture.openQuestion.setCode("district_problem");
+        fixture.openQuestion.setTitle("İlçenizin en önemli sorunu nedir?");
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Trafik ve altyapı", InterviewConversationSignal.ANSWER));
+
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        SurveyAnswer answer = answersByResponseId.get(savedResponse.getId()).getFirst();
+        assertThat(answer.isValid()).isTrue();
+        assertThat(answer.getAnswerText()).isEqualTo("Trafik ve altyapı");
+    }
+
     @Test
     void submitAnswer_normalizesCivicOpenEndedAsrPhraseBeforeSaving() {
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
