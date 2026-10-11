@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactElement } from "react";
+import { useRef, useState, type ReactElement } from "react";
 import { jsPDF } from "jspdf";
 import { toBlob, toPng } from "html-to-image";
 import { KpiCard } from "@/components/ui/KpiCard";
@@ -179,7 +179,11 @@ export function OperationAnalyticsSection({
       summary,
     })),
   ].sort((left, right) => left.order - right.order);
-  useEffect(() => {
+  // Rebuild the editable sample-response drafts whenever analytics data
+  // changes. Adjusted during render instead of in an effect.
+  const [prevAnalytics, setPrevAnalytics] = useState(analytics);
+  if (prevAnalytics !== analytics) {
+    setPrevAnalytics(analytics);
     const nextDrafts: Record<string, string> = {};
 
     for (const summary of analytics?.questionSummaries ?? []) {
@@ -189,7 +193,7 @@ export function OperationAnalyticsSection({
     }
 
     setSampleResponseDrafts(nextDrafts);
-  }, [analytics]);
+  }
 
   const setChartCopyRef = (key: string) => (node: HTMLElement | null) => {
     chartCopyRefs.current[key] = node;

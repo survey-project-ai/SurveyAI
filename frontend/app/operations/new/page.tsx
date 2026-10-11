@@ -105,14 +105,14 @@ export default function NewOperationPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedSurveyId) {
-      setSelectedSurveyDetail(null);
-      return;
-    }
-
     const controller = new AbortController();
 
     async function loadSurveyDetail() {
+      if (!selectedSurveyId) {
+        setSelectedSurveyDetail(null);
+        return;
+      }
+
       try {
         setIsLoadingSurveyDetail(true);
         const detail = await fetchSurveyBuilderSurvey(selectedSurveyId, undefined, { signal: controller.signal });

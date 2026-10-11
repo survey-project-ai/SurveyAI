@@ -34,15 +34,15 @@ export default function AnalyticsDetailPage() {
   });
 
   useEffect(() => {
-    if (!operationId) {
-      setErrorMessage("Operasyon kimligi bulunamadi.");
-      setIsLoading(false);
-      return;
-    }
-
     const controller = new AbortController();
 
     async function load() {
+      if (!operationId) {
+        setErrorMessage("Operasyon kimligi bulunamadi.");
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
         setErrorMessage(null);

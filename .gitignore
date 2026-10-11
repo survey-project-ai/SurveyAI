@@ -21,6 +21,13 @@ frontend/yarn-debug.log*
 frontend/yarn-error.log*
 frontend/pnpm-debug.log*
 
+# Playwright (E2E) artifacts
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/.playwright/
+frontend/playwright/.cache/
+
 # Logs / runtime
 logs/
 *.log

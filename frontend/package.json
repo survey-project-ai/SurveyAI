@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "node scripts/start.mjs",
-    "lint": "next lint"
+    "lint": "eslint .",
+    "test:e2e": "playwright test",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "html-to-image": "^1.11.13",
@@ -14,10 +16,11 @@
     "next": "^16.2.7",
     "react": "19.0.0",
     "react-dom": "19.0.0",
-    "recharts": "^3.8.1",
-    "read-excel-file": "^9.0.10"
+    "read-excel-file": "^9.0.10",
+    "recharts": "^3.8.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/node": "22.13.10",
     "@types/react": "19.0.10",
     "@types/react-dom": "19.0.4",

@@ -92,11 +92,16 @@ export default function OperationJobDetailPage() {
     return () => controller.abort();
   }, [callJobId, operationId]);
 
-  useEffect(() => {
-    const nextDrafts = createAnswerDrafts(detail?.surveyResponse?.answers ?? []);
+  // Reset the editable answer drafts whenever the loaded survey response
+  // changes. Adjusted during render (not in an effect) to avoid an extra pass.
+  const surveyResponse = detail?.surveyResponse;
+  const [prevSurveyResponse, setPrevSurveyResponse] = useState(surveyResponse);
+  if (prevSurveyResponse !== surveyResponse) {
+    setPrevSurveyResponse(surveyResponse);
+    const nextDrafts = createAnswerDrafts(surveyResponse?.answers ?? []);
     setAnswerDrafts(nextDrafts);
     setInitialAnswerSignature(serializeAnswerDrafts(nextDrafts));
-  }, [detail?.surveyResponse]);
+  }
 
   if (isMissing) {
     notFound();

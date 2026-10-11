@@ -111,13 +111,19 @@ export default function OperationsPage() {
     [filteredOperations, priorityPage],
   );
 
-  useEffect(() => {
-    setPriorityPage((current) => Math.min(current, Math.max(priorityPageCount - 1, 0)));
-  }, [priorityPageCount]);
-
-  useEffect(() => {
+  // Reset to the first page when the active tab changes (adjust state during
+  // render instead of in an effect to avoid a cascading re-render).
+  const [prevActiveTab, setPrevActiveTab] = useState(activeTab);
+  if (prevActiveTab !== activeTab) {
+    setPrevActiveTab(activeTab);
     setPriorityPage(0);
-  }, [activeTab]);
+  }
+
+  // Clamp the current page if the available page count shrinks.
+  const maxPriorityPage = Math.max(priorityPageCount - 1, 0);
+  if (priorityPage > maxPriorityPage) {
+    setPriorityPage(maxPriorityPage);
+  }
 
   useEffect(() => {
     let isMounted = true;

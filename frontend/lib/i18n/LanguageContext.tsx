@@ -1,7 +1,23 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import { defaultLanguage, languageStorageKey, languages, translations, type Language } from "@/lib/i18n";
+
+const languageChangeEvent = "surveyai:language-change";
+
+function subscribeToLanguage(onChange: () => void): () => void {
+  window.addEventListener("storage", onChange);
+  window.addEventListener(languageChangeEvent, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(languageChangeEvent, onChange);
+  };
+}
+
+function readStoredLanguage(): Language {
+  const savedLanguage = window.localStorage.getItem(languageStorageKey);
+  return savedLanguage && isLanguage(savedLanguage) ? savedLanguage : defaultLanguage;
+}
 
 type LanguageContextValue = {
   language: Language;
@@ -13,30 +29,19 @@ type LanguageContextValue = {
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguage] = useState<Language>(defaultLanguage);
-  const [hasRestoredLanguage, setHasRestoredLanguage] = useState(false);
+  // Read the persisted language from an external store (localStorage) so the
+  // server renders the default and the client reconciles after hydration
+  // without a mismatch — and without setting state inside an effect.
+  const language = useSyncExternalStore(subscribeToLanguage, readStoredLanguage, () => defaultLanguage);
+
+  const setLanguage = useCallback((nextLanguage: Language) => {
+    window.localStorage.setItem(languageStorageKey, nextLanguage);
+    window.dispatchEvent(new Event(languageChangeEvent));
+  }, []);
 
   useEffect(() => {
     document.documentElement.lang = language;
   }, [language]);
-
-  useEffect(() => {
-    const savedLanguage = window.localStorage.getItem(languageStorageKey);
-
-    if (savedLanguage && isLanguage(savedLanguage)) {
-      setLanguage(savedLanguage);
-    }
-
-    setHasRestoredLanguage(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hasRestoredLanguage) {
-      return;
-    }
-
-    window.localStorage.setItem(languageStorageKey, language);
-  }, [hasRestoredLanguage, language]);
 
   const value = useMemo<LanguageContextValue>(() => {
     return {
@@ -45,7 +50,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       t: (path, values) => formatTranslation(readTranslation(path, translations[language] as Record<string, unknown>), values),
       tm: <T,>(path: string) => readTranslation(path, translations[language] as Record<string, unknown>) as T,
     };
-  }, [language]);
+  }, [language, setLanguage]);
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }

@@ -332,20 +332,27 @@ export default function SurveysPage() {
     [filteredSurveys, surveyPage],
   );
 
-  useEffect(() => {
+  // Reset to the first page (and collapse the open row) when the active tab
+  // changes — adjusted during render to avoid cascading re-renders.
+  const [prevActiveTab, setPrevActiveTab] = useState(activeTab);
+  if (prevActiveTab !== activeTab) {
+    setPrevActiveTab(activeTab);
     setSurveyPage(0);
     setExpandedSurveyId(null);
-  }, [activeTab]);
+  }
 
-  useEffect(() => {
-    setSurveyPage((current) =>
-      Math.min(current, Math.max(surveyPageCount - 1, 0)),
-    );
-  }, [surveyPageCount]);
+  // Clamp the current page if the available page count shrinks.
+  const maxSurveyPage = Math.max(surveyPageCount - 1, 0);
+  if (surveyPage > maxSurveyPage) {
+    setSurveyPage(maxSurveyPage);
+  }
 
-  useEffect(() => {
+  // Collapse the expanded row whenever the page changes.
+  const [prevSurveyPage, setPrevSurveyPage] = useState(surveyPage);
+  if (prevSurveyPage !== surveyPage) {
+    setPrevSurveyPage(surveyPage);
     setExpandedSurveyId(null);
-  }, [surveyPage]);
+  }
 
   const columns = useMemo<TableColumn<SurveyRow>[]>(
     () => [

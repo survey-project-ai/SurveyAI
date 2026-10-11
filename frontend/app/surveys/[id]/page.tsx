@@ -403,19 +403,22 @@ export default function SurveyDetailPage() {
     }
 
     const controller = new AbortController();
-    void loadSurveyDetail(controller.signal);
+    async function run() {
+      await loadSurveyDetail(controller.signal);
+    }
+    void run();
     return () => controller.abort();
   }, [loadSurveyDetail, surveyId]);
 
   useEffect(() => {
-    if (linkedOperations.length === 0) {
-      setAnalytics([]);
-      return;
-    }
-
     const controller = new AbortController();
 
     async function loadAnalytics() {
+      if (linkedOperations.length === 0) {
+        setAnalytics([]);
+        return;
+      }
+
       const results = await Promise.allSettled(
         linkedOperations.map((operation) =>
           fetchOperationAnalytics(operation.id, undefined, { signal: controller.signal }),

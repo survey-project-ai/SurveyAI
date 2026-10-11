@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { CallJobDetail, CallJobSurveyResponseAnswer } from "@/lib/types";
 
@@ -41,11 +41,15 @@ export function CallJobSurveyResponseEditor({
   const [answerDrafts, setAnswerDrafts] = useState<SurveyAnswerDraft[]>([]);
   const [initialAnswerSignature, setInitialAnswerSignature] = useState("");
 
-  useEffect(() => {
+  // Reset the editable drafts whenever the incoming survey response changes.
+  // Adjusted during render instead of in an effect.
+  const [prevSurveyResponse, setPrevSurveyResponse] = useState(detail.surveyResponse);
+  if (prevSurveyResponse !== detail.surveyResponse) {
+    setPrevSurveyResponse(detail.surveyResponse);
     const nextDrafts = createAnswerDrafts(detail.surveyResponse?.answers ?? []);
     setAnswerDrafts(nextDrafts);
     setInitialAnswerSignature(serializeAnswerDrafts(nextDrafts));
-  }, [detail.surveyResponse]);
+  }
 
   const hasUnsavedAnswerChanges = serializeAnswerDrafts(answerDrafts) !== initialAnswerSignature;
   const responseStatus = detail.surveyResponse?.status ?? (detail.partialResponseDataExists ? "Kismi veri var" : "Yanit yok");
