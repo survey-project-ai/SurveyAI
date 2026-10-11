@@ -41,6 +41,7 @@ import com.yourcompany.surveyai.response.domain.entity.SurveyAnswer;
 import com.yourcompany.surveyai.response.domain.entity.SurveyResponse;
 import com.yourcompany.surveyai.response.domain.enums.SurveyResponseStatus;
 import com.yourcompany.surveyai.response.repository.SurveyAnswerRepository;
+import com.yourcompany.surveyai.response.repository.SurveyResponseAnalyticsRow;
 import com.yourcompany.surveyai.response.repository.SurveyResponseRepository;
 import com.yourcompany.surveyai.survey.domain.entity.Survey;
 import com.yourcompany.surveyai.survey.domain.entity.SurveyQuestion;
@@ -134,7 +135,6 @@ public class OperationServiceImpl implements OperationService {
             "go ahead"
     );
 
-    private static final String CONSENT_STATE_KEY = "openingConsentState";
     private static final String CONSENT_GRANTED = "GRANTED";
     private static final String CONSENT_DECLINED = "DECLINED";
     private static final String CONSENT_UNCLEAR = "UNCLEAR";
@@ -472,8 +472,8 @@ public class OperationServiceImpl implements OperationService {
         long skippedCallJobs = jobCountsByStatus.getOrDefault(CallJobStatus.CANCELLED, 0L);
         long totalCallsAttempted = totalJobs - queuedJobs;
 
-        List<SurveyResponse> responses = surveyResponseRepository
-                .findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId);
+        List<SurveyResponseAnalyticsRow> allResponses = surveyResponseRepository.findAnalyticsRowsByOperationId(operationId);
+        List<SurveyResponseAnalyticsRow> responses = selectOneResponsePerContact(allResponses);
         List<SurveyQuestion> questions = surveyQuestionRepository
                 .findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId());
         List<UUID> questionIds = questions.stream().map(SurveyQuestion::getId).toList();
@@ -488,12 +488,12 @@ public class OperationServiceImpl implements OperationService {
                                 Collectors.toList()
                         ));
 
-        Map<UUID, SurveyResponse> responsesById = responses.stream()
-                .collect(Collectors.toMap(SurveyResponse::getId, response -> response));
-        List<UUID> responseIds = responses.stream().map(SurveyResponse::getId).toList();
-        List<SurveyAnswer> answers = responseIds.isEmpty()
+        Map<UUID, SurveyResponseAnalyticsRow> responsesById = responses.stream()
+                .collect(Collectors.toMap(SurveyResponseAnalyticsRow::id, response -> response));
+        // Answers of the responses that do not count for their contact are dropped by the responsesById filters below.
+        List<SurveyAnswer> answers = responses.isEmpty()
                 ? List.of()
-                : surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(responseIds);
+                : surveyAnswerRepository.findAllForOperationAnalytics(operationId);
 
         Map<UUID, List<SurveyAnswer>> answersByQuestionId = answers.stream()
                 .filter(answer -> responsesById.containsKey(answer.getSurveyResponse().getId()))
@@ -510,7 +510,7 @@ public class OperationServiceImpl implements OperationService {
         Set<UUID> respondedContactIds = usableResponseIds.stream()
                 .map(responsesById::get)
                 .filter(Objects::nonNull)
-                .map(response -> response.getOperationContact().getId())
+                .map(SurveyResponseAnalyticsRow::operationContactId)
                 .collect(Collectors.toSet());
         long respondedContacts = respondedContactIds.size();
 
@@ -526,8 +526,8 @@ public class OperationServiceImpl implements OperationService {
         double participationRate = percentage(respondedContacts, totalContacts);
         double averageCompletionPercent = round(
                 responses.stream()
-                        .filter(response -> usableResponseIds.contains(response.getId()))
-                        .map(SurveyResponse::getCompletionPercent)
+                        .filter(response -> usableResponseIds.contains(response.id()))
+                        .map(SurveyResponseAnalyticsRow::completionPercent)
                         .filter(Objects::nonNull)
                         .mapToDouble(BigDecimal::doubleValue)
                         .average()
@@ -547,7 +547,8 @@ public class OperationServiceImpl implements OperationService {
                         question,
                         optionsByQuestionId.getOrDefault(question.getId(), List.of()),
                         answersByQuestionId.getOrDefault(question.getId(), List.of()),
-                        respondedContacts
+                        respondedContacts,
+                        responsesById
                 ))
                 .toList();
         questionSummaries = enrichQuestionDropOffs(questionSummaries);
@@ -567,7 +568,7 @@ public class OperationServiceImpl implements OperationService {
         List<OperationAnalyticsBreakdownItemDto> consentBreakdown = buildConsentBreakdown(responses, totalContacts);
 
         Map<String, Long> trendMap = responses.stream()
-                .map(response -> response.getCompletedAt() != null ? response.getCompletedAt() : response.getStartedAt())
+                .map(response -> response.completedAt() != null ? response.completedAt() : response.startedAt())
                 .filter(Objects::nonNull)
                 .collect(Collectors.groupingBy(
                         timestamp -> timestamp.toLocalDate()
@@ -603,7 +604,7 @@ public class OperationServiceImpl implements OperationService {
                 operationId,
                 totalContacts,
                 totalJobs,
-                responses.size(),
+                allResponses.size(),
                 completedResponses
         );
 
@@ -619,7 +620,7 @@ public class OperationServiceImpl implements OperationService {
                 completedCallJobs,
                 failedCallJobs,
                 skippedCallJobs,
-                responses.size(),
+                allResponses.size(),
                 respondedContacts,
                 completedResponses,
                 partialResponses,
@@ -787,15 +788,34 @@ public class OperationServiceImpl implements OperationService {
         );
     }
 
+    // A contact called more than once (retry, redial) has one response per call. Counting all of them
+    // made the contact count several times in question distributions, rates and the consent breakdown.
+    // The completed response counts, otherwise the most complete one, otherwise the latest.
+    private List<SurveyResponseAnalyticsRow> selectOneResponsePerContact(List<SurveyResponseAnalyticsRow> responses) {
+        Comparator<SurveyResponseAnalyticsRow> preference = Comparator
+                .comparing((SurveyResponseAnalyticsRow response) -> response.status() == SurveyResponseStatus.COMPLETED)
+                .thenComparing(response -> response.completionPercent() == null ? BigDecimal.ZERO : response.completionPercent())
+                .thenComparing(this::resolveResponseMoment, Comparator.nullsFirst(Comparator.naturalOrder()));
+        Map<UUID, SurveyResponseAnalyticsRow> responseByContact = new LinkedHashMap<>();
+        for (SurveyResponseAnalyticsRow response : responses) {
+            responseByContact.merge(
+                    response.operationContactId(),
+                    response,
+                    (current, candidate) -> preference.compare(candidate, current) > 0 ? candidate : current
+            );
+        }
+        return List.copyOf(responseByContact.values());
+    }
+
     private long countDistinctResponseContactsByStatus(
-            List<SurveyResponse> responses,
+            List<SurveyResponseAnalyticsRow> responses,
             Set<UUID> usableResponseIds,
             SurveyResponseStatus status
     ) {
         return responses.stream()
-                .filter(response -> response.getStatus() == status)
-                .filter(response -> usableResponseIds.contains(response.getId()))
-                .map(response -> response.getOperationContact().getId())
+                .filter(response -> response.status() == status)
+                .filter(response -> usableResponseIds.contains(response.id()))
+                .map(SurveyResponseAnalyticsRow::operationContactId)
                 .distinct()
                 .count();
     }
@@ -813,7 +833,8 @@ public class OperationServiceImpl implements OperationService {
             SurveyQuestion question,
             List<SurveyQuestionOption> options,
             List<SurveyAnswer> answers,
-            long respondedContacts
+            long respondedContacts,
+            Map<UUID, SurveyResponseAnalyticsRow> responsesById
     ) {
         if (question.getQuestionType() == QuestionType.RATING) {
             List<SurveyAnswer> ratingAnswers = answers.stream()
@@ -924,10 +945,11 @@ public class OperationServiceImpl implements OperationService {
             if (isNamedEntityOpenEndedQuestion(question)) {
                 Map<String, Long> entityCounts = new LinkedHashMap<>();
                 List<OperationAnalyticsSampleResponseDto> rawResponses = new ArrayList<>();
-                for (SurveyAnswer answer : sortOpenEndedAnswers(qualitativeAnswers)) {
+                for (SurveyAnswer answer : sortOpenEndedAnswers(qualitativeAnswers, responsesById)) {
                     OperationAnalyticsSampleResponseDto rawResponse = toOpenEndedSampleResponse(
                             answer,
-                            new OpenEndedGroupingResolution(null, List.of(), null)
+                            new OpenEndedGroupingResolution(null, List.of(), null),
+                            responsesById
                     );
                     if (rawResponse != null) {
                         rawResponses.add(rawResponse);
@@ -965,9 +987,9 @@ public class OperationServiceImpl implements OperationService {
             Map<String, Long> confirmedThemeCounts = new LinkedHashMap<>();
             List<OperationAnalyticsSampleResponseDto> reviewSamples = new ArrayList<>();
             List<OperationAnalyticsSampleResponseDto> rawResponses = new ArrayList<>();
-            for (SurveyAnswer answer : sortOpenEndedAnswers(qualitativeAnswers)) {
+            for (SurveyAnswer answer : sortOpenEndedAnswers(qualitativeAnswers, responsesById)) {
                 OpenEndedGroupingResolution resolution = resolveOpenEndedGrouping(question, answer);
-                OperationAnalyticsSampleResponseDto rawResponse = toOpenEndedSampleResponse(answer, resolution);
+                OperationAnalyticsSampleResponseDto rawResponse = toOpenEndedSampleResponse(answer, resolution, responsesById);
                 if (rawResponse != null) {
                     rawResponses.add(rawResponse);
                 }
@@ -1711,7 +1733,7 @@ public class OperationServiceImpl implements OperationService {
         return !normalized.isBlank() && !OPEN_ENDED_CONSENT_ARTIFACTS.contains(normalized);
     }
 
-    private List<OperationAnalyticsBreakdownItemDto> buildConsentBreakdown(List<SurveyResponse> responses, long totalContacts) {
+    private List<OperationAnalyticsBreakdownItemDto> buildConsentBreakdown(List<SurveyResponseAnalyticsRow> responses, long totalContacts) {
         if (responses.isEmpty()) {
             return List.of();
         }
@@ -1721,8 +1743,8 @@ public class OperationServiceImpl implements OperationService {
         counts.put("Katilmayi reddetti", 0L);
         counts.put("Belirsiz / yanitsiz", 0L);
 
-        for (SurveyResponse response : responses) {
-            String consentState = readConsentState(response);
+        for (SurveyResponseAnalyticsRow response : responses) {
+            String consentState = trimToNull(response.consentState());
             // The interview ended without a clear answer; its ABANDONED status is not a refusal.
             if (CONSENT_UNCLEAR.equals(consentState)) {
                 counts.computeIfPresent("Belirsiz / yanitsiz", (key, value) -> value + 1L);
@@ -1739,68 +1761,26 @@ public class OperationServiceImpl implements OperationService {
         return toBreakdown(counts, denominator);
     }
 
-    private boolean inferConsentDeclined(SurveyResponse response) {
-        if (response == null || response.getStatus() != SurveyResponseStatus.ABANDONED) {
+    private boolean inferConsentDeclined(SurveyResponseAnalyticsRow response) {
+        if (response == null || response.status() != SurveyResponseStatus.ABANDONED) {
             return false;
         }
 
-        BigDecimal completionPercent = response.getCompletionPercent();
+        BigDecimal completionPercent = response.completionPercent();
         return completionPercent == null || completionPercent.compareTo(BigDecimal.ZERO) <= 0;
     }
 
-    private boolean inferConsentAccepted(SurveyResponse response) {
+    private boolean inferConsentAccepted(SurveyResponseAnalyticsRow response) {
         if (response == null) {
             return false;
         }
 
-        if (response.getStatus() == SurveyResponseStatus.COMPLETED) {
+        if (response.status() == SurveyResponseStatus.COMPLETED) {
             return true;
         }
 
-        BigDecimal completionPercent = response.getCompletionPercent();
+        BigDecimal completionPercent = response.completionPercent();
         return completionPercent != null && completionPercent.compareTo(BigDecimal.ZERO) > 0;
-    }
-
-    private String readConsentState(SurveyResponse response) {
-        String payload = response.getTranscriptJson();
-        if (payload == null || payload.isBlank()) {
-            return null;
-        }
-
-        try {
-            JsonNode root = objectMapper.readTree(payload);
-            if (!root.hasNonNull(CONSENT_STATE_KEY)) {
-                return null;
-            }
-            return trimToNull(root.get(CONSENT_STATE_KEY).asText(null));
-        } catch (Exception error) {
-            return null;
-        }
-    }
-
-    private List<OperationAnalyticsBreakdownItemDto> buildOpenEndedBreakdown(List<SurveyAnswer> answers, long answeredCount) {
-        if (answers.isEmpty()) {
-            return List.of();
-        }
-
-        Map<String, Long> tokenFrequency = buildOpenEndedTokenFrequency(answers);
-        Map<String, Long> themeCounts = new LinkedHashMap<>();
-        for (SurveyAnswer answer : sortOpenEndedAnswers(answers)) {
-            String theme = resolveOpenEndedTheme(answer, tokenFrequency);
-            themeCounts.merge(theme, 1L, Long::sum);
-        }
-
-        LinkedHashMap<String, Long> orderedThemes = themeCounts.entrySet().stream()
-                .sorted(Map.Entry.<String, Long>comparingByValue(Comparator.reverseOrder())
-                        .thenComparing(Map.Entry::getKey))
-                .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        Map.Entry::getValue,
-                        (left, right) -> left,
-                        LinkedHashMap::new
-                ));
-
-        return toBreakdown(orderedThemes, answeredCount == 0 ? 1 : answeredCount);
     }
 
     private List<OperationAnalyticsBreakdownItemDto> buildSpecialAnswerBreakdown(List<SurveyAnswer> answers, long answeredCount) {
@@ -1934,27 +1914,29 @@ public class OperationServiceImpl implements OperationService {
         return List.copyOf(codes);
     }
 
-    private OperationAnalyticsSampleResponseDto toOpenEndedSampleResponse(SurveyAnswer answer, OpenEndedGroupingResolution resolution) {
+    // Reads the respondent from the already loaded response rows, so a sample costs no extra queries.
+    private OperationAnalyticsSampleResponseDto toOpenEndedSampleResponse(
+            SurveyAnswer answer,
+            OpenEndedGroupingResolution resolution,
+            Map<UUID, SurveyResponseAnalyticsRow> responsesById
+    ) {
         String responseText = resolveOpenEndedText(answer);
         if (responseText == null || responseText.isBlank()) {
             return null;
         }
 
-        SurveyResponse surveyResponse = answer.getSurveyResponse();
-        if (surveyResponse == null || surveyResponse.getCallAttempt() == null || surveyResponse.getCallAttempt().getCallJob() == null) {
+        SurveyResponseAnalyticsRow surveyResponse = responsesById.get(answer.getSurveyResponse().getId());
+        if (surveyResponse == null || surveyResponse.callJobId() == null) {
             return null;
         }
 
-        CallJob callJob = surveyResponse.getCallAttempt().getCallJob();
-        String respondentName = surveyResponse.getOperationContact() != null
-                ? buildContactDisplayName(surveyResponse.getOperationContact())
-                : null;
+        String respondentName = buildContactDisplayName(surveyResponse.contactFirstName(), surveyResponse.contactLastName());
         if (respondentName == null) {
             respondentName = "Katilimci";
         }
 
         return new OperationAnalyticsSampleResponseDto(
-                callJob.getId(),
+                surveyResponse.callJobId(),
                 respondentName,
                 resolveResponseMoment(surveyResponse),
                 trimSample(responseText.trim()),
@@ -1976,71 +1958,41 @@ public class OperationServiceImpl implements OperationService {
         return trimToNull(cleaned);
     }
 
-    private String buildContactDisplayName(OperationContact contact) {
-        if (contact == null) {
-            return null;
-        }
-        String firstName = contact.getFirstName() == null ? "" : contact.getFirstName().trim();
-        String lastName = contact.getLastName() == null ? "" : contact.getLastName().trim();
+    private String buildContactDisplayName(String contactFirstName, String contactLastName) {
+        String firstName = contactFirstName == null ? "" : contactFirstName.trim();
+        String lastName = contactLastName == null ? "" : contactLastName.trim();
         String fullName = (firstName + " " + lastName).trim();
         return fullName.isBlank() ? null : fullName;
     }
 
-    private List<SurveyAnswer> sortOpenEndedAnswers(List<SurveyAnswer> answers) {
+    private List<SurveyAnswer> sortOpenEndedAnswers(List<SurveyAnswer> answers, Map<UUID, SurveyResponseAnalyticsRow> responsesById) {
         return answers.stream()
                 .sorted(Comparator
-                        .comparing((SurveyAnswer answer) -> resolveResponseMoment(answer.getSurveyResponse()), Comparator.nullsLast(Comparator.reverseOrder()))
-                        .thenComparing(answer -> answer.getSurveyResponse().getCreatedAt(), Comparator.nullsLast(Comparator.reverseOrder())))
+                        .comparing(
+                                (SurveyAnswer answer) -> resolveResponseMoment(responsesById.get(answer.getSurveyResponse().getId())),
+                                Comparator.nullsLast(Comparator.reverseOrder())
+                        )
+                        .thenComparing(
+                                answer -> {
+                                    SurveyResponseAnalyticsRow response = responsesById.get(answer.getSurveyResponse().getId());
+                                    return response == null ? null : response.createdAt();
+                                },
+                                Comparator.nullsLast(Comparator.reverseOrder())
+                        ))
                 .toList();
     }
 
-    private OffsetDateTime resolveResponseMoment(SurveyResponse response) {
+    private OffsetDateTime resolveResponseMoment(SurveyResponseAnalyticsRow response) {
         if (response == null) {
             return null;
         }
-        if (response.getCompletedAt() != null) {
-            return response.getCompletedAt();
+        if (response.completedAt() != null) {
+            return response.completedAt();
         }
-        if (response.getStartedAt() != null) {
-            return response.getStartedAt();
+        if (response.startedAt() != null) {
+            return response.startedAt();
         }
-        return response.getCreatedAt();
-    }
-
-    private Map<String, Long> buildOpenEndedTokenFrequency(List<SurveyAnswer> answers) {
-        Map<String, Long> frequencies = new LinkedHashMap<>();
-        for (SurveyAnswer answer : answers) {
-            for (String token : extractMeaningfulTokens(resolveOpenEndedText(answer))) {
-                frequencies.merge(token, 1L, Long::sum);
-            }
-        }
-        return frequencies;
-    }
-
-    private String resolveOpenEndedTheme(SurveyAnswer answer, Map<String, Long> tokenFrequency) {
-        List<String> storedThemes = extractStoredThemeLabels(answer);
-        if (!storedThemes.isEmpty()) {
-            return storedThemes.getFirst();
-        }
-
-        List<String> tokens = extractMeaningfulTokens(resolveOpenEndedText(answer));
-        if (tokens.isEmpty()) {
-            return "Diger";
-        }
-
-        for (String token : tokens) {
-            String mappedTheme = OPEN_ENDED_THEME_BY_KEYWORD.get(token);
-            if (mappedTheme != null) {
-                return mappedTheme;
-            }
-        }
-
-        String strongestToken = tokens.stream()
-                .max(Comparator
-                        .comparingLong((String token) -> tokenFrequency.getOrDefault(token, 0L))
-                        .thenComparingInt(String::length))
-                .orElse(tokens.getFirst());
-        return toDisplayLabel(strongestToken.replace('_', ' '));
+        return response.createdAt();
     }
 
     private List<String> extractStoredThemeCodes(SurveyAnswer answer) {
@@ -2117,31 +2069,6 @@ public class OperationServiceImpl implements OperationService {
             }
         }
         return List.copyOf(matches);
-    }
-
-    private List<String> extractStoredThemeLabels(SurveyAnswer answer) {
-        if (answer.getAnswerJson() == null || answer.getAnswerJson().isBlank()) {
-            return List.of();
-        }
-
-        try {
-            JsonNode root = objectMapper.readTree(answer.getAnswerJson());
-            JsonNode codedThemes = root.get("codedThemes");
-            if (codedThemes == null || !codedThemes.isArray()) {
-                return List.of();
-            }
-            List<String> labels = new ArrayList<>();
-            codedThemes.forEach(item -> {
-                String rawValue = trimToNull(item.asText(null));
-                if (rawValue == null) {
-                    return;
-                }
-                labels.add(toDisplayLabel(rawValue.replace('_', ' ')));
-            });
-            return labels.stream().filter(Objects::nonNull).distinct().toList();
-        } catch (Exception error) {
-            return List.of();
-        }
     }
 
     private List<String> extractMeaningfulTokens(String text) {

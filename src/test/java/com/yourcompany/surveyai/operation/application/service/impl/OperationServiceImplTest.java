@@ -23,6 +23,7 @@ import com.yourcompany.surveyai.common.domain.entity.Company;
 import com.yourcompany.surveyai.common.exception.ValidationException;
 import com.yourcompany.surveyai.common.repository.AppUserRepository;
 import com.yourcompany.surveyai.common.repository.CompanyRepository;
+import com.yourcompany.surveyai.operation.application.dto.response.OperationAnalyticsQuestionSummaryDto;
 import com.yourcompany.surveyai.operation.application.dto.response.OperationAnalyticsResponseDto;
 import com.yourcompany.surveyai.operation.application.dto.response.OperationResponseDto;
 import com.yourcompany.surveyai.operation.application.dto.request.CreateOperationRequest;
@@ -40,6 +41,7 @@ import com.yourcompany.surveyai.survey.domain.entity.Survey;
 import com.yourcompany.surveyai.survey.domain.entity.SurveyQuestion;
 import com.yourcompany.surveyai.survey.domain.entity.SurveyQuestionOption;
 import com.yourcompany.surveyai.response.repository.SurveyAnswerRepository;
+import com.yourcompany.surveyai.response.repository.SurveyResponseAnalyticsRow;
 import com.yourcompany.surveyai.response.repository.SurveyResponseRepository;
 import com.yourcompany.surveyai.survey.domain.enums.QuestionType;
 import com.yourcompany.surveyai.survey.domain.enums.SurveyStatus;
@@ -324,6 +326,63 @@ class OperationServiceImplTest {
     }
 
     @Test
+    void getOperationAnalytics_countsAContactCalledTwiceOnceUsingTheCompletedResponse() {
+        Operation operation = buildOperation(OperationStatus.RUNNING, SurveyStatus.PUBLISHED);
+        UUID companyId = operation.getCompany().getId();
+        UUID operationId = operation.getId();
+
+        SurveyQuestion choiceQuestion = buildQuestion(operation.getSurvey(), "q-choice", 1, QuestionType.SINGLE_CHOICE, "Memnun musunuz?");
+        SurveyQuestion ratingQuestion = buildQuestion(operation.getSurvey(), "q-rating", 2, QuestionType.RATING, "Deneyim puani");
+        SurveyQuestionOption yesOption = buildOption(choiceQuestion, 1, "YES", "Evet", "yes");
+        SurveyQuestionOption noOption = buildOption(choiceQuestion, 2, "NO", "Hayir", "no");
+
+        // The first call was cut off half way; the redial completed the survey with different answers.
+        SurveyResponse firstCall = buildSurveyResponse(operation, SurveyResponseStatus.PARTIAL, "905551112233", 50, OffsetDateTime.now().minusDays(1));
+        SurveyResponse redial = buildSurveyResponse(operation, SurveyResponseStatus.COMPLETED, "905551112233", 100, OffsetDateTime.now().minusHours(1));
+        redial.setOperationContact(firstCall.getOperationContact());
+        redial.getCallAttempt().setOperationContact(firstCall.getOperationContact());
+
+        when(operationRepository.findByIdAndCompany_IdAndDeletedAtIsNull(operationId, companyId))
+                .thenReturn(Optional.of(operation));
+        when(operationContactRepository.countByOperation_IdAndCompany_IdAndDeletedAtIsNull(operationId, companyId))
+                .thenReturn(1L);
+        when(callJobRepository.countGroupedByStatusForOperation(operationId))
+                .thenReturn(List.<Object[]>of(new Object[]{CallJobStatus.COMPLETED, 1L}));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(redial, firstCall));
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
+                .thenReturn(List.of(choiceQuestion, ratingQuestion));
+        when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
+                List.of(choiceQuestion.getId(), ratingQuestion.getId())
+        )).thenReturn(List.of(yesOption, noOption));
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId)).thenReturn(List.of(
+                buildChoiceAnswer(firstCall, choiceQuestion, noOption),
+                buildRatingAnswer(firstCall, ratingQuestion, 1),
+                buildChoiceAnswer(redial, choiceQuestion, yesOption),
+                buildRatingAnswer(redial, ratingQuestion, 5)
+        ));
+
+        OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
+
+        assertThat(response.totalResponses()).isEqualTo(2);
+        assertThat(response.respondedContacts()).isEqualTo(1);
+        assertThat(response.completedResponses()).isEqualTo(1);
+        assertThat(response.partialResponses()).isZero();
+        assertThat(response.responseRate()).isEqualTo(100.0);
+        OperationAnalyticsQuestionSummaryDto choiceSummary = response.questionSummaries().get(0);
+        assertThat(choiceSummary.answeredCount()).isEqualTo(1);
+        assertThat(choiceSummary.responseRate()).isEqualTo(100.0);
+        assertThat(choiceSummary.breakdown())
+                .extracting(item -> item.label() + ":" + item.count())
+                .contains("Evet:1")
+                .doesNotContain("Hayir:1");
+        assertThat(response.questionSummaries().get(1).averageRating()).isEqualTo(5.0);
+        assertThat(response.consentBreakdown())
+                .extracting(item -> item.label() + ":" + item.count())
+                .contains("Katilmayi kabul etti:1");
+    }
+
+    @Test
     void getOperationAnalytics_aggregatesRealSurveyResponsesAndAnswers() {
         Operation operation = buildOperation(OperationStatus.RUNNING, SurveyStatus.PUBLISHED);
         UUID companyId = operation.getCompany().getId();
@@ -357,16 +416,14 @@ class OperationServiceImplTest {
                         new Object[]{CallJobStatus.FAILED, 1L},
                         new Object[]{CallJobStatus.QUEUED, 1L}
                 ));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(partialResponse, completedResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(partialResponse, completedResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of(choiceQuestion, ratingQuestion, openEndedQuestion));
         when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
                 List.of(choiceQuestion.getId(), ratingQuestion.getId(), openEndedQuestion.getId())
         )).thenReturn(List.of(yesOption, noOption));
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(
-                List.of(partialResponse.getId(), completedResponse.getId())
-        )).thenReturn(List.of(choiceAnswer, ratingAnswer, openEndedAnswer));
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId)).thenReturn(List.of(choiceAnswer, ratingAnswer, openEndedAnswer));
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
 
@@ -422,11 +479,11 @@ class OperationServiceImplTest {
                 .thenReturn(1L);
         when(callJobRepository.countGroupedByStatusForOperation(operationId))
                 .thenReturn(List.<Object[]>of(new Object[]{CallJobStatus.FAILED, 1L}));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(voicemailLikeResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(voicemailLikeResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of());
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(List.of(voicemailLikeResponse.getId())))
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId))
                 .thenReturn(List.of());
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
@@ -461,11 +518,11 @@ class OperationServiceImplTest {
                 .thenReturn(1L);
         when(callJobRepository.countGroupedByStatusForOperation(operationId))
                 .thenReturn(List.<Object[]>of(new Object[]{CallJobStatus.COMPLETED, 1L}));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(unclearResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(unclearResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of());
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(List.of(unclearResponse.getId())))
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId))
                 .thenReturn(List.of());
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
@@ -515,16 +572,14 @@ class OperationServiceImplTest {
                         buildCallJob(operation, CallJobStatus.COMPLETED),
                         buildCallJob(operation, CallJobStatus.COMPLETED)
                 ));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(secondResponse, firstResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(secondResponse, firstResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of(choiceQuestion));
         when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
                 List.of(choiceQuestion.getId())
         )).thenReturn(List.of(yesOption, noOption));
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(
-                List.of(secondResponse.getId(), firstResponse.getId())
-        )).thenReturn(List.of(yesAnswer, legacyNoAnswer));
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId)).thenReturn(List.of(yesAnswer, legacyNoAnswer));
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
 
@@ -593,16 +648,14 @@ class OperationServiceImplTest {
                         buildCallJob(operation, CallJobStatus.COMPLETED),
                         buildCallJob(operation, CallJobStatus.FAILED)
                 ));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(secondResponse, firstResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(secondResponse, firstResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of(choiceQuestion));
         when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
                 List.of(choiceQuestion.getId())
         )).thenReturn(List.of(yesOption, noOption));
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(
-                List.of(secondResponse.getId(), firstResponse.getId())
-        )).thenReturn(List.of(yesAnswer, blankChoiceAnswer));
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId)).thenReturn(List.of(yesAnswer, blankChoiceAnswer));
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
 
@@ -660,14 +713,14 @@ class OperationServiceImplTest {
                 .thenReturn(1L);
         when(callJobRepository.findAllByOperation_IdAndDeletedAtIsNull(operationId))
                 .thenReturn(List.of(buildCallJob(operation, CallJobStatus.COMPLETED)));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(completedResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(completedResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of(choiceQuestion));
         when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
                 List.of(choiceQuestion.getId())
         )).thenReturn(List.of(yesOption, noOption));
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(List.of(completedResponse.getId())))
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId))
                 .thenReturn(List.of(specialAnswer));
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
@@ -740,16 +793,14 @@ class OperationServiceImplTest {
                         buildCallJob(operation, CallJobStatus.COMPLETED),
                         buildCallJob(operation, CallJobStatus.COMPLETED)
                 ));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(thirdResponse, secondResponse, firstResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(thirdResponse, secondResponse, firstResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of(openEndedQuestion));
         when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
                 List.of(openEndedQuestion.getId())
         )).thenReturn(List.of());
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(
-                List.of(thirdResponse.getId(), secondResponse.getId(), firstResponse.getId())
-        )).thenReturn(List.of(firstAnswer, secondAnswer, thirdAnswer));
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId)).thenReturn(List.of(firstAnswer, secondAnswer, thirdAnswer));
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
 
@@ -806,16 +857,14 @@ class OperationServiceImplTest {
                         buildCallJob(operation, CallJobStatus.COMPLETED),
                         buildCallJob(operation, CallJobStatus.COMPLETED)
                 ));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(secondResponse, firstResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(secondResponse, firstResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of(openEndedQuestion));
         when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
                 List.of(openEndedQuestion.getId())
         )).thenReturn(List.of());
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(
-                List.of(secondResponse.getId(), firstResponse.getId())
-        )).thenReturn(List.of(firstAnswer, secondAnswer));
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId)).thenReturn(List.of(firstAnswer, secondAnswer));
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
 
@@ -887,16 +936,14 @@ class OperationServiceImplTest {
                         buildCallJob(operation, CallJobStatus.COMPLETED),
                         buildCallJob(operation, CallJobStatus.COMPLETED)
                 ));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(thirdResponse, secondResponse, firstResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(thirdResponse, secondResponse, firstResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of(openEndedQuestion));
         when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
                 List.of(openEndedQuestion.getId())
         )).thenReturn(List.of());
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(
-                List.of(thirdResponse.getId(), secondResponse.getId(), firstResponse.getId())
-        )).thenReturn(List.of(firstAnswer, secondAnswer, thirdAnswer));
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId)).thenReturn(List.of(firstAnswer, secondAnswer, thirdAnswer));
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
 
@@ -927,8 +974,8 @@ class OperationServiceImplTest {
                 .thenReturn(1L);
         when(callJobRepository.countGroupedByStatusForOperation(operationId))
                 .thenReturn(List.<Object[]>of(new Object[]{CallJobStatus.FAILED, 1L}));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of());
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows());
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of(question));
         when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
@@ -1005,14 +1052,14 @@ class OperationServiceImplTest {
                 .thenReturn(1L);
         when(callJobRepository.findAllByOperation_IdAndDeletedAtIsNull(operationId))
                 .thenReturn(List.of(buildCallJob(operation, CallJobStatus.COMPLETED)));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(partialResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(partialResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of(choiceQuestion, ratingQuestion, openEndedQuestion));
         when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
                 List.of(choiceQuestion.getId(), ratingQuestion.getId(), openEndedQuestion.getId())
         )).thenReturn(List.of(yesOption, noOption));
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(List.of(partialResponse.getId())))
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId))
                 .thenReturn(List.of(validChoiceAnswer, invalidRatingAnswer, invalidOpenEndedAnswer));
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
@@ -1083,14 +1130,14 @@ class OperationServiceImplTest {
                 .thenReturn(1L);
         when(callJobRepository.findAllByOperation_IdAndDeletedAtIsNull(operationId))
                 .thenReturn(List.of(buildCallJob(operation, CallJobStatus.COMPLETED)));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(completedResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(completedResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of(multiChoiceQuestion));
         when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
                 List.of(multiChoiceQuestion.getId())
         )).thenReturn(List.of(billingOption, supportOption, appOption));
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(List.of(completedResponse.getId())))
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId))
                 .thenReturn(List.of(multiChoiceAnswer));
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
@@ -1152,14 +1199,14 @@ class OperationServiceImplTest {
                 .thenReturn(1L);
         when(callJobRepository.findAllByOperation_IdAndDeletedAtIsNull(operationId))
                 .thenReturn(List.of(buildCallJob(operation, CallJobStatus.COMPLETED)));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(completedResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(completedResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of(ratingQuestion, openEndedQuestion));
         when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
                 List.of(ratingQuestion.getId(), openEndedQuestion.getId())
         )).thenReturn(List.of());
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(List.of(completedResponse.getId())))
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId))
                 .thenReturn(List.of(ratingAnswer, openEndedAnswer));
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
@@ -1232,8 +1279,8 @@ class OperationServiceImplTest {
                         buildCallJob(operation, CallJobStatus.COMPLETED),
                         buildCallJob(operation, CallJobStatus.COMPLETED)
                 ));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(secondResponse, firstResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(secondResponse, firstResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of(politicianOne, politicianTwo));
         when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
@@ -1242,9 +1289,7 @@ class OperationServiceImplTest {
                 veryWellOne, knowOne, littleOne, heardOne, neverOne,
                 veryWellTwo, knowTwo, littleTwo, heardTwo, neverTwo
         ));
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(
-                List.of(secondResponse.getId(), firstResponse.getId())
-        )).thenReturn(List.of(firstRowOne, firstRowTwo, secondRowOne, secondRowTwo));
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId)).thenReturn(List.of(firstRowOne, firstRowTwo, secondRowOne, secondRowTwo));
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
 
@@ -1324,8 +1369,8 @@ class OperationServiceImplTest {
                         buildCallJob(operation, CallJobStatus.COMPLETED),
                         buildCallJob(operation, CallJobStatus.COMPLETED)
                 ));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(secondResponse, firstResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(secondResponse, firstResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of(trust, leadership));
         when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
@@ -1334,9 +1379,7 @@ class OperationServiceImplTest {
                 veryImportantTrust, importantTrust,
                 veryImportantLeadership, importantLeadership
         ));
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(
-                List.of(secondResponse.getId(), firstResponse.getId())
-        )).thenReturn(List.of(firstTrust, firstLeadership, secondTrust, secondLeadership));
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId)).thenReturn(List.of(firstTrust, firstLeadership, secondTrust, secondLeadership));
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
 
@@ -1427,14 +1470,14 @@ class OperationServiceImplTest {
                 .thenReturn(1L);
         when(callJobRepository.findAllByOperation_IdAndDeletedAtIsNull(operationId))
                 .thenReturn(List.of(buildCallJob(operation, CallJobStatus.COMPLETED)));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(completedResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(completedResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of(politicianOne, politicianTwo));
         when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
                 List.of(politicianOne.getId(), politicianTwo.getId())
         )).thenReturn(List.of(knowOne, unknownOne, knowTwo, unknownTwo));
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(List.of(completedResponse.getId())))
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId))
                 .thenReturn(List.of(firstAnswer, secondAnswer));
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
@@ -1490,14 +1533,14 @@ class OperationServiceImplTest {
                 .thenReturn(1L);
         when(callJobRepository.findAllByOperation_IdAndDeletedAtIsNull(operationId))
                 .thenReturn(List.of(buildCallJob(operation, CallJobStatus.COMPLETED)));
-        when(surveyResponseRepository.findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(operationId))
-                .thenReturn(List.of(completedResponse));
+        when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
+                .thenReturn(analyticsRows(completedResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
                 .thenReturn(List.of(favorabilityQuestion));
         when(surveyQuestionOptionRepository.findAllBySurveyQuestion_IdInAndDeletedAtIsNullOrderBySurveyQuestion_IdAscOptionOrderAsc(
                 List.of(favorabilityQuestion.getId())
         )).thenReturn(List.of(positiveOption, negativeOption));
-        when(surveyAnswerRepository.findAllBySurveyResponse_IdInAndDeletedAtIsNull(List.of(completedResponse.getId())))
+        when(surveyAnswerRepository.findAllForOperationAnalytics(operationId))
                 .thenReturn(List.of(answer));
 
         OperationAnalyticsResponseDto response = operationService.getOperationAnalytics(companyId, operationId);
@@ -1669,8 +1712,29 @@ class OperationServiceImplTest {
         answer.setRetryCount(0);
         return answer;
     }
+
+    private List<SurveyResponseAnalyticsRow> analyticsRows(SurveyResponse... responses) {
+        List<SurveyResponseAnalyticsRow> rows = new ArrayList<>();
+        for (SurveyResponse response : responses) {
+            String consentState = null;
+            try {
+                consentState = new ObjectMapper().readTree(response.getTranscriptJson()).path("openingConsentState").asText(null);
+            } catch (Exception ignored) {
+            }
+            rows.add(new SurveyResponseAnalyticsRow(
+                    response.getId(),
+                    response.getOperationContact().getId(),
+                    response.getOperationContact().getFirstName(),
+                    response.getOperationContact().getLastName(),
+                    response.getCallAttempt().getCallJob().getId(),
+                    response.getStatus(),
+                    response.getCompletionPercent(),
+                    response.getStartedAt(),
+                    response.getCompletedAt(),
+                    response.getCreatedAt(),
+                    consentState
+            ));
+        }
+        return rows;
+    }
 }
-
-
-
-

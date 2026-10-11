@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface SurveyResponseRepository extends JpaRepository<SurveyResponse, UUID> {
 
@@ -19,6 +21,19 @@ public interface SurveyResponseRepository extends JpaRepository<SurveyResponse, 
     List<SurveyResponse> findAllByOperation_IdOrderByCreatedAtDesc(UUID operationId);
 
     List<SurveyResponse> findAllByOperation_IdAndDeletedAtIsNullOrderByCreatedAtDesc(UUID operationId);
+
+    @Query("""
+            SELECT new com.yourcompany.surveyai.response.repository.SurveyResponseAnalyticsRow(
+                r.id, contact.id, contact.firstName, contact.lastName, attempt.callJob.id,
+                r.status, r.completionPercent, r.startedAt, r.completedAt, r.createdAt,
+                cast(function('jsonb_extract_path_text', r.transcriptJson, 'openingConsentState') as String))
+            FROM SurveyResponse r
+            JOIN r.operationContact contact
+            JOIN r.callAttempt attempt
+            WHERE r.operation.id = :operationId AND r.deletedAt IS NULL
+            ORDER BY r.createdAt DESC
+            """)
+    List<SurveyResponseAnalyticsRow> findAnalyticsRowsByOperationId(@Param("operationId") UUID operationId);
 
     Optional<SurveyResponse> findByCallAttempt_IdAndDeletedAtIsNull(UUID callAttemptId);
 
