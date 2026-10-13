@@ -400,30 +400,20 @@ export default function DashboardPage() {
             {activityRows.length === 0 ? (
               <EmptyState title="Aktivite bulunmuyor" description="Operasyon guncellemeleri burada listelenecek." />
             ) : (
-              <div className="ops-dashboard-activity-scroll">
-                <div className="ops-control-table">
-                <div className="ops-control-table-head ops-control-table-head-activity">
-                  <span>Saat</span>
-                  <span>Kullanici / Sistem</span>
-                  <span>Olay</span>
-                  <span>Ilgili Nesne</span>
-                  <span>Sonuc</span>
-                  <span>Aksiyon</span>
-                </div>
+              <div className="ops-dashboard-activity-list">
                 {activityRows.map((row) => (
-                  <div key={row.id} className="ops-control-table-row ops-control-table-row-activity">
-                    <span>{row.time}</span>
-                    <strong>{row.actor}</strong>
-                    <span>{row.event}</span>
-                    <span>{row.area}</span>
-                    <span>{row.result}</span>
-                    <Link href={row.href} className="ops-control-inline-action">
-                      Yonet
-                      <ArrowRightIcon className="nav-icon" />
-                    </Link>
-                  </div>
+                  <Link key={row.id} href={row.href} className="ops-dashboard-activity-row">
+                    <span className="ops-dashboard-activity-time">{row.time}</span>
+                    <div className="ops-dashboard-activity-copy">
+                      <strong>
+                        {row.event} · {row.area}
+                      </strong>
+                      <p>{row.result}</p>
+                      <small>{row.actor}</small>
+                    </div>
+                    <ArrowRightIcon className="nav-icon ops-dashboard-activity-arrow" />
+                  </Link>
                 ))}
-                </div>
               </div>
             )}
           </SectionCard>
@@ -525,7 +515,7 @@ function buildResponsePerformance(analytics: OperationAnalytics[]) {
   const seed = ["Pzt", "Sal", "Car", "Per", "Cum", "Cmt"];
   const hasData = analytics.some((item) => item.totalResponses > 0 || item.totalCallsAttempted > 0);
   const analyticsAverage =
-    analytics.length > 0 ? (analytics.reduce((sum, item) => sum + item.responseRate, 0) / analytics.length) * 100 : 0;
+    analytics.length > 0 ? analytics.reduce((sum, item) => sum + item.responseRate, 0) / analytics.length : 0;
   const points = seed.map((label, index) => ({
     label,
     value: hasData ? Math.max(Math.round(analyticsAverage + (index - 2) * 2 + (index % 2 === 0 ? 1 : -1)), 12) : 0,
@@ -619,6 +609,15 @@ function buildDashboardTasks(operations: Operation[], surveys: Survey[]): Dashbo
     .slice(0, 3);
 }
 
+const contactStatusLabels: Record<OperationContact["status"], string> = {
+  Active: "Aktif",
+  Completed: "Tamamlandi",
+  Failed: "Basarisiz",
+  Retry: "Tekrar aranacak",
+  Invalid: "Gecersiz",
+  Pending: "Beklemede",
+};
+
 function buildDashboardActivityRows(operations: Operation[], contacts: DashboardContact[]): DashboardActivityRow[] {
   const operationRows = operations.slice(0, 3).map((operation, index) => ({
     id: operation.id,
@@ -636,7 +635,7 @@ function buildDashboardActivityRows(operations: Operation[], contacts: Dashboard
     actor: "Sistem",
     event: "Kisi kuyruga eklendi",
     area: contact.operationName,
-    result: `${contact.name} / ${contact.status}`,
+    result: `${contact.name} / ${contactStatusLabels[contact.status]}`,
     href: "/operations",
   }));
 
