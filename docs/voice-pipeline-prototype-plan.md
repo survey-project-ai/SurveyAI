@@ -78,6 +78,25 @@ Başarı ölçütleri (aynı senaryo, en az 20 tur):
 
 Ölçütler tutmazsa ElevenLabs'te kalırız ve Aşama 1'e geçmeyiz.
 
+### Aşama 0 sonuçları (13 Ekim 2026)
+
+Prototip (`voice-agent/`): LiveKit Cloud "Germany 2" bölgesi, Netgsm giden SIP hattı, ElevenLabs Scribe v2 realtime (0,5 sn sessizlikte kesinleştirme), ElevenLabs Flash v2.5 ve Gözde sesi (ElevenLabs agent'ıyla aynı ses ve ayarlar), dil modeli yok. Agent geliştirme makinesinde (Türkiye) çalıştı; backend yerine backend'in sağlık uç noktası çağrıldı.
+
+| Tur | Konuşmanın bitişinden agent sesine |
+|---|---|
+| "Sesim geliyor mu?" | 0,91 sn |
+| "Tabii, buyurun." | 0,71 sn |
+| "Cinsiyetim erkek." | 0,80 sn |
+| "Eee, 27 yaşındayım." | 0,72 sn |
+| "Bir." | 0,71 sn |
+
+- Medyan 0,72 sn, en kötü 0,91 sn. ElevenLabs agent'ı: 1,2–1,7 sn. Başarı ölçütü (medyan ≤ 0,9, p95 ≤ 1,5) karşılandı.
+- En büyük kalem konuşma tanımanın 0,5 sn'lik sessizlik eşiği (kesinleştirme ~0,48 sn). Kalanı: backend gidiş-dönüşü ~0,07 sn, TTS ilk ses ~0,15 sn.
+- Gerçek `/answer` veritabanı sorguları nedeniyle ~0,1–0,2 sn ekleyecek; agent AB'de çalışınca Türkiye–Frankfurt gidiş-dönüşü düşecek.
+- Türkçe tanıma iyi; bir hata: "Sesim" → "Resim".
+- Karşılaşılan sorunlar ve çözümleri: Scribe realtime yalnızca commit'te kesin sonuç veriyor (server VAD açıldı); ücretsiz ElevenLabs planı kütüphane seslerini API'de kullandırmıyor (kredi yüklendi); Scribe sessizlikten sahte "Evet." üretebiliyor (önceki cevap çalınmadan gelen kısa sesler yok sayılıyor).
+- Henüz denenmedi: "neden soruyorsunuz", "kimsiniz", sessizlik senaryoları; v4 Turbo ses modeli; daha düşük sessizlik eşiği.
+
 ### Aşama 1: Backend entegrasyonu, tahmini 1–2 hafta
 
 - `CallProvider.LIVEKIT` ve migration V18. `call_attempt.provider` CHECK kısıtı şu an `ELEVENLABS, MOCK, TWILIO, SIP, MANUAL` değerlerini kabul ediyor.
