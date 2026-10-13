@@ -362,6 +362,10 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             );
         }
 
+        if (request.signal() == InterviewConversationSignal.REASON_REQUEST) {
+            return buildProgressResponse(context, response, buildQuestionReasonLeadIn(context.survey()), currentFlowState);
+        }
+
         if (request.signal() == InterviewConversationSignal.REPEAT_REQUEST) {
             return buildProgressResponse(context, response, localized(context.survey(),
                     "Soruyu yavaşça bir kez daha sor ve henüz ilerleme.",
@@ -587,7 +591,8 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             return buildConsentPhaseResponse(context, response, buildOpeningConsentRepeatPrompt(context.survey()));
         }
 
-        if (request.signal() == InterviewConversationSignal.IDENTITY_REQUEST) {
+        if (request.signal() == InterviewConversationSignal.IDENTITY_REQUEST
+                || request.signal() == InterviewConversationSignal.REASON_REQUEST) {
             return buildConsentPhaseResponse(context, response, buildOpeningConsentIdentityPrompt(context));
         }
 
@@ -892,7 +897,7 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
                     raw,
                     localized(
                             question.getSurvey(),
-                            "Yanitinizi kisa ve net bir sekilde bir kez daha soyler misiniz?",
+                            "Yanıtınızı kısa ve net bir şekilde bir kez daha söyler misiniz?",
                             "Could you please repeat your answer briefly and clearly?"
                     )
             );
@@ -2626,7 +2631,7 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         }
         if (question.getQuestionType() == QuestionType.NUMBER) {
             if (turkish) {
-                appendPromptSentence(builder, "Lutfen tek bir sayi soyleyin");
+                appendPromptSentence(builder, "Lütfen tek bir sayı söyleyin");
             } else {
                 appendPromptSentence(builder, "Please answer with one number");
             }
@@ -2749,26 +2754,26 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         if ((question.getQuestionType() == QuestionType.SINGLE_CHOICE || question.getQuestionType() == QuestionType.MULTI_CHOICE)
                 && !options.isEmpty()) {
             if (turkish) {
-                return "Sizi net duyamadim. Tekrarlar misiniz?";
+                return "Sizi net duyamadım. Tekrarlar mısınız?";
             }
             return "I could not hear that clearly. Could you repeat that?";
         }
         if (question.getQuestionType() == QuestionType.RATING && ratingMin != null && ratingMax != null) {
             if (turkish) {
-                return "Yaniti puan olarak anlayamadim. Lutfen "
-                        + ratingMin + " ile " + ratingMax + " arasinda tek bir sayi soyleyin.";
+                return "Yanıtı puan olarak anlayamadım. Lütfen "
+                        + ratingMin + " ile " + ratingMax + " arasında tek bir sayı söyleyin.";
             }
             return "I could not convert that into a rating. Please say one number between "
                     + ratingMin + " and " + ratingMax + ".";
         }
         if (question.getQuestionType() == QuestionType.NUMBER) {
             if (turkish) {
-                return "Yaniti sayi olarak anlayamadim. Lutfen tek bir sayi soyleyin.";
+                return "Yanıtı sayı olarak anlayamadım. Lütfen tek bir sayı söyleyin.";
             }
             return "I could not convert that into a number. Please say one number.";
         }
         if (turkish) {
-            return "Sizi net duyamadim. Lutfen bir kez daha cevaplayin.";
+            return "Sizi net duyamadım. Lütfen bir kez daha cevaplayın.";
         }
         return "I could not hear that clearly. Please answer once more.";
     }
@@ -3074,11 +3079,7 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
 
     private String buildOpeningConsentIdentityPrompt(SessionContext context) {
         String introPrompt = trimToNull(context.survey().getIntroPrompt());
-        String companyName = resolveCallerCompanyName(context);
-        String operationName = trimToNull(context.callAttempt().getOperation().getName());
-        String explanation = isTurkish(context.survey())
-                ? buildTurkishIdentityPrompt(companyName, operationName, null)
-                : buildEnglishIdentityPrompt(companyName, operationName, null);
+        String explanation = buildIdentityPrompt(context);
         if (introPrompt != null) {
             return explanation + " " + introPrompt;
         }
@@ -3086,15 +3087,27 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     }
 
     private String buildInSurveyIdentityPrompt(SessionContext context) {
+        return buildIdentityPrompt(context);
+    }
+
+    // Who is calling and about what. The operation name is an internal label (such as "test1" or
+    // "Mayis dalgasi"), so only the company and the survey are spoken.
+    private String buildIdentityPrompt(SessionContext context) {
         String companyName = resolveCallerCompanyName(context);
-        String operationName = trimToNull(context.callAttempt().getOperation().getName());
         String surveyName = trimToNull(context.survey().getName());
+        return isTurkish(context.survey())
+                ? buildTurkishIdentityPrompt(companyName, surveyName)
+                : buildEnglishIdentityPrompt(companyName, surveyName);
+    }
 
-        if (isTurkish(context.survey())) {
-            return buildTurkishIdentityPrompt(companyName, operationName, surveyName);
-        }
-
-        return buildEnglishIdentityPrompt(companyName, operationName, surveyName);
+    // Spoken when the caller asks why a question is asked. Declining is a valid answer
+    // ("cevap vermek istemiyorum" is recorded as a refusal).
+    private String buildQuestionReasonLeadIn(Survey survey) {
+        return localized(
+                survey,
+                "Bu soruyu anket gereği tüm katılımcılara soruyoruz. Cevap vermek istemezseniz bunu da söyleyebilirsiniz.",
+                "We ask every participant this question as part of the survey. If you prefer not to answer, you can say so."
+        );
     }
 
     // The callee hears the name of the research company that owns the operation (the tenant),
@@ -3104,35 +3117,34 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         return company == null ? null : trimToNull(company.getName());
     }
 
-    private String buildTurkishIdentityPrompt(String companyName, String operationName, String surveyName) {
-        String caller = companyName != null ? "Ben " + companyName + " adina " : "Ben ";
-        if (operationName != null && surveyName != null) {
-            return caller + operationName
-                    + " kapsamindaki " + surveyName
-                    + " anketi icin ariyorum.";
+    private String buildTurkishIdentityPrompt(String companyName, String surveyName) {
+        // A survey named "... anketi" must not become "... anketi anketi".
+        String subject = surveyName == null
+                ? "kısa bir anket"
+                : surveyName + (endsWithAnyWord(normalize(surveyName), "anket", "anketi", "arastirma", "arastirmasi") ? "" : " anketi");
+        if (companyName == null) {
+            return Character.toUpperCase(subject.charAt(0)) + subject.substring(1) + " için arıyorum.";
         }
-        if (operationName != null) {
-            return caller + operationName + " arastirmasi icin ariyorum.";
-        }
-        if (surveyName != null) {
-            return caller + surveyName + " anketi icin ariyorum.";
-        }
-        return caller + "kisa bir anket calismasi icin ariyorum.";
+        return "Ben " + companyName + " adına " + subject + " için arıyorum.";
     }
 
-    private String buildEnglishIdentityPrompt(String companyName, String operationName, String surveyName) {
-        String caller = companyName != null ? "I am calling on behalf of " + companyName + " " : "I am calling ";
-        if (operationName != null && surveyName != null) {
-            return caller + "for the " + operationName
-                    + " study and the " + surveyName + " survey.";
+    private boolean endsWithAnyWord(String normalizedText, String... words) {
+        for (String word : words) {
+            if (normalizedText.equals(word) || normalizedText.endsWith(" " + word)) {
+                return true;
+            }
         }
-        if (operationName != null) {
-            return caller + "for the " + operationName + " study.";
+        return false;
+    }
+
+    private String buildEnglishIdentityPrompt(String companyName, String surveyName) {
+        String subject = surveyName == null
+                ? "a short survey"
+                : "the " + surveyName + (normalize(surveyName).endsWith("survey") ? "" : " survey");
+        if (companyName == null) {
+            return "I am calling about " + subject + ".";
         }
-        if (surveyName != null) {
-            return caller + "for the " + surveyName + " survey.";
-        }
-        return caller + "for a short survey study.";
+        return "I am calling on behalf of " + companyName + " about " + subject + ".";
     }
 
     private String buildConsentDeclinedClosingPrompt(Survey survey) {

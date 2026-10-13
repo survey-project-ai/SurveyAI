@@ -14,6 +14,7 @@ Optional:
 - `ELEVENLABS_CALL_RECORDING_ENABLED=true|false`
 - `ELEVENLABS_TOOL_API_SECRET`
 - `ELEVENLABS_AGENT_PROMPT_OVERRIDE_ENABLED=true|false`
+- `ELEVENLABS_AGENT_LLM` (for example `claude-haiku-5-5`): sent with the prompt override, so the agent's Security tab must allow the LLM override. Empty keeps the agent's own model.
 - `ELEVENLABS_AGENT_FIRST_MESSAGE_OVERRIDE_ENABLED=true|false`
 - `ELEVENLABS_AGENT_LANGUAGE_OVERRIDE_ENABLED=true|false`
 

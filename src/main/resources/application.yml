@@ -107,6 +107,8 @@ surveyai:
         agent-first-message-override-enabled: ${ELEVENLABS_AGENT_FIRST_MESSAGE_OVERRIDE_ENABLED:true}
         agent-language-override-enabled: ${ELEVENLABS_AGENT_LANGUAGE_OVERRIDE_ENABLED:true}
         agent-asr-keywords-override-enabled: ${ELEVENLABS_AGENT_ASR_KEYWORDS_OVERRIDE_ENABLED:true}
+        # LLM for each call (for example claude-haiku-5-5). Empty keeps the model stored on the agent.
+        agent-llm: ${ELEVENLABS_AGENT_LLM:}
         asr-quality: ${ELEVENLABS_ASR_QUALITY:high}
         turn-detection-timeout-seconds: ${ELEVENLABS_TURN_DETECTION_TIMEOUT_SECONDS:}
         turn-detection-eagerness: ${ELEVENLABS_TURN_DETECTION_EAGERNESS:normal}

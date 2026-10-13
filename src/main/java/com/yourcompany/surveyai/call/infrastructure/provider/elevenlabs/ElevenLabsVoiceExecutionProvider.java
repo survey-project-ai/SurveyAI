@@ -415,6 +415,11 @@ public class ElevenLabsVoiceExecutionProvider implements VoiceExecutionProvider 
         if (isOverrideEnabled(configuration, "agent-prompt-override-enabled")) {
             Map<String, Object> promptOverrides = new LinkedHashMap<>();
             promptOverrides.put("prompt", buildAgentPrompt(request));
+            // Lets the model be switched from configuration; the agent must allow the LLM override.
+            String llm = configuration.settings().get("agent-llm");
+            if (hasText(llm)) {
+                promptOverrides.put("llm", llm.trim());
+            }
             agentOverrides.put("prompt", promptOverrides);
         }
         if (!agentOverrides.isEmpty()) {
@@ -492,6 +497,7 @@ public class ElevenLabsVoiceExecutionProvider implements VoiceExecutionProvider 
                 - The first spoken survey line must be a non-empty backend prompt from a tool response.
                 - Do not add, rephrase, duplicate, or surround backend opening, consent, company, or survey invitation text.
                 - If the backend returns no prompt, stay silent and wait for the callee to speak again.
+                - If nobody speaks for a few seconds after the call connects, say only "Alo?" (or "Hello?" for an English survey) once, then wait.
                 - If the opening asks permission to continue, wait for the reply; on any reply, immediately call `survey_submit_answer` before asking the first question.
 
                 Voicemail and non-human audio:
@@ -500,10 +506,12 @@ public class ElevenLabsVoiceExecutionProvider implements VoiceExecutionProvider 
                 - For machine, busy, or automated audio, do not call `survey_start_interview`, `survey_submit_answer`, or `survey_finish_interview`.
                 - Immediately call built-in `voicemail_detection`; if unavailable, call built-in `end_call` with no farewell. Say nothing else.
                 - Never ask audio-check lines like "hala orada misiniz", "beni duyabiliyor musunuz", "ses geliyor mu", or "can you hear me".
+                - If the callee stays silent after a question, call `survey_submit_answer` with signal `NO_INPUT` and say the prompt it returns.
 
                 Survey flow:
                 - After every caller turn, immediately call `survey_submit_answer` before reacting, paraphrasing, or thinking out loud.
-                - Use signal `ANSWER` normally, `REPEAT_REQUEST` when the caller asks to repeat, `IDENTITY_REQUEST` when the caller asks who/why, and `STOP_REQUEST` or `survey_finish_interview` when the caller wants to stop.
+                - Use signal `ANSWER` normally, `REPEAT_REQUEST` when the caller asks to repeat, `IDENTITY_REQUEST` when the caller asks who is calling or why they are being called, `REASON_REQUEST` when the caller asks why a specific question is asked or objects to it, and `STOP_REQUEST` or `survey_finish_interview` when the caller wants to stop.
+                - Call tools only through the tool interface. Never say or write tool names, code, JSON, or parameters.
                 - For identity, repeat, retry, next-question, and closing cases, follow the backend prompt exactly.
                 - Never invent, skip, summarize, or reorder questions.
                 - Ask only one question at a time. For grid or matrix questions, do not read all choices unless asked.

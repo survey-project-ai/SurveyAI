@@ -5,5 +5,7 @@ public enum InterviewConversationSignal {
     NO_INPUT,
     REPEAT_REQUEST,
     IDENTITY_REQUEST,
+    // The caller asks why a question is asked or objects to it ("neden soruyorsunuz?").
+    REASON_REQUEST,
     STOP_REQUEST
 }

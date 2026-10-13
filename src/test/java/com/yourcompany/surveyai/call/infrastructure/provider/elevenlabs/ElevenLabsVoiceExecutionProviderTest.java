@@ -135,6 +135,31 @@ class ElevenLabsVoiceExecutionProviderTest {
     }
 
     @Test
+    void dispatchCallJob_sendsTheConfiguredLlmOnlyWhenOneIsSet() throws Exception {
+        VoiceProviderConfiguration defaults = configuration(false);
+        Map<String, String> settings = new java.util.HashMap<>(defaults.settings());
+        settings.put("agent-llm", " claude-haiku-5-5 ");
+        VoiceProviderConfiguration withLlm = new VoiceProviderConfiguration(
+                defaults.provider(), defaults.enabled(), defaults.mode(), defaults.apiKey(), defaults.agentId(),
+                defaults.phoneNumberId(), defaults.webhookSecret(), defaults.baseUrl(), defaults.sandboxMode(),
+                defaults.webhookTimestampToleranceSeconds(), settings
+        );
+        when(apiClient.startOutboundCall(any(), any())).thenReturn("{\"conversation_id\": \"conv_123\"}");
+
+        provider.dispatchCallJob(buildRequest(), withLlm);
+        provider.dispatchCallJob(buildRequest(), defaults);
+
+        org.mockito.ArgumentCaptor<String> payloads = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(apiClient, org.mockito.Mockito.times(2)).startOutboundCall(payloads.capture(), any());
+        JsonNode configuredPrompt = new ObjectMapper().readTree(payloads.getAllValues().get(0))
+                .path("conversation_initiation_client_data").path("conversation_config_override").path("agent").path("prompt");
+        JsonNode defaultPrompt = new ObjectMapper().readTree(payloads.getAllValues().get(1))
+                .path("conversation_initiation_client_data").path("conversation_config_override").path("agent").path("prompt");
+        assertThat(configuredPrompt.path("llm").asText()).isEqualTo("claude-haiku-5-5");
+        assertThat(defaultPrompt.has("llm")).isFalse();
+    }
+
+    @Test
     void dispatchCallJob_includesInternalCorrelationMetadataInLivePayload() throws Exception {
         ProviderDispatchRequest request = buildRequest();
         VoiceProviderConfiguration configuration = configuration(false);

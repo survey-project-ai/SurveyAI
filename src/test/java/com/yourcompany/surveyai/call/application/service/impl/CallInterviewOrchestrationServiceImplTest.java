@@ -179,9 +179,44 @@ class CallInterviewOrchestrationServiceImplTest {
         assertThat(response.question().code()).isEqualTo("satisfied");
         assertThat(response.prompt()).contains("Acme Research");
         assertThat(response.prompt()).doesNotContain("Ayna");
-        assertThat(response.prompt()).contains("April CSAT Wave");
-        assertThat(response.prompt()).contains("CSAT");
+        // The operation name is an internal label and is not read to the callee.
+        assertThat(response.prompt()).doesNotContain("April CSAT Wave");
+        assertThat(response.prompt()).contains("the CSAT survey");
         assertThat(response.prompt()).contains("Memnun musunuz?");
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "Cumhuriyet Halk Partisi memnuniyet anketi | Ben Ayna Araştırma adına Cumhuriyet Halk Partisi memnuniyet anketi için arıyorum.",
+            "İzmir Gündem Araştırması | Ben Ayna Araştırma adına İzmir Gündem Araştırması için arıyorum.",
+            "Belediye hizmetleri | Ben Ayna Araştırma adına Belediye hizmetleri anketi için arıyorum."
+    })
+    void identityRequest_introducesTheCompanyAndSurveyInTurkish(String surveyName, String expectedIdentity) {
+        fixture.survey.setLanguageCode("tr");
+        fixture.survey.setName(surveyName);
+        fixture.company.setName("Ayna Araştırma");
+
+        InterviewOrchestrationResponse response = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Kimsiniz?", InterviewConversationSignal.IDENTITY_REQUEST));
+
+        assertThat(response.prompt()).startsWith(expectedIdentity);
+        assertThat(response.prompt()).doesNotContain("April CSAT Wave");
+    }
+
+    @Test
+    void reasonRequest_explainsTheQuestionAndAsksItAgainWithoutRecordingAnAnswer() {
+        fixture.survey.setLanguageCode("tr");
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        InterviewOrchestrationResponse response = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Bunu neden soruyorsunuz?", InterviewConversationSignal.REASON_REQUEST));
+
+        assertThat(response.question().code()).isEqualTo("satisfied");
+        assertThat(response.prompt())
+                .startsWith("Bu soruyu anket gereği tüm katılımcılara soruyoruz.")
+                .contains("Memnun musunuz?");
+        SurveyResponse savedResponse = responsesByAttemptId.get(fixture.callAttempt.getId());
+        assertThat(answersByResponseId.getOrDefault(savedResponse.getId(), List.of())).isEmpty();
     }
 
     @Test
