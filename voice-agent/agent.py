@@ -28,6 +28,7 @@ from livekit.agents import (
 from livekit.plugins import elevenlabs, silero
 
 from common import AGENT_NAME, BACKEND_URL, LOG_DIR, STT_MODEL, TTS_MODEL, VOICE_ID, load_keys, read_state
+from gender import VoiceGenderDetector, load_model
 
 load_keys()
 logger = logging.getLogger("survey-prototype")
@@ -83,9 +84,17 @@ class SurveyFlow:
         self.step = "greeting"
         self.question_index = 0
         self.answers: dict[str, str] = {}
+        # Set from the callee's voice before the questions start; the gender question is then skipped.
+        self.inferred_gender: str | None = None
 
     def current_question(self) -> str:
         return QUESTIONS[self.question_index][1]
+
+    def _skip_answered_by_voice(self) -> None:
+        while (self.question_index < len(QUESTIONS) and QUESTIONS[self.question_index][0] == "gender"
+               and self.inferred_gender is not None):
+            self.answers["gender"] = f"{self.inferred_gender} (sesten)"
+            self.question_index += 1
 
     def handle(self, raw: str) -> tuple[str, bool]:
         text = normalize(raw)
@@ -100,6 +109,7 @@ class SurveyFlow:
         if self.step == "consent":
             if has_any(text, "evet", "olur", "tabii", "tabi", "buyurun", "buyrun", "tamam", "sorabilirsiniz", "sorun degil", "dinliyorum"):
                 self.step = "questions"
+                self._skip_answered_by_voice()
                 return "Teşekkür ederim. " + self.current_question(), False
             return "Kısaca onayınızı rica edeceğim. Size birkaç soru sorabilir miyim?", False
         code = QUESTIONS[self.question_index][0]
@@ -190,10 +200,22 @@ class TurnRecorder:
 
 
 class SurveyAgent(Agent):
-    def __init__(self, flow: SurveyFlow, recorder: TurnRecorder, http: aiohttp.ClientSession, hang_up) -> None:
+    def __init__(self, flow: SurveyFlow, recorder: TurnRecorder, http: aiohttp.ClientSession, hang_up,
+                 gender: VoiceGenderDetector) -> None:
         super().__init__(instructions="Fixed-script survey prototype; replies come from SurveyFlow.")
         self.flow, self.recorder, self.http, self.hang_up = flow, recorder, http, hang_up
+        self.gender = gender
         self.last_reply = None
+
+    async def stt_node(self, audio, model_settings):
+        # The callee's audio also goes to the gender detector.
+        async def tee():
+            async for frame in audio:
+                self.gender.push_frame(frame)
+                yield frame
+
+        async for event in Agent.default.stt_node(self, tee(), model_settings):
+            yield event
 
     async def on_user_turn_completed(self, turn_ctx, new_message) -> None:
         user_text = new_message.text_content or ""
@@ -210,6 +232,13 @@ class SurveyAgent(Agent):
         except Exception as error:  # the measurement must not break the call
             logger.warning("backend probe failed: %s", error)
         turn["backend_ms"] = round((time.time() - backend_started) * 1000)
+        self.gender.start()
+        if self.flow.step == "consent" and self.flow.inferred_gender is None:
+            # The questions may start with this reply; give the classifier a moment if it is still running.
+            result = await self.gender.wait(timeout=0.5)
+            turn["gender"] = None if result is None else result.__dict__
+            if result is not None and result.label is not None:
+                self.flow.inferred_gender = result.label
         reply, end_call = self.flow.handle(user_text)
         turn["handler_ms"] = round((time.time() - started) * 1000)
         turn["reply"] = reply
@@ -222,6 +251,7 @@ class SurveyAgent(Agent):
 
 def prewarm(proc: JobProcess) -> None:
     proc.userdata["vad"] = silero.VAD.load()
+    proc.userdata["gender_model"] = load_model()
 
 
 # One process is kept ready so the call does not wait for process start-up.
@@ -237,6 +267,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
     flow = SurveyFlow()
     recorder = TurnRecorder(ctx.room.name)
+    gender = VoiceGenderDetector(ctx.proc.userdata["gender_model"])
     http = aiohttp.ClientSession()
     session = AgentSession(
         vad=ctx.proc.userdata["vad"],
@@ -248,6 +279,11 @@ async def entrypoint(ctx: JobContext) -> None:
             voice_id=VOICE_ID,
             model=TTS_MODEL,
             language="tr",
+            # Uncompressed audio like the ElevenLabs agent (the plugin default is 32 kbps MP3), and one
+            # continuous generation per reply instead of a fresh one per sentence, which made the volume
+            # jump at each new sentence.
+            encoding="pcm_16000",
+            auto_mode=False,
             # The ElevenLabs agent's settings for this voice.
             voice_settings=elevenlabs.VoiceSettings(stability=0.5, similarity_boost=0.8, speed=1.02),
         ),
@@ -284,11 +320,11 @@ async def entrypoint(ctx: JobContext) -> None:
 
     async def close_http() -> None:
         await http.close()
-        logger.info("call finished: %d turns, answers=%s", len(recorder.turns), flow.answers)
+        logger.info("call finished: %d turns, answers=%s, gender=%s", len(recorder.turns), flow.answers, gender.result)
 
     ctx.add_shutdown_callback(close_http)
 
-    session_started = asyncio.create_task(session.start(agent=SurveyAgent(flow, recorder, http, hang_up), room=ctx.room))
+    session_started = asyncio.create_task(session.start(agent=SurveyAgent(flow, recorder, http, hang_up, gender), room=ctx.room))
     try:
         await ctx.api.sip.create_sip_participant(api.CreateSIPParticipantRequest(
             room_name=ctx.room.name,

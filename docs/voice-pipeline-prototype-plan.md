@@ -95,6 +95,8 @@ Prototip (`voice-agent/`): LiveKit Cloud "Germany 2" bölgesi, Netgsm giden SIP 
 - Gerçek `/answer` veritabanı sorguları nedeniyle ~0,1–0,2 sn ekleyecek; agent AB'de çalışınca Türkiye–Frankfurt gidiş-dönüşü düşecek.
 - Türkçe tanıma iyi; bir hata: "Sesim" → "Resim".
 - Karşılaşılan sorunlar ve çözümleri: Scribe realtime yalnızca commit'te kesin sonuç veriyor (server VAD açıldı); ücretsiz ElevenLabs planı kütüphane seslerini API'de kullandırmıyor (kredi yüklendi); Scribe sessizlikten sahte "Evet." üretebiliyor (önceki cevap çalınmadan gelen kısa sesler yok sayılıyor).
+- Cinsiyet sesten tahmin ediliyor: Apache-2.0 lisanslı wav2vec2 tabanlı model (int8 ONNX, 95 MB). Telefon kalitesine indirilmiş 21 seste 20 doğru, 1 "emin değil" (güven < 0,85 ise soru sorulur). Gerçek aramada erkek sesi 1,28 sn konuşmadan 0,999 güvenle bulundu, 0,2 sn sürdü. audeering modelleri ticari kullanıma kapalı (CC-BY-NC-SA) olduğu için elendi; ses perdesi yöntemi telefon bandında başarısız (21'de 8).
+- Ses kalitesi: eklenti varsayılanı olan 32 kbps MP3 ve cümle cümle üretim yerine PCM ve tek parça üretim. TTS ilk ses 0,15 → ~0,2 sn; son aramada turlar 0,74–0,99 sn.
 - Henüz denenmedi: "neden soruyorsunuz", "kimsiniz", sessizlik senaryoları; v4 Turbo ses modeli; daha düşük sessizlik eşiği.
 
 ### Aşama 1: Backend entegrasyonu, tahmini 1–2 hafta
