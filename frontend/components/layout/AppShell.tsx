@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { GlobalSearch } from "@/components/layout/GlobalSearch";
 import { getNavigationItems } from "@/components/layout/navigation";
 import { PageHeaderProvider, useResolvedPageHeader } from "@/components/layout/PageHeaderContext";
-import { ArrowLeftIcon, ArrowRightIcon, BellIcon, CollapseIcon, MenuIcon, SearchIcon } from "@/components/ui/Icons";
+import { ArrowLeftIcon, ArrowRightIcon, BellIcon, CollapseIcon, MenuIcon } from "@/components/ui/Icons";
 import { useAuth } from "@/lib/auth";
 import { useNotifications } from "@/lib/notifications";
 import { useLanguage, useTranslations } from "@/lib/i18n/LanguageContext";
@@ -39,7 +40,6 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [mobileNavState, setMobileNavState] = useState<{ pathname: string; open: boolean }>({ pathname, open: false });
   const [userMenuState, setUserMenuState] = useState<{ pathname: string; open: boolean }>({ pathname, open: false });
-  const [searchQuery, setSearchQuery] = useState("");
   const { language, setLanguage } = useLanguage();
   const { status, currentUser, logout } = useAuth();
   const { t } = useTranslations();
@@ -189,23 +189,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             </button>
           </div>
 
-          <label
-            className={["search-field", "sidebar-search", isSidebarCollapsed ? "is-collapsed" : ""].filter(Boolean).join(" ")}
-            aria-label="Genel arama"
-          >
-            <SearchIcon className="nav-icon" />
-            {!isSidebarCollapsed ? (
-              <>
-                <input
-                  type="search"
-                  placeholder="Ara"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                />
-                <span className="topbar-search-shortcut">35K</span>
-              </>
-            ) : null}
-          </label>
+          <GlobalSearch collapsed={isSidebarCollapsed} navigationItems={navigationItems} />
 
           <nav className="nav-list">
             {navigationItems.map((item) => {
