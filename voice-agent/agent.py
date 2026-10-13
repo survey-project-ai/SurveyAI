@@ -47,9 +47,9 @@ CONSENT_QUESTION = "Size birkaç soru sorabilir miyim?"
 SILENCE = "Sizi duyamadım."
 CLOSING = "Vakit ayırdığınız için teşekkür ederim. Anketimiz burada sona erdi. İyi günler dilerim."
 DECLINED = "Anladım, teşekkür ederim. İyi günler dilerim."
-# (code, question, shorter form used when the question has to be asked again)
+# (code, question, shorter form used when the question has to be asked again). Gender is not asked: it is
+# noted from the callee's voice over the whole call (gender.py).
 QUESTIONS = [
-    ("gender", "Cinsiyetiniz nedir?", "Cinsiyetiniz nedir?"),
     ("age", "Kaç yaşındasınız?", "Kaç yaşındasınız?"),
     ("rating", "Belediye hizmetlerinden ne kadar memnunsunuz? Bir ile beş arasında bir puan verir misiniz?",
      "Bir ile beş arasında kaç puan verirsiniz?"),
@@ -103,8 +103,6 @@ class SurveyFlow:
         self.question_index = 0
         self.asked: set[str] = set()
         self.answers: dict[str, str] = {}
-        # Set from the callee's voice; the gender question is then skipped.
-        self.inferred_gender: str | None = None
 
     def current_question(self, full: bool = False) -> str:
         """The question in full the first time (or when asked to repeat it), the short form after that."""
@@ -113,26 +111,6 @@ class SurveyFlow:
             self.asked.add(code)
             return question
         return short
-
-    def gender_may_come_next(self) -> bool:
-        """The next reply may ask the gender question, so the voice estimate is worth waiting for."""
-        if self.inferred_gender is not None or "gender" in self.answers:
-            return False
-        if self.step == "consent":
-            return True
-        following = self.question_index + 1
-        return self.step == "questions" and following < len(self.questions) and self.questions[following][0] == "gender"
-
-    def _skip_answered_by_voice(self) -> None:
-        while self.question_index < len(self.questions) and self.questions[self.question_index][0] == "gender":
-            if self.inferred_gender is not None:
-                self.answers["gender"] = f"{self.inferred_gender} (sesten)"
-                self.question_index += 1
-            elif self.question_index < len(self.questions) - 1:
-                # Not enough speech yet to tell: ask the other questions first and decide again at the end.
-                self.questions.append(self.questions.pop(self.question_index))
-            else:
-                break
 
     def handle(self, raw: str, previous_reply_missed: bool = False) -> tuple[str, bool]:
         """previous_reply_missed: the agent's last reply was cut off before the callee heard it."""
@@ -149,7 +127,6 @@ class SurveyFlow:
         if self.step == "consent":
             if has_any(text, "evet", "olur", "tabii", "tabi", "buyurun", "buyrun", "tamam", "sorabilirsiniz", "sorun degil", "dinliyorum"):
                 self.step = "questions"
-                self._skip_answered_by_voice()
                 return "Teşekkür ederim. " + self.current_question(), False
             ask = OPENING if previous_reply_missed else CONSENT_QUESTION
             if presence_check:
@@ -170,7 +147,6 @@ class SurveyFlow:
             return UNCLEAR + " " + self.current_question(), False
         self.answers[code] = raw
         self.question_index += 1
-        self._skip_answered_by_voice()
         if self.question_index >= len(self.questions):
             self.step = "done"
             return CLOSING, True
@@ -178,8 +154,6 @@ class SurveyFlow:
 
     @staticmethod
     def accepts(code: str, text: str) -> bool:
-        if code == "gender":
-            return has_any(text, "kadin", "erkek", "bayan", "kiz", "kadinim", "erkegim")
         if code == "age":
             return spoken_number(text) is not None
         number = spoken_number(text)
@@ -314,15 +288,8 @@ class SurveyAgent(Agent):
         except Exception as error:  # the measurement must not break the call
             logger.warning("backend probe failed: %s", error)
         turn["backend_ms"] = round((time.time() - backend_started) * 1000)
-        self.gender.start()
-        if self.flow.inferred_gender is None and self.gender.result is not None and self.gender.result.label:
-            self.flow.inferred_gender = self.gender.result.label
-        if self.flow.gender_may_come_next():
-            # This reply may ask the gender question; give the classifier a moment if it is still running.
-            result = await self.gender.wait(timeout=0.5)
-            turn["gender"] = None if result is None else result.__dict__
-            if result is not None and result.label is not None:
-                self.flow.inferred_gender = result.label
+        # Scores this turn's voice in the background; the gender is decided when the call ends.
+        self.gender.end_turn()
         missed = self._last_reply_missed()
         if missed:
             turn["previous_reply_missed"] = True
@@ -409,12 +376,15 @@ async def entrypoint(ctx: JobContext) -> None:
     def _item(event) -> None:
         recorder.message(event.item)
 
-    async def close_http() -> None:
+    async def finish_call() -> None:
         await http.close()
         survey_agent.save_sent_audio(LOG_DIR / f"{ctx.room.name}.agent.wav")
-        logger.info("call finished: %d turns, answers=%s, gender=%s", len(recorder.turns), flow.answers, gender.result)
+        decision = await gender.decide(timeout=2.0)
+        flow.answers["gender"] = f"{decision.label or 'belirsiz'} (sesten)"
+        logger.info("call finished: %d turns, answers=%s, gender=%s, scores=%s", len(recorder.turns), flow.answers,
+                    decision, [score.__dict__ for score in gender.scores])
 
-    ctx.add_shutdown_callback(close_http)
+    ctx.add_shutdown_callback(finish_call)
 
     survey_agent = SurveyAgent(flow, recorder, http, hang_up, gender)
     session_started = asyncio.create_task(session.start(agent=survey_agent, room=ctx.room))
