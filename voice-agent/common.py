@@ -32,9 +32,10 @@ SIP_ADDRESS = "sip.netgsm.com.tr"
 VOICE_ID = os.environ.get("PROTOTYPE_VOICE_ID", "aEJD8mYP0nuof1XHShVY")
 # v4 Turbo sounded more natural than Flash v2.5 in a listening test and started faster (0.34 s vs 0.66 s).
 TTS_MODEL = os.environ.get("PROTOTYPE_TTS_MODEL", "eleven_v4_turbo")
-# Office ambience under the call, 0 turns it off. The built-in clip is quiet (about 29 dB below the voice
-# at 1.0); the player multiplies and clips, so values above 1 work. 2.0 was picked in a listening test.
-AMBIENT_VOLUME = float(os.environ.get("PROTOTYPE_AMBIENT_VOLUME", "2.0"))
+# Office ambience under the call, 0 turns it off; the player multiplies and clips, so values above 1 work.
+# The level picked in a listening test sits about 18 dB under the voice; 4.2 keeps that under the voice
+# as levelled by leveler.py.
+AMBIENT_VOLUME = float(os.environ.get("PROTOTYPE_AMBIENT_VOLUME", "4.2"))
 STT_MODEL = "scribe_v2_realtime"
 BACKEND_URL = "https://surveyai-backend-production.up.railway.app"
 

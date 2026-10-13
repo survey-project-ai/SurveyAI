@@ -11,6 +11,7 @@ import logging
 import re
 import time
 import unicodedata
+import wave
 
 import aiohttp
 from livekit import api
@@ -32,6 +33,7 @@ from livekit.plugins import elevenlabs, silero
 
 from common import AGENT_NAME, AMBIENT_VOLUME, BACKEND_URL, LOG_DIR, STT_MODEL, TTS_MODEL, VOICE_ID, load_keys, read_state
 from gender import VoiceGenderDetector, load_model
+from leveler import VoiceLeveler
 
 load_keys()
 logger = logging.getLogger("survey-prototype")
@@ -40,18 +42,25 @@ OPENING = "Merhaba, ben Ayna Araştırma adına kısa bir anket için arıyorum.
 IDENTITY = "Ben Ayna Araştırma adına kısa bir anket için arıyorum."
 REASON = "Bu soruyu anket gereği tüm katılımcılara soruyoruz. Cevap vermek istemezseniz bunu da söyleyebilirsiniz."
 UNCLEAR = "Sizi net anlayamadım."
-PRESENT = "Buradayım."
+HEARD = "Evet, sizi duyuyorum."
+CONSENT_QUESTION = "Size birkaç soru sorabilir miyim?"
 SILENCE = "Sizi duyamadım."
 CLOSING = "Vakit ayırdığınız için teşekkür ederim. Anketimiz burada sona erdi. İyi günler dilerim."
 DECLINED = "Anladım, teşekkür ederim. İyi günler dilerim."
+# (code, question, shorter form used when the question has to be asked again)
 QUESTIONS = [
-    ("gender", "Cinsiyetiniz nedir?"),
-    ("age", "Kaç yaşındasınız?"),
-    ("rating", "Belediye hizmetlerinden ne kadar memnunsunuz? Bir ile beş arasında bir puan verir misiniz?"),
+    ("gender", "Cinsiyetiniz nedir?", "Cinsiyetiniz nedir?"),
+    ("age", "Kaç yaşındasınız?", "Kaç yaşındasınız?"),
+    ("rating", "Belediye hizmetlerinden ne kadar memnunsunuz? Bir ile beş arasında bir puan verir misiniz?",
+     "Bir ile beş arasında kaç puan verirsiniz?"),
 ]
 # Short sounds that arrive before the agent's reply has been played cannot answer the next question; the
 # recognizer also produced a phantom "Evet." from near-silence in the first test call.
 FILLERS = {"", "evet", "tamam", "hi", "hm", "hmm", "ee", "eee", "aha", "alo", "efendim", "he", "hi hi"}
+# "Eee", "hmm", "şey": the callee is thinking. Answering it cut in on a callee who was about to give a rating.
+HESITATION = re.compile(r"(e+|i+|m+|h+m+|a+h+|sey|yani)( (e+|i+|m+|h+m+|a+h+|sey|yani))*")
+# The callee checking whether the line works, usually because they did not hear the agent.
+PRESENCE_CHECKS = ("alo", "duyuyor musunuz", "orada misiniz", "sesim geliyor mu", "sesimi duyuyor musunuz")
 NUMBER_WORDS = {
     "bir": 1, "iki": 2, "uc": 3, "dort": 4, "bes": 5, "alti": 6, "yedi": 7, "sekiz": 8, "dokuz": 9,
     "on": 10, "yirmi": 20, "otuz": 30, "kirk": 40, "elli": 50, "altmis": 60, "yetmis": 70, "seksen": 80, "doksan": 90,
@@ -63,6 +72,10 @@ def normalize(text: str) -> str:
     folded = unicodedata.normalize("NFD", folded)
     folded = "".join(ch for ch in folded if unicodedata.category(ch) != "Mn")
     return re.sub(r"[^a-z0-9 ]+", " ", folded).strip()
+
+
+def is_hesitation(text: str) -> bool:
+    return HESITATION.fullmatch(" ".join(normalize(text).split())) is not None
 
 
 def has_any(text: str, *phrases: str) -> bool:
@@ -86,22 +99,45 @@ class SurveyFlow:
 
     def __init__(self) -> None:
         self.step = "greeting"
+        self.questions = list(QUESTIONS)
         self.question_index = 0
+        self.asked: set[str] = set()
         self.answers: dict[str, str] = {}
-        # Set from the callee's voice before the questions start; the gender question is then skipped.
+        # Set from the callee's voice; the gender question is then skipped.
         self.inferred_gender: str | None = None
 
-    def current_question(self) -> str:
-        return QUESTIONS[self.question_index][1]
+    def current_question(self, full: bool = False) -> str:
+        """The question in full the first time (or when asked to repeat it), the short form after that."""
+        code, question, short = self.questions[self.question_index]
+        if full or code not in self.asked:
+            self.asked.add(code)
+            return question
+        return short
+
+    def gender_may_come_next(self) -> bool:
+        """The next reply may ask the gender question, so the voice estimate is worth waiting for."""
+        if self.inferred_gender is not None or "gender" in self.answers:
+            return False
+        if self.step == "consent":
+            return True
+        following = self.question_index + 1
+        return self.step == "questions" and following < len(self.questions) and self.questions[following][0] == "gender"
 
     def _skip_answered_by_voice(self) -> None:
-        while (self.question_index < len(QUESTIONS) and QUESTIONS[self.question_index][0] == "gender"
-               and self.inferred_gender is not None):
-            self.answers["gender"] = f"{self.inferred_gender} (sesten)"
-            self.question_index += 1
+        while self.question_index < len(self.questions) and self.questions[self.question_index][0] == "gender":
+            if self.inferred_gender is not None:
+                self.answers["gender"] = f"{self.inferred_gender} (sesten)"
+                self.question_index += 1
+            elif self.question_index < len(self.questions) - 1:
+                # Not enough speech yet to tell: ask the other questions first and decide again at the end.
+                self.questions.append(self.questions.pop(self.question_index))
+            else:
+                break
 
-    def handle(self, raw: str) -> tuple[str, bool]:
+    def handle(self, raw: str, previous_reply_missed: bool = False) -> tuple[str, bool]:
+        """previous_reply_missed: the agent's last reply was cut off before the callee heard it."""
         text = normalize(raw)
+        presence_check = has_any(text, *PRESENCE_CHECKS)
         if self.step == "greeting":
             self.step = "consent"
             return OPENING, False
@@ -109,26 +145,33 @@ class SurveyFlow:
             self.step = "done"
             return DECLINED, True
         if has_any(text, "kimsiniz", "kim ariyor", "nereden ariyorsunuz", "siz kimsiniz"):
-            return IDENTITY + " " + (OPENING.split(". ", 1)[1] if self.step == "consent" else self.current_question()), False
+            return IDENTITY + " " + (CONSENT_QUESTION if self.step == "consent" else self.current_question()), False
         if self.step == "consent":
             if has_any(text, "evet", "olur", "tabii", "tabi", "buyurun", "buyrun", "tamam", "sorabilirsiniz", "sorun degil", "dinliyorum"):
                 self.step = "questions"
                 self._skip_answered_by_voice()
                 return "Teşekkür ederim. " + self.current_question(), False
-            return "Kısaca onayınızı rica edeceğim. Size birkaç soru sorabilir miyim?", False
-        code = QUESTIONS[self.question_index][0]
+            ask = OPENING if previous_reply_missed else CONSENT_QUESTION
+            if presence_check:
+                return HEARD + " " + ask, False
+            if previous_reply_missed:
+                return OPENING, False
+            return "Kısaca onayınızı rica edeceğim. " + CONSENT_QUESTION, False
+        code = self.questions[self.question_index][0]
         if has_any(text, "neden", "niye", "nicin", "belli degil mi", "ne gerek var"):
             return REASON + " " + self.current_question(), False
         if has_any(text, "tekrar", "anlamadim", "ne dediniz", "efendim"):
-            return self.current_question(), False
+            return self.current_question(full=True), False
         if not self.accepts(code, text):
-            # "Alo?" after a question usually means the callee did not hear it.
-            if has_any(text, "alo", "duyuyor musunuz", "orada misiniz"):
-                return PRESENT + " " + self.current_question(), False
+            if presence_check:
+                return HEARD + " " + self.current_question(), False
+            if previous_reply_missed:
+                return self.current_question(), False
             return UNCLEAR + " " + self.current_question(), False
         self.answers[code] = raw
         self.question_index += 1
-        if self.question_index >= len(QUESTIONS):
+        self._skip_answered_by_voice()
+        if self.question_index >= len(self.questions):
             self.step = "done"
             return CLOSING, True
         return self.current_question(), False
@@ -212,6 +255,10 @@ class SurveyAgent(Agent):
         super().__init__(instructions="Fixed-script survey prototype; replies come from SurveyFlow.")
         self.flow, self.recorder, self.http, self.hang_up = flow, recorder, http, hang_up
         self.gender = gender
+        self.leveler = VoiceLeveler()
+        # What the agent sent to the line, one reply after another, written to logs/ when the call ends.
+        self.sent_audio: list[bytes] = []
+        self.sent_sample_rate = 16000
         self.last_reply = None
 
     async def stt_node(self, audio, model_settings):
@@ -224,10 +271,38 @@ class SurveyAgent(Agent):
         async for event in Agent.default.stt_node(self, tee(), model_settings):
             yield event
 
+    def _last_reply_missed(self) -> bool:
+        """True when the previous reply was interrupted before most of it was played."""
+        speech = self.last_reply
+        if speech is None or not speech.interrupted:
+            return False
+        said = getattr(speech, "_reply_text", "")
+        heard = " ".join(item.text_content or "" for item in speech.chat_items if getattr(item, "role", None) == "assistant")
+        return len(heard) < 0.6 * len(said)
+
+    async def tts_node(self, text, model_settings):
+        # One leveler for the whole call, so each reply starts at the gain the previous one ended with.
+        async for frame in Agent.default.tts_node(self, text, model_settings):
+            levelled = self.leveler.process_frame(frame)
+            self.sent_sample_rate = levelled.sample_rate
+            self.sent_audio.append(bytes(levelled.data))
+            yield levelled
+        self.sent_audio.append(bytes(int(self.sent_sample_rate * 0.5) * 2))  # half a second between replies
+
+    def save_sent_audio(self, path) -> None:
+        with wave.open(str(path), "wb") as handle:
+            handle.setnchannels(1)
+            handle.setsampwidth(2)
+            handle.setframerate(self.sent_sample_rate)
+            handle.writeframes(b"".join(self.sent_audio))
+
     async def on_user_turn_completed(self, turn_ctx, new_message) -> None:
         user_text = new_message.text_content or ""
         if self.last_reply is not None and not self.last_reply.done() and normalize(user_text) in FILLERS:
             logger.info("ignoring %r: the previous reply has not been played yet", user_text)
+            raise StopResponse()
+        if self.flow.step != "greeting" and is_hesitation(user_text):
+            logger.info("ignoring %r: the callee is thinking", user_text)
             raise StopResponse()
         turn = self.recorder.start_turn(self.flow.step, user_text)
         started = time.time()
@@ -240,16 +315,24 @@ class SurveyAgent(Agent):
             logger.warning("backend probe failed: %s", error)
         turn["backend_ms"] = round((time.time() - backend_started) * 1000)
         self.gender.start()
-        if self.flow.step == "consent" and self.flow.inferred_gender is None:
-            # The questions may start with this reply; give the classifier a moment if it is still running.
+        if self.flow.inferred_gender is None and self.gender.result is not None and self.gender.result.label:
+            self.flow.inferred_gender = self.gender.result.label
+        if self.flow.gender_may_come_next():
+            # This reply may ask the gender question; give the classifier a moment if it is still running.
             result = await self.gender.wait(timeout=0.5)
             turn["gender"] = None if result is None else result.__dict__
             if result is not None and result.label is not None:
                 self.flow.inferred_gender = result.label
-        reply, end_call = self.flow.handle(user_text)
+        missed = self._last_reply_missed()
+        if missed:
+            turn["previous_reply_missed"] = True
+        reply, end_call = self.flow.handle(user_text, previous_reply_missed=missed)
         turn["handler_ms"] = round((time.time() - started) * 1000)
         turn["reply"] = reply
-        speech = self.session.say(reply)
+        # The opening is said in full even if the callee says "Alo?" again over it, as a person would; in the
+        # second test call a repeated "Alo" cancelled it before it started and the callee never heard it.
+        speech = self.session.say(reply, allow_interruptions=reply != OPENING)
+        speech._reply_text = reply
         self.last_reply = speech
         if end_call:
             asyncio.create_task(self.hang_up(speech))
@@ -328,11 +411,23 @@ async def entrypoint(ctx: JobContext) -> None:
 
     async def close_http() -> None:
         await http.close()
+        survey_agent.save_sent_audio(LOG_DIR / f"{ctx.room.name}.agent.wav")
         logger.info("call finished: %d turns, answers=%s, gender=%s", len(recorder.turns), flow.answers, gender.result)
 
     ctx.add_shutdown_callback(close_http)
 
-    session_started = asyncio.create_task(session.start(agent=SurveyAgent(flow, recorder, http, hang_up, gender), room=ctx.room))
+    survey_agent = SurveyAgent(flow, recorder, http, hang_up, gender)
+    session_started = asyncio.create_task(session.start(agent=survey_agent, room=ctx.room))
+
+    async def warm_backend() -> None:
+        # Opens the connection the per-turn backend round trip reuses (the first one paid ~300 ms for TLS).
+        try:
+            async with http.get(BACKEND_URL + "/api/health", timeout=aiohttp.ClientTimeout(total=5)) as response:
+                await response.read()
+        except Exception as error:
+            logger.warning("backend warm-up failed: %s", error)
+
+    warm_up = asyncio.create_task(warm_backend())
     try:
         await ctx.api.sip.create_sip_participant(api.CreateSIPParticipantRequest(
             room_name=ctx.room.name,
@@ -347,6 +442,7 @@ async def entrypoint(ctx: JobContext) -> None:
         ctx.shutdown()
         return
     await session_started
+    await warm_up
 
     if AMBIENT_VOLUME > 0:
         background = BackgroundAudioPlayer(ambient_sound=AudioConfig(BuiltinAudioClip.OFFICE_AMBIENCE, volume=AMBIENT_VOLUME))
