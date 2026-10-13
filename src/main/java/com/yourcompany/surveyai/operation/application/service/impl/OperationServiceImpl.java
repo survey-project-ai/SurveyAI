@@ -20,6 +20,8 @@ import com.yourcompany.surveyai.operation.application.dto.response.OperationAnal
 import com.yourcompany.surveyai.operation.application.dto.response.OperationAnalyticsQuestionSummaryDto;
 import com.yourcompany.surveyai.operation.application.dto.response.OperationAnalyticsResponseDto;
 import com.yourcompany.surveyai.operation.application.dto.response.OperationAnalyticsTrendPointDto;
+import com.yourcompany.surveyai.operation.application.dto.response.OperationContactStatusCountDto;
+import com.yourcompany.surveyai.operation.application.dto.response.OperationDashboardTotalsDto;
 import com.yourcompany.surveyai.operation.application.dto.response.OperationExecutionSummaryDto;
 import com.yourcompany.surveyai.operation.application.dto.response.OperationReadinessDto;
 import com.yourcompany.surveyai.operation.application.dto.response.OperationResponseDto;
@@ -27,6 +29,7 @@ import com.yourcompany.surveyai.operation.application.service.OperationService;
 import com.yourcompany.surveyai.operation.application.support.OperationAutoEntityLexiconService;
 import com.yourcompany.surveyai.operation.domain.entity.Operation;
 import com.yourcompany.surveyai.operation.domain.entity.OperationContact;
+import com.yourcompany.surveyai.operation.domain.enums.OperationContactStatus;
 import com.yourcompany.surveyai.operation.domain.enums.OperationSourceType;
 import com.yourcompany.surveyai.operation.domain.enums.OperationStatus;
 import com.yourcompany.surveyai.operation.repository.OperationContactRepository;
@@ -57,6 +60,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.Normalizer;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -70,6 +74,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -197,6 +202,9 @@ public class OperationServiceImpl implements OperationService {
             Map.entry("kultur", "Sosyal alanlar"),
             Map.entry("spor", "Sosyal alanlar")
     );
+
+    // Days of daily response counts the dashboard receives.
+    private static final int DASHBOARD_TREND_DAYS = 30;
 
     private final OperationRepository operationRepository;
     private final OperationContactRepository operationContactRepository;
@@ -457,19 +465,13 @@ public class OperationServiceImpl implements OperationService {
         long totalContacts = countContacts(operation);
         syncLifecycleState(operation, totalContacts);
 
-        Map<CallJobStatus, Long> jobCountsByStatus = callJobRepository
-                .countGroupedByStatusForOperation(operationId)
-                .stream()
-                .collect(Collectors.toMap(row -> (CallJobStatus) row[0], row -> (Long) row[1]));
-        long totalJobs = jobCountsByStatus.values().stream().mapToLong(Long::longValue).sum();
-        long queuedJobs = jobCountsByStatus.getOrDefault(CallJobStatus.PENDING, 0L)
-                + jobCountsByStatus.getOrDefault(CallJobStatus.QUEUED, 0L)
-                + jobCountsByStatus.getOrDefault(CallJobStatus.RETRY, 0L);
-        long inProgressJobs = jobCountsByStatus.getOrDefault(CallJobStatus.IN_PROGRESS, 0L);
-        long completedCallJobs = jobCountsByStatus.getOrDefault(CallJobStatus.COMPLETED, 0L);
-        long failedCallJobs = jobCountsByStatus.getOrDefault(CallJobStatus.FAILED, 0L)
-                + jobCountsByStatus.getOrDefault(CallJobStatus.DEAD_LETTER, 0L);
-        long skippedCallJobs = jobCountsByStatus.getOrDefault(CallJobStatus.CANCELLED, 0L);
+        JobStatusTotals jobTotals = JobStatusTotals.fromGroupedRows(callJobRepository.countGroupedByStatusForOperation(operationId));
+        long totalJobs = jobTotals.total();
+        long queuedJobs = jobTotals.queued();
+        long inProgressJobs = jobTotals.inProgress();
+        long completedCallJobs = jobTotals.completed();
+        long failedCallJobs = jobTotals.failed();
+        long skippedCallJobs = jobTotals.skipped();
         // Counted from attempts, not job status: a job waiting for a retry or being dialed was already called.
         Object[] attemptSummary = callJobRepository.summarizeCallAttemptsForOperation(operationId).stream()
                 .findFirst()
@@ -477,8 +479,13 @@ public class OperationServiceImpl implements OperationService {
         long totalCallsAttempted = ((Number) attemptSummary[0]).longValue();
         long totalCallAttempts = ((Number) attemptSummary[1]).longValue();
 
-        List<SurveyResponseAnalyticsRow> allResponses = surveyResponseRepository.findAnalyticsRowsByOperationId(operationId);
-        List<SurveyResponseAnalyticsRow> responses = selectOneResponsePerContact(allResponses);
+        ResponseSummary responseSummary = summarizeResponses(operationId);
+        List<SurveyResponseAnalyticsRow> allResponses = responseSummary.allResponses();
+        List<SurveyResponseAnalyticsRow> responses = responseSummary.responses();
+        Map<UUID, SurveyResponseAnalyticsRow> responsesById = responseSummary.responsesById();
+        List<SurveyAnswer> answers = responseSummary.answers();
+        Set<UUID> usableResponseIds = responseSummary.usableResponseIds();
+        long respondedContacts = responseSummary.respondedContacts();
         List<SurveyQuestion> questions = surveyQuestionRepository
                 .findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId());
         List<UUID> questionIds = questions.stream().map(SurveyQuestion::getId).toList();
@@ -493,13 +500,7 @@ public class OperationServiceImpl implements OperationService {
                                 Collectors.toList()
                         ));
 
-        Map<UUID, SurveyResponseAnalyticsRow> responsesById = responses.stream()
-                .collect(Collectors.toMap(SurveyResponseAnalyticsRow::id, response -> response));
-        // Answers of the responses that do not count for their contact are dropped by the responsesById filters below.
-        List<SurveyAnswer> answers = responses.isEmpty()
-                ? List.of()
-                : surveyAnswerRepository.findAllForOperationAnalytics(operationId);
-
+        // Answers of the responses that do not count for their contact are dropped by the responsesById filter.
         Map<UUID, List<SurveyAnswer>> answersByQuestionId = answers.stream()
                 .filter(answer -> responsesById.containsKey(answer.getSurveyResponse().getId()))
                 .collect(Collectors.groupingBy(
@@ -507,17 +508,6 @@ public class OperationServiceImpl implements OperationService {
                         LinkedHashMap::new,
                         Collectors.toList()
                 ));
-        Set<UUID> usableResponseIds = answers.stream()
-                .filter(answer -> responsesById.containsKey(answer.getSurveyResponse().getId()))
-                .filter(this::hasUsableAnalyticsAnswer)
-                .map(answer -> answer.getSurveyResponse().getId())
-                .collect(Collectors.toSet());
-        Set<UUID> respondedContactIds = usableResponseIds.stream()
-                .map(responsesById::get)
-                .filter(Objects::nonNull)
-                .map(SurveyResponseAnalyticsRow::operationContactId)
-                .collect(Collectors.toSet());
-        long respondedContacts = respondedContactIds.size();
 
         long completedResponses = countDistinctResponseContactsByStatus(responses, usableResponseIds, SurveyResponseStatus.COMPLETED);
         long partialResponses = countDistinctResponseContactsByStatus(responses, usableResponseIds, SurveyResponseStatus.PARTIAL);
@@ -572,17 +562,7 @@ public class OperationServiceImpl implements OperationService {
         );
         List<OperationAnalyticsBreakdownItemDto> consentBreakdown = buildConsentBreakdown(responses, totalContacts);
 
-        Map<String, Long> trendMap = responses.stream()
-                .map(response -> response.completedAt() != null ? response.completedAt() : response.startedAt())
-                .filter(Objects::nonNull)
-                .collect(Collectors.groupingBy(
-                        timestamp -> timestamp.toLocalDate()
-                                .format(DateTimeFormatter.ISO_LOCAL_DATE),
-                        LinkedHashMap::new,
-                        Collectors.counting()
-                ));
-        List<OperationAnalyticsTrendPointDto> responseTrend = trendMap.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
+        List<OperationAnalyticsTrendPointDto> responseTrend = countResponsesPerDay(responses).entrySet().stream()
                 .map(entry -> new OperationAnalyticsTrendPointDto(entry.getKey(), entry.getValue()))
                 .toList();
 
@@ -797,6 +777,80 @@ public class OperationServiceImpl implements OperationService {
     // A contact called more than once (retry, redial) has one response per call. Counting all of them
     // made the contact count several times in question distributions, rates and the consent breakdown.
     // The completed response counts, otherwise the most complete one, otherwise the latest.
+    @Override
+    public OperationDashboardTotalsDto getDashboardTotals(UUID companyId) {
+        ensureCompanyExists(companyId);
+
+        List<OperationContactStatusCountDto> contactStatusCounts = operationContactRepository
+                .countGroupedByStatusForCompany(companyId)
+                .stream()
+                .map(row -> new OperationContactStatusCountDto((OperationContactStatus) row[0], (Long) row[1]))
+                .toList();
+        long totalContacts = contactStatusCounts.stream().mapToLong(OperationContactStatusCountDto::count).sum();
+        JobStatusTotals jobTotals = JobStatusTotals.fromGroupedRows(callJobRepository.countGroupedByStatusForCompany(companyId));
+
+        // Telling usable answers apart needs each operation's answers, exactly as the analytics count them.
+        long respondedContacts = 0;
+        Map<String, Long> responsesPerDay = new TreeMap<>();
+        for (Operation operation : operationRepository.findAllByCompany_IdAndDeletedAtIsNull(companyId)) {
+            ResponseSummary summary = summarizeResponses(operation.getId());
+            respondedContacts += summary.respondedContacts();
+            countResponsesPerDay(summary.responses()).forEach((day, count) -> responsesPerDay.merge(day, count, Long::sum));
+        }
+        String firstTrendDay = LocalDate.now().minusDays(DASHBOARD_TREND_DAYS - 1L).format(DateTimeFormatter.ISO_LOCAL_DATE);
+        List<OperationAnalyticsTrendPointDto> responseTrend = responsesPerDay.entrySet().stream()
+                .filter(entry -> entry.getKey().compareTo(firstTrendDay) >= 0)
+                .map(entry -> new OperationAnalyticsTrendPointDto(entry.getKey(), entry.getValue()))
+                .toList();
+
+        return new OperationDashboardTotalsDto(
+                contactStatusCounts,
+                totalContacts,
+                respondedContacts,
+                responseTrend,
+                jobTotals.total(),
+                jobTotals.queued(),
+                jobTotals.inProgress(),
+                jobTotals.completed(),
+                jobTotals.failed(),
+                callJobRepository.sumCallAttemptsForCompany(companyId)
+        );
+    }
+
+    private ResponseSummary summarizeResponses(UUID operationId) {
+        List<SurveyResponseAnalyticsRow> allResponses = surveyResponseRepository.findAnalyticsRowsByOperationId(operationId);
+        List<SurveyResponseAnalyticsRow> responses = selectOneResponsePerContact(allResponses);
+        Map<UUID, SurveyResponseAnalyticsRow> responsesById = responses.stream()
+                .collect(Collectors.toMap(SurveyResponseAnalyticsRow::id, response -> response));
+        List<SurveyAnswer> answers = responses.isEmpty()
+                ? List.of()
+                : surveyAnswerRepository.findAllForOperationAnalytics(operationId);
+        Set<UUID> usableResponseIds = answers.stream()
+                .filter(answer -> responsesById.containsKey(answer.getSurveyResponse().getId()))
+                .filter(this::hasUsableAnalyticsAnswer)
+                .map(answer -> answer.getSurveyResponse().getId())
+                .collect(Collectors.toSet());
+        long respondedContacts = usableResponseIds.stream()
+                .map(responsesById::get)
+                .filter(Objects::nonNull)
+                .map(SurveyResponseAnalyticsRow::operationContactId)
+                .distinct()
+                .count();
+        return new ResponseSummary(allResponses, responses, responsesById, answers, usableResponseIds, respondedContacts);
+    }
+
+    // Responses per day as ISO dates, in day order.
+    private Map<String, Long> countResponsesPerDay(List<SurveyResponseAnalyticsRow> responses) {
+        return responses.stream()
+                .map(response -> response.completedAt() != null ? response.completedAt() : response.startedAt())
+                .filter(Objects::nonNull)
+                .collect(Collectors.groupingBy(
+                        timestamp -> timestamp.toLocalDate().format(DateTimeFormatter.ISO_LOCAL_DATE),
+                        TreeMap::new,
+                        Collectors.counting()
+                ));
+    }
+
     private List<SurveyResponseAnalyticsRow> selectOneResponsePerContact(List<SurveyResponseAnalyticsRow> responses) {
         Comparator<SurveyResponseAnalyticsRow> preference = Comparator
                 .comparing((SurveyResponseAnalyticsRow response) -> response.status() == SurveyResponseStatus.COMPLETED)
@@ -2239,6 +2293,36 @@ public class OperationServiceImpl implements OperationService {
     private boolean hasNonEmptyJsonArray(JsonNode root, String fieldName) {
         JsonNode node = root.get(fieldName);
         return node != null && node.isArray() && node.size() > 0;
+    }
+
+    // One response per contact, the answers loaded for them, and the responses with at least one usable answer.
+    private record ResponseSummary(
+            List<SurveyResponseAnalyticsRow> allResponses,
+            List<SurveyResponseAnalyticsRow> responses,
+            Map<UUID, SurveyResponseAnalyticsRow> responsesById,
+            List<SurveyAnswer> answers,
+            Set<UUID> usableResponseIds,
+            long respondedContacts
+    ) {
+    }
+
+    // Call jobs grouped the way the analytics and the dashboard show them.
+    private record JobStatusTotals(long total, long queued, long inProgress, long completed, long failed, long skipped) {
+
+        static JobStatusTotals fromGroupedRows(List<Object[]> rows) {
+            Map<CallJobStatus, Long> counts = rows.stream()
+                    .collect(Collectors.toMap(row -> (CallJobStatus) row[0], row -> (Long) row[1]));
+            return new JobStatusTotals(
+                    counts.values().stream().mapToLong(Long::longValue).sum(),
+                    counts.getOrDefault(CallJobStatus.PENDING, 0L)
+                            + counts.getOrDefault(CallJobStatus.QUEUED, 0L)
+                            + counts.getOrDefault(CallJobStatus.RETRY, 0L),
+                    counts.getOrDefault(CallJobStatus.IN_PROGRESS, 0L),
+                    counts.getOrDefault(CallJobStatus.COMPLETED, 0L),
+                    counts.getOrDefault(CallJobStatus.FAILED, 0L) + counts.getOrDefault(CallJobStatus.DEAD_LETTER, 0L),
+                    counts.getOrDefault(CallJobStatus.CANCELLED, 0L)
+            );
+        }
     }
 
     private record ResolvedChoiceAnswer(SurveyAnswer answer, List<String> labels) {

@@ -154,6 +154,14 @@ public class CallJobServiceImpl implements CallJobService {
     }
 
     @Override
+    public List<CallJobResponseDto> listRecentlyCalledJobs(UUID companyId, int limit) {
+        return callJobRepository.findRecentlyCalledForCompany(companyId, PageRequest.of(0, Math.min(Math.max(limit, 1), 50)))
+                .stream()
+                .map(this::toDto)
+                .toList();
+    }
+
+    @Override
     public CallJobDetailResponseDto getOperationCallJobDetail(UUID companyId, UUID operationId, UUID callJobId) {
         ensureOperationExists(companyId, operationId);
         CallJob callJob = getCallJob(companyId, operationId, callJobId);

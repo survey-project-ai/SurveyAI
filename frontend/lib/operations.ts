@@ -1,7 +1,7 @@
 import { API_BASE_URL, apiFetch } from "@/lib/api";
 import { requireCompanyId, requireCurrentUserId } from "@/lib/auth";
 import { fetchCompanySurveys } from "@/lib/surveys";
-import { CallJob, CallJobAttempt, CallJobDetail, CallJobSurveyResponse, CallJobSurveyResponseAnswer, CallJobSurveyResponseAnswerOption, Operation, OperationAnalytics, OperationAnalyticsAudienceBreakdown, OperationAnalyticsBreakdownItem, OperationAnalyticsInsightItem, OperationAnalyticsQuestionGroupRow, OperationAnalyticsQuestionGroupSeries, OperationAnalyticsQuestionGroupSummary, OperationAnalyticsQuestionSummary, OperationAnalyticsSampleResponse, OperationAnalyticsTrendPoint, OperationContact } from "@/lib/types";
+import { CallJob, CallJobAttempt, CallJobDetail, CallJobSurveyResponse, CallJobSurveyResponseAnswer, CallJobSurveyResponseAnswerOption, DashboardSummary, Operation, OperationAnalytics, OperationAnalyticsAudienceBreakdown, OperationAnalyticsBreakdownItem, OperationAnalyticsInsightItem, OperationAnalyticsQuestionGroupRow, OperationAnalyticsQuestionGroupSeries, OperationAnalyticsQuestionGroupSummary, OperationAnalyticsQuestionSummary, OperationAnalyticsSampleResponse, OperationAnalyticsTrendPoint, OperationContact } from "@/lib/types";
 
 type ApiErrorResponse = {
   code?: string;
@@ -279,6 +279,22 @@ type OperationAnalyticsInsightItemApiResponse = {
 type OperationAnalyticsTrendPointApiResponse = {
   label: string;
   count: number;
+};
+
+type DashboardSummaryApiResponse = {
+  totals: {
+    contactStatusCounts: Array<{ status: OperationContactStatusApi; count: number }>;
+    totalContacts: number;
+    respondedContacts: number;
+    responseTrend: OperationAnalyticsTrendPointApiResponse[];
+    totalCallJobs: number;
+    queuedJobs: number;
+    inProgressJobs: number;
+    completedCallJobs: number;
+    failedCallJobs: number;
+    totalCallAttempts: number;
+  };
+  recentCallJobs: CallJobApiResponse[];
 };
 
 type OperationAnalyticsAudienceBreakdownApiResponse = {
@@ -611,11 +627,7 @@ export async function fetchOperationAnalytics(
         data: series.data ?? [],
       })),
     })),
-    responseTrend: (response.responseTrend ?? []).map((item): OperationAnalyticsTrendPoint => ({
-      label: formatAnalyticsDate(item.label),
-      date: item.label,
-      count: item.count,
-    })),
+    responseTrend: (response.responseTrend ?? []).map(mapTrendPoint),
   };
 }
 
@@ -774,6 +786,33 @@ export async function fetchOperationCallJobsPage(
     totalPages: response.totalPages,
     page: response.page,
     size: response.size,
+  };
+}
+
+export async function fetchDashboardSummary(companyId?: string, init?: RequestInit): Promise<DashboardSummary> {
+  const resolvedCompanyId = requireCompanyId(companyId);
+  const response = await fetchJson<DashboardSummaryApiResponse>(
+    `${API_BASE_URL}/api/v1/dashboard/summary?companyId=${resolvedCompanyId}`,
+    init,
+    "dashboard summary",
+  );
+  const { totals } = response;
+
+  return {
+    contactStatusCounts: totals.contactStatusCounts.map((item) => ({
+      status: mapOperationContactStatus(item.status),
+      count: item.count,
+    })),
+    totalContacts: totals.totalContacts,
+    respondedContacts: totals.respondedContacts,
+    responseTrend: totals.responseTrend.map(mapTrendPoint),
+    totalCallJobs: totals.totalCallJobs,
+    queuedJobs: totals.queuedJobs,
+    inProgressJobs: totals.inProgressJobs,
+    completedCallJobs: totals.completedCallJobs,
+    failedCallJobs: totals.failedCallJobs,
+    totalCallAttempts: totals.totalCallAttempts,
+    recentCallJobs: response.recentCallJobs.map(mapCallJobDtoToCallJob),
   };
 }
 
@@ -942,6 +981,14 @@ function mapOperationDtoToOperation(dto: OperationApiResponse, surveys: SurveyRe
     startedAt: dto.startedAt,
     completedAt: dto.completedAt,
     scheduledAt: dto.scheduledAt,
+  };
+}
+
+function mapTrendPoint(item: OperationAnalyticsTrendPointApiResponse): OperationAnalyticsTrendPoint {
+  return {
+    label: formatAnalyticsDate(item.label),
+    date: item.label,
+    count: item.count,
   };
 }
 

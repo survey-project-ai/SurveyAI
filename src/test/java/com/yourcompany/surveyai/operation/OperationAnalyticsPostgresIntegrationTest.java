@@ -2,6 +2,8 @@ package com.yourcompany.surveyai.operation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.yourcompany.surveyai.call.application.dto.response.CallJobResponseDto;
+import com.yourcompany.surveyai.call.application.service.CallJobService;
 import com.yourcompany.surveyai.call.domain.entity.CallAttempt;
 import com.yourcompany.surveyai.call.domain.entity.CallJob;
 import com.yourcompany.surveyai.call.domain.enums.CallAttemptStatus;
@@ -14,6 +16,8 @@ import com.yourcompany.surveyai.common.domain.enums.CompanyStatus;
 import com.yourcompany.surveyai.common.repository.CompanyRepository;
 import com.yourcompany.surveyai.operation.application.dto.response.OperationAnalyticsQuestionSummaryDto;
 import com.yourcompany.surveyai.operation.application.dto.response.OperationAnalyticsResponseDto;
+import com.yourcompany.surveyai.operation.application.dto.response.OperationAnalyticsTrendPointDto;
+import com.yourcompany.surveyai.operation.application.dto.response.OperationDashboardTotalsDto;
 import com.yourcompany.surveyai.operation.application.service.OperationService;
 import com.yourcompany.surveyai.operation.domain.entity.Operation;
 import com.yourcompany.surveyai.operation.domain.entity.OperationContact;
@@ -38,7 +42,9 @@ import com.yourcompany.surveyai.survey.repository.SurveyRepository;
 import jakarta.persistence.EntityManagerFactory;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.UUID;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -106,6 +112,9 @@ class OperationAnalyticsPostgresIntegrationTest {
     private OperationService operationService;
 
     @Autowired
+    private CallJobService callJobService;
+
+    @Autowired
     private EntityManagerFactory entityManagerFactory;
 
     @Autowired
@@ -147,6 +156,30 @@ class OperationAnalyticsPostgresIntegrationTest {
         // Operation, contact count, job counts, attempt summary, response rows, questions, options and answers.
         // The old code also loaded every attempt, job and contact behind the open-ended samples, one by one.
         assertThat(statementCount).isLessThanOrEqualTo(10);
+    }
+
+    @Test
+    void dashboardTotalsMatchTheOperationAnalytics() {
+        Fixture fixture = new TransactionTemplate(transactionManager).execute(status -> createOperationWithResponses());
+
+        OperationAnalyticsResponseDto analytics = operationService.getOperationAnalytics(fixture.companyId(), fixture.operationId());
+        OperationDashboardTotalsDto totals = operationService.getDashboardTotals(fixture.companyId());
+
+        assertThat(totals.totalContacts()).isEqualTo(analytics.totalContacts()).isEqualTo(RESPONDENT_COUNT);
+        assertThat(totals.respondedContacts()).isEqualTo(analytics.respondedContacts()).isEqualTo(RESPONDENT_COUNT);
+        assertThat(totals.totalCallAttempts()).isEqualTo(analytics.totalCallAttempts()).isEqualTo(RESPONDENT_COUNT + 1);
+        assertThat(totals.completedCallJobs()).isEqualTo(analytics.completedCallJobs()).isEqualTo(RESPONDENT_COUNT);
+        assertThat(totals.contactStatusCounts())
+                .extracting(item -> item.status() + ":" + item.count())
+                .containsExactly("COMPLETED:" + RESPONDENT_COUNT);
+        // One response per contact, like the analytics trend.
+        assertThat(totals.responseTrend().stream().mapToLong(OperationAnalyticsTrendPointDto::count).sum())
+                .isEqualTo(RESPONDENT_COUNT);
+
+        List<CallJobResponseDto> recentJobs = callJobService.listRecentlyCalledJobs(fixture.companyId(), 10);
+        assertThat(recentJobs).hasSize(RESPONDENT_COUNT);
+        assertThat(recentJobs).extracting(CallJobResponseDto::updatedAt).isSortedAccordingTo(Comparator.reverseOrder());
+        assertThat(recentJobs).allSatisfy(job -> assertThat(job.personName()).startsWith("Katilimci "));
     }
 
     private Fixture createOperationWithResponses() {

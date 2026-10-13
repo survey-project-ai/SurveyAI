@@ -9,6 +9,8 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface OperationContactRepository extends JpaRepository<OperationContact, UUID>, JpaSpecificationExecutor<OperationContact> {
 
@@ -29,4 +31,12 @@ public interface OperationContactRepository extends JpaRepository<OperationConta
     );
 
     Optional<OperationContact> findByOperation_IdAndExternalRefAndDeletedAtIsNull(UUID operationId, String externalRef);
+
+    @Query("""
+            SELECT c.status, COUNT(c)
+            FROM OperationContact c
+            WHERE c.company.id = :companyId AND c.deletedAt IS NULL AND c.operation.deletedAt IS NULL
+            GROUP BY c.status
+            """)
+    List<Object[]> countGroupedByStatusForCompany(@Param("companyId") UUID companyId);
 }

@@ -404,6 +404,21 @@ export type OperationAnalyticsInsightItem = {
   tone: "neutral" | "positive" | "warning";
 };
 
+// Company-wide numbers for the home page, with the same definitions as OperationAnalytics.
+export type DashboardSummary = {
+  contactStatusCounts: Array<{ status: OperationContact["status"]; count: number }>;
+  totalContacts: number;
+  respondedContacts: number;
+  responseTrend: OperationAnalyticsTrendPoint[];
+  totalCallJobs: number;
+  queuedJobs: number;
+  inProgressJobs: number;
+  completedCallJobs: number;
+  failedCallJobs: number;
+  totalCallAttempts: number;
+  recentCallJobs: CallJob[];
+};
+
 export type OperationAnalytics = {
   operationId: string;
   totalContacts: number;

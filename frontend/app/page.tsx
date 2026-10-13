@@ -17,25 +17,14 @@ import {
   SurveyIcon,
 } from "@/components/ui/Icons";
 import { useAuth } from "@/lib/auth";
-import {
-  fetchCompanyOperations,
-  fetchOperationAnalytics,
-  fetchOperationCallJobsPage,
-  fetchOperationContactSummary,
-} from "@/lib/operations";
+import { fetchCompanyOperations, fetchDashboardSummary } from "@/lib/operations";
 import { fetchCompanySurveys } from "@/lib/surveys";
 import { ResponseTrendChart } from "@/components/charts/DashboardCharts";
-import type { CallJob, Operation, OperationAnalytics, OperationContact, Survey } from "@/lib/types";
+import type { CallJob, DashboardSummary, Operation, OperationContact, Survey } from "@/lib/types";
 
-// Latest call jobs read per operation for the activity list.
-const RECENT_JOBS_PER_OPERATION = 5;
 const ACTIVITY_ROW_LIMIT = 6;
 
 type ContactStatusTotals = Partial<Record<OperationContact["status"], number>>;
-
-type DashboardCallJob = CallJob & {
-  operationName: string;
-};
 
 type QuickLink = {
   title: string;
@@ -66,9 +55,7 @@ export default function DashboardPage() {
   const { currentUser } = useAuth();
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [operations, setOperations] = useState<Operation[]>([]);
-  const [contactStatusTotals, setContactStatusTotals] = useState<ContactStatusTotals>({});
-  const [analytics, setAnalytics] = useState<OperationAnalytics[]>([]);
-  const [recentCallJobs, setRecentCallJobs] = useState<DashboardCallJob[]>([]);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [unavailableSections, setUnavailableSections] = useState<string[]>([]);
@@ -88,61 +75,26 @@ export default function DashboardPage() {
         setIsLoading(true);
         setErrorMessage(null);
 
-        const [surveysResult, operationsResult] = await Promise.allSettled([fetchCompanySurveys(), fetchCompanyOperations()]);
+        // Three requests however many operations there are: the summary carries the company-wide numbers.
+        const [surveysResult, operationsResult, summaryResult] = await Promise.allSettled([
+          fetchCompanySurveys(),
+          fetchCompanyOperations(),
+          fetchDashboardSummary(),
+        ]);
 
         if (!isMounted) {
           return;
         }
 
-        const nextSurveys = surveysResult.status === "fulfilled" ? surveysResult.value : [];
-        const nextOperations = operationsResult.status === "fulfilled" ? operationsResult.value : [];
-
-        setSurveys(nextSurveys);
-        setOperations(nextOperations);
-
-        // Per operation: contact status counts (not the contact list), analytics and the latest call jobs.
-        const [summaryResults, analyticsResults, callJobResults] = nextOperations.length
-          ? await Promise.all([
-              Promise.allSettled(nextOperations.map((operation) => fetchOperationContactSummary(operation.id, { latestLimit: 0 }))),
-              Promise.allSettled(nextOperations.map((operation) => fetchOperationAnalytics(operation.id))),
-              Promise.allSettled(
-                nextOperations.map(async (operation) => {
-                  const page = await fetchOperationCallJobsPage(operation.id, {
-                    size: RECENT_JOBS_PER_OPERATION,
-                    sortBy: "updatedAt",
-                    direction: "desc",
-                  });
-                  return page.items.map((job): DashboardCallJob => ({ ...job, operationName: operation.name }));
-                }),
-              ),
-            ])
-          : [[], [], []];
-
-        if (!isMounted) {
-          return;
-        }
-
-        const nextTotals: ContactStatusTotals = {};
-        for (const result of summaryResults) {
-          if (result.status !== "fulfilled") {
-            continue;
-          }
-          for (const item of result.value.statusCounts) {
-            nextTotals[item.status] = (nextTotals[item.status] ?? 0) + item.count;
-          }
-        }
-
-        setContactStatusTotals(nextTotals);
-        setAnalytics(analyticsResults.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])));
-        setRecentCallJobs(callJobResults.flatMap((result) => (result.status === "fulfilled" ? result.value : [])));
+        setSurveys(surveysResult.status === "fulfilled" ? surveysResult.value : []);
+        setOperations(operationsResult.status === "fulfilled" ? operationsResult.value : []);
+        setSummary(summaryResult.status === "fulfilled" ? summaryResult.value : null);
 
         setUnavailableSections(
           [
             surveysResult.status === "rejected" ? "Anket akışı" : null,
             operationsResult.status === "rejected" ? "Operasyon akışı" : null,
-            summaryResults.some((result) => result.status === "rejected") ? "Kişi özetleri" : null,
-            analyticsResults.some((result) => result.status === "rejected") ? "Analitik özeti" : null,
-            callJobResults.some((result) => result.status === "rejected") ? "Son aramalar" : null,
+            summaryResult.status === "rejected" ? "Arama ve yanıt özeti" : null,
           ].filter((value): value is string => value !== null),
         );
       } catch (error) {
@@ -166,11 +118,14 @@ export default function DashboardPage() {
   }, []);
 
   const completion = useMemo(() => buildOperationCompletion(operations), [operations]);
-  const callResults = useMemo(() => buildCallResultSummary(contactStatusTotals), [contactStatusTotals]);
-  const responsePerformance = useMemo(() => buildResponsePerformance(analytics), [analytics]);
-  const callQueue = useMemo(() => buildCallQueue(analytics), [analytics]);
+  const callResults = useMemo(() => buildCallResultSummary(summary), [summary]);
+  const responsePerformance = useMemo(() => buildResponsePerformance(summary), [summary]);
+  const callQueue = useMemo(() => buildCallQueue(summary), [summary]);
   const tasks = useMemo(() => buildDashboardTasks(operations, surveys), [operations, surveys]);
-  const activityRows = useMemo(() => buildDashboardActivityRows(operations, recentCallJobs), [operations, recentCallJobs]);
+  const activityRows = useMemo(
+    () => buildDashboardActivityRows(operations, summary?.recentCallJobs ?? []),
+    [operations, summary],
+  );
 
   const featuredQuickLinks: QuickLink[] = [
     { title: "Anketler", href: "/surveys", icon: <SurveyIcon className="nav-icon" /> },
@@ -508,7 +463,11 @@ function buildOperationCompletion(operations: Operation[]) {
   };
 }
 
-function buildCallResultSummary(totals: ContactStatusTotals) {
+function buildCallResultSummary(summary: DashboardSummary | null) {
+  const totals: ContactStatusTotals = {};
+  for (const item of summary?.contactStatusCounts ?? []) {
+    totals[item.status] = (totals[item.status] ?? 0) + item.count;
+  }
   const success = totals.Completed ?? 0;
   const rejected = totals.Failed ?? 0;
   const pending = totals.Pending ?? 0;
@@ -531,16 +490,10 @@ function buildCallResultSummary(totals: ContactStatusTotals) {
   };
 }
 
-function buildResponsePerformance(analytics: OperationAnalytics[], now = new Date()) {
-  const respondedContacts = analytics.reduce((sum, item) => sum + item.respondedContacts, 0);
-  const totalContacts = analytics.reduce((sum, item) => sum + item.totalContacts, 0);
-
-  const countsByDay = new Map<string, number>();
-  for (const item of analytics) {
-    for (const point of item.responseTrend) {
-      countsByDay.set(point.date, (countsByDay.get(point.date) ?? 0) + point.count);
-    }
-  }
+function buildResponsePerformance(summary: DashboardSummary | null, now = new Date()) {
+  const respondedContacts = summary?.respondedContacts ?? 0;
+  const totalContacts = summary?.totalContacts ?? 0;
+  const countsByDay = new Map((summary?.responseTrend ?? []).map((point) => [point.date, point.count]));
 
   const weekdayFormat = new Intl.DateTimeFormat("tr-TR", { weekday: "short" });
   const points = Array.from({ length: 7 }, (_, index) => {
@@ -558,16 +511,14 @@ function buildResponsePerformance(analytics: OperationAnalytics[], now = new Dat
   };
 }
 
-function buildCallQueue(analytics: OperationAnalytics[]) {
-  const sum = (pick: (item: OperationAnalytics) => number) => analytics.reduce((total, item) => total + pick(item), 0);
-
+function buildCallQueue(summary: DashboardSummary | null) {
   return {
-    hasData: sum((item) => item.totalCallJobs) > 0,
-    attempts: sum((item) => item.totalCallAttempts),
-    queued: sum((item) => item.queuedJobs),
-    inProgress: sum((item) => item.inProgressJobs),
-    completed: sum((item) => item.completedCallJobs),
-    failed: sum((item) => item.failedCallJobs),
+    hasData: (summary?.totalCallJobs ?? 0) > 0,
+    attempts: summary?.totalCallAttempts ?? 0,
+    queued: summary?.queuedJobs ?? 0,
+    inProgress: summary?.inProgressJobs ?? 0,
+    completed: summary?.completedCallJobs ?? 0,
+    failed: summary?.failedCallJobs ?? 0,
   };
 }
 
@@ -659,15 +610,16 @@ function describeCallJob(job: CallJob): string {
   }
 }
 
-function buildDashboardActivityRows(operations: Operation[], callJobs: DashboardCallJob[]): DashboardActivityRow[] {
-  // Jobs that were never dialed are queue entries, not activity.
+function buildDashboardActivityRows(operations: Operation[], callJobs: CallJob[]): DashboardActivityRow[] {
+  const operationNames = new Map(operations.map((operation) => [operation.id, operation.name]));
+  // The API only returns jobs that were dialed at least once; never-dialed jobs are queue entries, not activity.
   const callRows = callJobs
     .filter((job) => job.attemptCount > 0)
     .map((job) => ({
       id: `job-${job.id}`,
       timestamp: Date.parse(job.updatedAtIso),
       event: describeCallJob(job),
-      area: job.operationName,
+      area: operationNames.get(job.operationId) ?? "Operasyon",
       result: job.lastResultSummary ? `${job.personName} · ${job.lastResultSummary}` : job.personName,
       href: `/operations/${job.operationId}/jobs/${job.id}`,
     }));
