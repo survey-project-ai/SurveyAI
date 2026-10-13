@@ -30,7 +30,11 @@ SIP_ADDRESS = "sip.netgsm.com.tr"
 # Same voice (Gözde Arıkan, a library voice; needs API credits) and TTS model as the ElevenLabs agent,
 # so the comparison only changes the architecture. PROTOTYPE_VOICE_ID overrides it.
 VOICE_ID = os.environ.get("PROTOTYPE_VOICE_ID", "aEJD8mYP0nuof1XHShVY")
-TTS_MODEL = "eleven_flash_v2_5"
+# v4 Turbo sounded more natural than Flash v2.5 in a listening test and started faster (0.34 s vs 0.66 s).
+TTS_MODEL = os.environ.get("PROTOTYPE_TTS_MODEL", "eleven_v4_turbo")
+# Office ambience under the call, 0 turns it off. The built-in clip is quiet (about 29 dB below the voice
+# at 1.0); the player multiplies and clips, so values above 1 work. 2.0 was picked in a listening test.
+AMBIENT_VOLUME = float(os.environ.get("PROTOTYPE_AMBIENT_VOLUME", "2.0"))
 STT_MODEL = "scribe_v2_realtime"
 BACKEND_URL = "https://surveyai-backend-production.up.railway.app"
 

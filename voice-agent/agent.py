@@ -18,6 +18,9 @@ from livekit.agents import (
     Agent,
     AgentServer,
     AgentSession,
+    AudioConfig,
+    BackgroundAudioPlayer,
+    BuiltinAudioClip,
     JobContext,
     JobProcess,
     MetricsCollectedEvent,
@@ -27,7 +30,7 @@ from livekit.agents import (
 )
 from livekit.plugins import elevenlabs, silero
 
-from common import AGENT_NAME, BACKEND_URL, LOG_DIR, STT_MODEL, TTS_MODEL, VOICE_ID, load_keys, read_state
+from common import AGENT_NAME, AMBIENT_VOLUME, BACKEND_URL, LOG_DIR, STT_MODEL, TTS_MODEL, VOICE_ID, load_keys, read_state
 from gender import VoiceGenderDetector, load_model
 
 load_keys()
@@ -37,6 +40,7 @@ OPENING = "Merhaba, ben Ayna Araştırma adına kısa bir anket için arıyorum.
 IDENTITY = "Ben Ayna Araştırma adına kısa bir anket için arıyorum."
 REASON = "Bu soruyu anket gereği tüm katılımcılara soruyoruz. Cevap vermek istemezseniz bunu da söyleyebilirsiniz."
 UNCLEAR = "Sizi net anlayamadım."
+PRESENT = "Buradayım."
 SILENCE = "Sizi duyamadım."
 CLOSING = "Vakit ayırdığınız için teşekkür ederim. Anketimiz burada sona erdi. İyi günler dilerim."
 DECLINED = "Anladım, teşekkür ederim. İyi günler dilerim."
@@ -118,6 +122,9 @@ class SurveyFlow:
         if has_any(text, "tekrar", "anlamadim", "ne dediniz", "efendim"):
             return self.current_question(), False
         if not self.accepts(code, text):
+            # "Alo?" after a question usually means the callee did not hear it.
+            if has_any(text, "alo", "duyuyor musunuz", "orada misiniz"):
+                return PRESENT + " " + self.current_question(), False
             return UNCLEAR + " " + self.current_question(), False
         self.answers[code] = raw
         self.question_index += 1
@@ -284,7 +291,8 @@ async def entrypoint(ctx: JobContext) -> None:
             # jump at each new sentence.
             encoding="pcm_16000",
             auto_mode=False,
-            # The ElevenLabs agent's settings for this voice.
+            # The ElevenLabs agent's settings for this voice. v4 Turbo goes through the text-to-dialogue API
+            # and ignores similarity_boost and speed.
             voice_settings=elevenlabs.VoiceSettings(stability=0.5, similarity_boost=0.8, speed=1.02),
         ),
         turn_detection="stt",
@@ -339,6 +347,10 @@ async def entrypoint(ctx: JobContext) -> None:
         ctx.shutdown()
         return
     await session_started
+
+    if AMBIENT_VOLUME > 0:
+        background = BackgroundAudioPlayer(ambient_sound=AudioConfig(BuiltinAudioClip.OFFICE_AMBIENCE, volume=AMBIENT_VOLUME))
+        await background.start(room=ctx.room, agent_session=session)
 
     # The callee normally speaks first ("Alo"). If nobody does, say "Alo?" once.
     await asyncio.sleep(3)
