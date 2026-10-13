@@ -162,6 +162,8 @@ export default function OperationDetailPage() {
   const operationId = params.id;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const hasInitializedTabRef = useRef(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [operation, setOperation] = useState<Operation | null>(null);
   const [contactSummary, setContactSummary] = useState<OperationContactSummary | null>(null);
   const [analytics, setAnalytics] = useState<OperationAnalytics | null>(null);
@@ -171,14 +173,12 @@ export default function OperationDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [startErrorMessage, setStartErrorMessage] = useState<string | null>(null);
-  const [startSuccessMessage, setStartSuccessMessage] = useState<string | null>(null);
   const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
   const [isMissing, setIsMissing] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [importRows, setImportRows] = useState<ImportPreviewRow[]>([]);
   const [importSummary, setImportSummary] = useState<ImportSummary>(createEmptyImportSummary());
   const [importErrorMessage, setImportErrorMessage] = useState<string | null>(null);
-  const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [jobsPage, setJobsPage] = useState<CallJobPage | null>(null);
   const [jobsPageIndex, setJobsPageIndex] = useState(0);
@@ -282,7 +282,7 @@ export default function OperationDetailPage() {
       } else if (next === "Failed") {
         notify("error", `${operation.name} başarısız oldu`, "Operasyon hata durumunda.");
       } else if (next === "Paused") {
-        notify("warning", `${operation.name} duraklatıldı`);
+        notify("warning", `${operation.name} duraklatıldı`, "Süren görüşme bittikten sonra yeni çağrı başlatılmaz.");
       } else if (next === "Running" && prev !== "Running") {
         notify("info", `${operation.name} başladı`, "Aramalar devam ediyor.");
       }
@@ -429,22 +429,7 @@ export default function OperationDetailPage() {
   const headerTabs = useMemo(() => (
     <div className="operation-header-nav">
       <div className="operation-header-tabs" role="tablist" aria-label="Operasyon sekmeleri">
-        <button
-          type="button"
-          className={["operation-header-tab", activeTab === "analysis" ? "is-active" : ""].filter(Boolean).join(" ")}
-          onClick={() => setActiveTab("analysis")}
-          aria-pressed={activeTab === "analysis"}
-        >
-          Sonuçlar
-        </button>
-        <button
-          type="button"
-          className={["operation-header-tab", activeTab === "firstLook" ? "is-active" : ""].filter(Boolean).join(" ")}
-          onClick={() => setActiveTab("firstLook")}
-          aria-pressed={activeTab === "firstLook"}
-        >
-          İlk bakış
-        </button>
+        {/* Setup and status first, then the calls and their results; İlk bakış is the keyword lexicon preview. */}
         <button
           type="button"
           className={["operation-header-tab", activeTab === "details" ? "is-active" : ""].filter(Boolean).join(" ")}
@@ -460,6 +445,22 @@ export default function OperationDetailPage() {
           aria-pressed={activeTab === "jobs"}
         >
           Çağrılar
+        </button>
+        <button
+          type="button"
+          className={["operation-header-tab", activeTab === "analysis" ? "is-active" : ""].filter(Boolean).join(" ")}
+          onClick={() => setActiveTab("analysis")}
+          aria-pressed={activeTab === "analysis"}
+        >
+          Sonuçlar
+        </button>
+        <button
+          type="button"
+          className={["operation-header-tab", activeTab === "firstLook" ? "is-active" : ""].filter(Boolean).join(" ")}
+          onClick={() => setActiveTab("firstLook")}
+          aria-pressed={activeTab === "firstLook"}
+        >
+          İlk bakış
         </button>
       </div>
     </div>
@@ -504,15 +505,10 @@ export default function OperationDetailPage() {
     try {
       setIsStarting(true);
       setStartErrorMessage(null);
-      setStartSuccessMessage(null);
+      // The status change raises its own notification.
       const nextOperation = await startOperation(operationId);
       setOperation(nextOperation);
       await refreshAfterMutation();
-      setStartSuccessMessage(
-        nextOperation.executionSummary.newlyPreparedCallJobs > 0
-          ? `Operasyon başlatıldı. ${nextOperation.executionSummary.newlyPreparedCallJobs} yeni çağrı işi hazırlandı.`
-          : "Operasyon başlatıldı. Mevcut çağrı işleri yeniden kullanıldı.",
-      );
     } catch (error) {
       setStartErrorMessage(error instanceof Error ? error.message : "Operasyon başlatılamadı.");
     } finally {
@@ -528,8 +524,8 @@ export default function OperationDetailPage() {
     try {
       setIsStarting(true);
       setStartErrorMessage(null);
-      setStartSuccessMessage(null);
 
+      // The status change raises its own notification.
       const nextOperation = primaryAction.intent === "pause"
         ? await pauseOperation(operationId)
         : primaryAction.intent === "resume"
@@ -538,24 +534,36 @@ export default function OperationDetailPage() {
 
       setOperation(nextOperation);
       await refreshAfterMutation();
-
-      if (primaryAction.intent === "pause") {
-        setStartSuccessMessage("Operasyon duraklatıldı. Mevcut görüşme bittiğinde yeni çağrı başlatılmayacak.");
-      } else if (primaryAction.intent === "resume") {
-        setStartSuccessMessage("Operasyon devam ettirildi. Sıradaki bekleyen çağrı akışa alınacak.");
-      } else {
-        setStartSuccessMessage(
-          nextOperation.executionSummary.newlyPreparedCallJobs > 0
-            ? `Operasyon başlatıldı. ${nextOperation.executionSummary.newlyPreparedCallJobs} yeni çağrı işi hazırlandı.`
-            : "Operasyon başlatıldı. Mevcut çağrı işleri yeniden kullanıldı.",
-        );
-      }
     } catch (error) {
       setStartErrorMessage(error instanceof Error ? error.message : "İşlem tamamlanamadı.");
     } finally {
       setIsStarting(false);
     }
   }, [operation, operationId, primaryAction.disabled, primaryAction.intent, refreshAfterMutation]);
+
+  useEffect(() => {
+    if (!isMoreMenuOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
+        setIsMoreMenuOpen(false);
+      }
+    }
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsMoreMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMoreMenuOpen]);
 
   const handleDeleteOperation = useCallback(async () => {
     if (!operationId || !operation || isDeleting) {
@@ -594,64 +602,33 @@ export default function OperationDetailPage() {
   const headerPlaybackState = useMemo(() => {
     if (operationIsTerminal) {
       return {
-        statusLabel: "Tamamlandı",
-        statusClassName: "operation-media-state is-complete",
-        statusIconClassName: "operation-media-state-icon is-complete",
-        StatusIcon: PauseIcon,
         actionLabel: "Operasyon Tamamlandı",
         actionClassName: "operation-media-action is-complete",
         actionIconClassName: "operation-media-action-icon is-complete",
         ActionIcon: PauseIcon,
         actionDisabled: true,
         actionHint: "Bu operasyonun çağrıları tamamlandı. Yeni bir aksiyon alınmaz.",
-        showInlineHint: true,
       };
     }
 
     if (operation?.status === "Running") {
       return {
-        statusLabel: "Yürütülüyor",
-        statusClassName: "operation-media-state is-running",
-        statusIconClassName: "operation-media-state-icon is-running",
-        StatusIcon: PlayIcon,
         actionLabel: primaryAction.label,
         actionClassName: "operation-media-action is-stop",
         actionIconClassName: "operation-media-action-icon is-stop",
         ActionIcon: PauseIcon,
         actionDisabled: isStarting || primaryAction.disabled,
         actionHint: primaryAction.hint,
-        showInlineHint: false,
-      };
-    }
-
-    if (operation?.status === "Paused") {
-      return {
-        statusLabel: "Duraklatıldı",
-        statusClassName: "operation-media-state is-idle",
-        statusIconClassName: "operation-media-state-icon is-idle",
-        StatusIcon: PauseIcon,
-        actionLabel: primaryAction.label,
-        actionClassName: "operation-media-action is-start",
-        actionIconClassName: "operation-media-action-icon is-start",
-        ActionIcon: PlayIcon,
-        actionDisabled: isStarting || primaryAction.disabled,
-        actionHint: primaryAction.hint,
-        showInlineHint: true,
       };
     }
 
     return {
-      statusLabel: "Başlatılmadı",
-      statusClassName: "operation-media-state is-idle",
-      statusIconClassName: "operation-media-state-icon is-idle",
-      StatusIcon: PauseIcon,
       actionLabel: primaryAction.label,
       actionClassName: "operation-media-action is-start",
       actionIconClassName: "operation-media-action-icon is-start",
       ActionIcon: PlayIcon,
       actionDisabled: isStarting || primaryAction.disabled,
       actionHint: primaryAction.hint,
-      showInlineHint: true,
     };
   }, [isStarting, operation?.status, operationIsTerminal, primaryAction.disabled, primaryAction.hint, primaryAction.label]);
 
@@ -675,14 +652,10 @@ export default function OperationDetailPage() {
           <strong>{failedContactCount}</strong>
         </div>
       </div>
-      {!operationIsTerminal ? (
-        <div className="survey-header-action-buttons operation-media-controls">
-          <div className={headerPlaybackState.statusClassName}>
-            <span className={headerPlaybackState.statusIconClassName}>
-              <headerPlaybackState.StatusIcon className="nav-icon" />
-            </span>
-            <span>{headerPlaybackState.statusLabel}</span>
-          </div>
+      <div className="survey-header-action-buttons operation-media-controls">
+        {/* A status, not a control: the badge keeps it from reading as a second button next to the action. */}
+        <StatusBadge status={operation.status} label={statusConfig.badge.label} />
+        {!operationIsTerminal ? (
           <button
             type="button"
             className={`compact-button survey-header-button ${headerPlaybackState.actionClassName}`}
@@ -695,31 +668,48 @@ export default function OperationDetailPage() {
             </span>
             {headerPlaybackState.actionLabel}
           </button>
-          {headerPlaybackState.actionHint && headerPlaybackState.showInlineHint ? (
-            <span className="survey-header-action-note">{headerPlaybackState.actionHint}</span>
+        ) : null}
+        <div className="operation-header-more" ref={moreMenuRef}>
+          <button
+            type="button"
+            className="button-secondary compact-button operation-header-more-button"
+            aria-label="Diğer işlemler"
+            aria-haspopup="menu"
+            aria-expanded={isMoreMenuOpen}
+            onClick={() => setIsMoreMenuOpen((open) => !open)}
+          >
+            ⋯
+          </button>
+          {isMoreMenuOpen ? (
+            <div className="operation-header-more-menu" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                className="operation-header-more-item is-danger"
+                disabled={isDeleting}
+                onClick={() => {
+                  setIsMoreMenuOpen(false);
+                  void handleDeleteOperation();
+                }}
+              >
+                {isDeleting ? "Siliniyor..." : "Operasyonu sil"}
+              </button>
+            </div>
           ) : null}
         </div>
-      ) : null}
-      <div className="survey-header-action-buttons">
-        <button
-          type="button"
-          className="button-secondary compact-button survey-header-button danger-button"
-          onClick={() => void handleDeleteOperation()}
-          disabled={isDeleting}
-          title="Operasyonu sil"
-        >
-          {isDeleting ? "Siliniyor..." : "Operasyonu Sil"}
-        </button>
+        {/* Why the action is unavailable; when it is available the hint stays in its tooltip. */}
+        {!operationIsTerminal && headerPlaybackState.actionDisabled && headerPlaybackState.actionHint ? (
+          <span className="survey-header-action-note">{headerPlaybackState.actionHint}</span>
+        ) : null}
       </div>
     </div>
-  ) : null, [attemptedContactCount, contactCount, failedContactCount, handleDeleteOperation, handlePrimaryHeaderAction, headerPlaybackState, isDeleting, operation, operationIsTerminal, successfulContactCount]);
+  ) : null, [attemptedContactCount, contactCount, failedContactCount, handleDeleteOperation, handlePrimaryHeaderAction, headerPlaybackState, isDeleting, isMoreMenuOpen, operation, operationIsTerminal, statusConfig.badge.label, successfulContactCount]);
 
   usePageHeaderOverride({ ...pageHeader, action: headerAction });
 
   async function handleFileSelection(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     setImportErrorMessage(null);
-    setImportSuccessMessage(null);
     setImportRows([]);
     setImportSummary(createEmptyImportSummary());
     setSelectedFileName(file?.name ?? null);
@@ -756,7 +746,6 @@ export default function OperationDetailPage() {
 
     const validRows = importRows.filter((row) => row.isValid);
     setImportErrorMessage(null);
-    setImportSuccessMessage(null);
 
     if (validRows.length === 0) {
       setImportErrorMessage("İçeri aktarılacak geçerli kişi bulunamadı.");
@@ -786,7 +775,9 @@ export default function OperationDetailPage() {
 
       if (importedRows.length > 0) {
         const duplicateFeedback = importSummary.duplicateRows > 0 ? ` ${importSummary.duplicateRows} tekrar satırı dışarıda bırakıldı.` : "";
-        setImportSuccessMessage(
+        notify(
+          "success",
+          "Toplu yükleme tamamlandı",
           failedRows.length > 0
             ? `${importedRows.length} kişi operasyona eklendi.${duplicateFeedback} ${failedRows.length} satır backend tarafında başarısız oldu.`
             : `${importedRows.length} kişi operasyona başarıyla eklendi.${duplicateFeedback}`,
@@ -824,7 +815,28 @@ export default function OperationDetailPage() {
   const importRequested = searchParams.get("importRequested") === "1";
   const importError = searchParams.get("importError");
   const contactsSkipped = searchParams.get("contacts") === "skipped";
-  const showCreationSummary = importRequested || contactsSkipped;
+  const creationSucceeded = !importError && (contactsSkipped || importedCount > 0);
+  // Only a creation whose contact import went wrong keeps a message on the page.
+  const showCreationSummary = (importRequested || contactsSkipped) && !creationSucceeded;
+  const hasAnnouncedCreationRef = useRef(false);
+
+  // A successful creation is announced once, and the result parameters are dropped from the URL so a reload
+  // does not announce it again.
+  useEffect(() => {
+    if (!creationSucceeded || hasAnnouncedCreationRef.current) {
+      return;
+    }
+
+    hasAnnouncedCreationRef.current = true;
+    notify(
+      "success",
+      contactsSkipped ? "Operasyon oluşturuldu" : "Operasyon ve kişi importu tamamlandı",
+      contactsSkipped
+        ? "Kişileri bu ekrandaki Kişi Ekle bölümünden yükleyebilirsiniz."
+        : `${importedCount} geçerli kişi yeni operasyona bağlandı.${invalidCount > 0 ? ` Geçersiz satır: ${invalidCount}.` : ""}${ignoredCount > 0 ? ` Boş geçilen satır: ${ignoredCount}.` : ""}`,
+    );
+    router.replace(`/operations/${operationId}`, { scroll: false });
+  }, [contactsSkipped, creationSucceeded, ignoredCount, importedCount, invalidCount, notify, operationId, router]);
 
   if (isMissing) {
     notFound();
@@ -855,22 +867,14 @@ export default function OperationDetailPage() {
           <section className="panel-card">
             <div className={`operation-inline-message ${importError ? "is-danger" : "is-accent"}`}>
               <strong>
-                {contactsSkipped
-                  ? "Operasyon oluşturuldu"
-                  : importError
-                    ? "Operasyon oluşturuldu, kişi importu tamamlanamadı"
-                    : importedCount > 0
-                      ? "Operasyon ve kişi importu tamamlandı"
-                      : "Operasyon oluşturuldu, geçerli kişi bulunamadı"}
+                {importError
+                  ? "Operasyon oluşturuldu, kişi importu tamamlanamadı"
+                  : "Operasyon oluşturuldu, geçerli kişi bulunamadı"}
               </strong>
               <span>
-                {contactsSkipped
-                  ? "Kişi importu bu adımda atlandı. Gerekirse bu ekrandan daha sonra yükleyebilirsiniz."
-                  : importError
-                    ? `${importError}${invalidCount > 0 ? ` Geçersiz satır: ${invalidCount}.` : ""}`
-                    : importedCount > 0
-                      ? `${importedCount} geçerli kişi yeni operasyona bağlandı.${invalidCount > 0 ? ` Geçersiz satır: ${invalidCount}.` : ""}${ignoredCount > 0 ? ` Boş geçilen satır: ${ignoredCount}.` : ""}`
-                      : `Dosya parse edildi ancak import edilecek geçerli kişi bulunamadı.${invalidCount > 0 ? ` Geçersiz satır: ${invalidCount}.` : ""}${ignoredCount > 0 ? ` Boş geçilen satır: ${ignoredCount}.` : ""}`}
+                {importError
+                  ? `${importError}${invalidCount > 0 ? ` Geçersiz satır: ${invalidCount}.` : ""}`
+                  : `Dosya parse edildi ancak import edilecek geçerli kişi bulunamadı.${invalidCount > 0 ? ` Geçersiz satır: ${invalidCount}.` : ""}${ignoredCount > 0 ? ` Boş geçilen satır: ${ignoredCount}.` : ""}`}
               </span>
             </div>
           </section>
@@ -1200,24 +1204,10 @@ export default function OperationDetailPage() {
                   </div>
                 ) : null}
 
-                {startSuccessMessage ? (
-                  <div className="operation-inline-message compact is-accent">
-                    <strong>Yürütme açıldı</strong>
-                    <span>{startSuccessMessage}</span>
-                  </div>
-                ) : null}
-
                 {importErrorMessage ? (
                   <div className="operation-inline-message compact is-danger">
                     <strong>Toplu yükleme sorunu</strong>
                     <span>{importErrorMessage}</span>
-                  </div>
-                ) : null}
-
-                {importSuccessMessage ? (
-                  <div className="operation-inline-message compact is-accent">
-                    <strong>Toplu yükleme tamamlandı</strong>
-                    <span>{importSuccessMessage}</span>
                   </div>
                 ) : null}
 
