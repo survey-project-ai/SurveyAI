@@ -366,7 +366,7 @@ public class OperationServiceImpl implements OperationService {
         long contactCount = countContacts(operation);
 
         if (operation.getStatus() != OperationStatus.RUNNING) {
-            throw new ValidationException("Yalnizca yurutulen operasyon duraklatilabilir.");
+            throw new ValidationException("Yalnızca yürütülen operasyon duraklatılabilir.");
         }
 
         operation.setStatus(OperationStatus.PAUSED);
@@ -381,7 +381,7 @@ public class OperationServiceImpl implements OperationService {
         long contactCount = countContacts(operation);
 
         if (operation.getStatus() != OperationStatus.PAUSED) {
-            throw new ValidationException("Yalnizca duraklatilmis operasyon devam ettirilebilir.");
+            throw new ValidationException("Yalnızca duraklatılmış operasyon devam ettirilebilir.");
         }
 
         callJobDispatcher.validateActiveProviderConfiguration();
@@ -401,7 +401,7 @@ public class OperationServiceImpl implements OperationService {
                 OPEN_CALL_JOB_STATUSES
         );
         if (operation.getStatus() == OperationStatus.RUNNING && hasOpenCallJobs) {
-            throw new ValidationException("Yurutulen operasyon silinemez. Once duraklatin.");
+            throw new ValidationException("Yürütülen operasyon silinemez. Önce duraklatın.");
         }
         // Pausing stops new dispatches but not a call that is already placed. Deleting now would
         // soft-delete the rows that call's tool requests and post-call webhook still need. Jobs that
@@ -536,10 +536,10 @@ public class OperationServiceImpl implements OperationService {
 
         List<OperationAnalyticsBreakdownItemDto> outcomeBreakdown = List.of(
                 new OperationAnalyticsBreakdownItemDto("queued", "Kuyrukta", queuedJobs, percentage(queuedJobs, totalJobs)),
-                new OperationAnalyticsBreakdownItemDto("inProgress", "Yurutuluyor", inProgressJobs, percentage(inProgressJobs, totalJobs)),
-                new OperationAnalyticsBreakdownItemDto("completed", "Tamamlandi", completedCallJobs, percentage(completedCallJobs, totalJobs)),
-                new OperationAnalyticsBreakdownItemDto("failed", "Basarisiz", failedCallJobs, percentage(failedCallJobs, totalJobs)),
-                new OperationAnalyticsBreakdownItemDto("skipped", "Atlandi", skippedCallJobs, percentage(skippedCallJobs, totalJobs))
+                new OperationAnalyticsBreakdownItemDto("inProgress", "Yürütülüyor", inProgressJobs, percentage(inProgressJobs, totalJobs)),
+                new OperationAnalyticsBreakdownItemDto("completed", "Tamamlandı", completedCallJobs, percentage(completedCallJobs, totalJobs)),
+                new OperationAnalyticsBreakdownItemDto("failed", "Başarısız", failedCallJobs, percentage(failedCallJobs, totalJobs)),
+                new OperationAnalyticsBreakdownItemDto("skipped", "Atlandı", skippedCallJobs, percentage(skippedCallJobs, totalJobs))
         );
 
         List<OperationAnalyticsQuestionSummaryDto> questionSummaries = questions.stream()
@@ -729,13 +729,13 @@ public class OperationServiceImpl implements OperationService {
 
         List<String> blockingReasons = new ArrayList<>();
         if (!surveyLinked) {
-            blockingReasons.add("Operasyona bagli bir anket bulunmuyor.");
+            blockingReasons.add("Operasyona bağlı bir anket bulunmuyor.");
         }
         if (surveyLinked && !surveyPublished) {
-            blockingReasons.add("Bagli anket yayinlanmis durumda degil.");
+            blockingReasons.add("Bağlı anket yayınlanmış durumda değil.");
         }
         if (!contactsLoaded) {
-            blockingReasons.add("Operasyonu baslatmak icin en az bir kisi gerekli.");
+            blockingReasons.add("Operasyonu başlatmak için en az bir kişi gerekli.");
         }
         if (!startableState) {
             blockingReasons.add(buildStateBlockingReason(operation.getStatus()));
@@ -875,7 +875,7 @@ public class OperationServiceImpl implements OperationService {
                     0,
                     0,
                     averageRating,
-                    answeredCount == 0 ? "Puan dagilimi, gorusmelerden sayisal cevap geldikce gosterilir." : null,
+                    answeredCount == 0 ? "Puan dağılımı, görüşmelerden sayısal cevap geldikçe gösterilir." : null,
                     0,
                     List.of(),
                     toBreakdown(ratings, answeredCount),
@@ -920,7 +920,7 @@ public class OperationServiceImpl implements OperationService {
                     0,
                     0,
                     averageValue,
-                    answeredCount == 0 ? "Sayisal dagilim, gecerli sayi yanitlari geldikce gosterilir." : null,
+                    answeredCount == 0 ? "Sayısal dağılım, geçerli sayı yanıtları geldikçe gösterilir." : null,
                     0,
                     List.of(),
                     toBreakdown(values, answeredCount),
@@ -974,7 +974,7 @@ public class OperationServiceImpl implements OperationService {
                         0,
                         0,
                         null,
-                        answeredCount == 0 ? "Isim yanitlari geldikce dagilim burada gosterilir." : null,
+                        answeredCount == 0 ? "İsim yanıtları geldikçe dağılım burada gösterilir." : null,
                         0,
                         List.of(),
                         toBreakdown(entityCounts, answeredCount == 0 ? 1 : answeredCount),
@@ -1018,7 +1018,7 @@ public class OperationServiceImpl implements OperationService {
                     0,
                     0,
                     null,
-                    answeredCount == 0 ? "Acik uclu icgoruler, gecerli metin yanitlari geldikce olusur." : null,
+                    answeredCount == 0 ? "Açık uçlu içgörüler, geçerli metin yanıtları geldikçe oluşur." : null,
                     reviewSamples.size(),
                     reviewGroupOptions,
                     toBreakdown(confirmedThemeCounts, confirmedCount == 0 ? 1 : confirmedCount),
@@ -1056,7 +1056,7 @@ public class OperationServiceImpl implements OperationService {
                 0,
                 0,
                 null,
-                answeredCount == 0 ? "Bu soru icin dagilim, cevaplar geldikce burada gosterilir." : null,
+                answeredCount == 0 ? "Bu soru için dağılım, cevaplar geldikçe burada gösterilir." : null,
                 0,
                 List.of(),
                 toBreakdown(distributions, answeredCount == 0 ? 1 : answeredCount),
@@ -1198,7 +1198,7 @@ public class OperationServiceImpl implements OperationService {
         }
 
         String emptyStateMessage = answeredRowCount == 0
-                ? "Bu soru grubu icin birlesik dagilim, cevaplar geldikce burada gosterilir."
+                ? "Bu soru grubu için birleşik dağılım, cevaplar geldikçe burada gösterilir."
                 : null;
         return new OperationAnalyticsQuestionGroupSummaryDto(
                 grouping.groupCode(),
@@ -1256,8 +1256,8 @@ public class OperationServiceImpl implements OperationService {
         List<OperationAnalyticsAudienceBreakdownDto> items = new ArrayList<>();
 
         addAudienceBreakdown(items, "gender", "Cinsiyet", questions, optionsByQuestionId, answersByQuestionId, totalContacts);
-        addAudienceBreakdown(items, "city", "Sehir", questions, optionsByQuestionId, answersByQuestionId, totalContacts);
-        addAudienceBreakdown(items, "age", "Yas", questions, optionsByQuestionId, answersByQuestionId, totalContacts);
+        addAudienceBreakdown(items, "city", "Şehir", questions, optionsByQuestionId, answersByQuestionId, totalContacts);
+        addAudienceBreakdown(items, "age", "Yaş", questions, optionsByQuestionId, answersByQuestionId, totalContacts);
 
         return items;
     }
@@ -1379,7 +1379,7 @@ public class OperationServiceImpl implements OperationService {
             List<SurveyAnswer> answers
     ) {
         Map<String, Long> counts = new LinkedHashMap<>();
-        counts.put("18 alti", 0L);
+        counts.put("18 altı", 0L);
         counts.put("18-24", 0L);
         counts.put("25-34", 0L);
         counts.put("35-44", 0L);
@@ -1450,7 +1450,7 @@ public class OperationServiceImpl implements OperationService {
 
     private String resolveAgeBucket(int age) {
         if (age < 18) {
-            return "18 alti";
+            return "18 altı";
         }
         if (age <= 24) {
             return "18-24";
@@ -1502,7 +1502,7 @@ public class OperationServiceImpl implements OperationService {
                 return "Erkek";
             }
             if (normalized.equals("kadin") || normalized.equals("kadın") || normalized.equals("female") || normalized.equals("woman")) {
-                return "Kadin";
+                return "Kadın";
             }
         }
 
@@ -1739,21 +1739,21 @@ public class OperationServiceImpl implements OperationService {
         }
 
         Map<String, Long> counts = new LinkedHashMap<>();
-        counts.put("Katilmayi kabul etti", 0L);
-        counts.put("Katilmayi reddetti", 0L);
-        counts.put("Belirsiz / yanitsiz", 0L);
+        counts.put("Katılmayı kabul etti", 0L);
+        counts.put("Katılmayı reddetti", 0L);
+        counts.put("Belirsiz / yanıtsız", 0L);
 
         for (SurveyResponseAnalyticsRow response : responses) {
             String consentState = trimToNull(response.consentState());
             // The interview ended without a clear answer; its ABANDONED status is not a refusal.
             if (CONSENT_UNCLEAR.equals(consentState)) {
-                counts.computeIfPresent("Belirsiz / yanitsiz", (key, value) -> value + 1L);
+                counts.computeIfPresent("Belirsiz / yanıtsız", (key, value) -> value + 1L);
             } else if (CONSENT_DECLINED.equals(consentState) || inferConsentDeclined(response)) {
-                counts.computeIfPresent("Katilmayi reddetti", (key, value) -> value + 1L);
+                counts.computeIfPresent("Katılmayı reddetti", (key, value) -> value + 1L);
             } else if (CONSENT_GRANTED.equals(consentState) || inferConsentAccepted(response)) {
-                counts.computeIfPresent("Katilmayi kabul etti", (key, value) -> value + 1L);
+                counts.computeIfPresent("Katılmayı kabul etti", (key, value) -> value + 1L);
             } else {
-                counts.computeIfPresent("Belirsiz / yanitsiz", (key, value) -> value + 1L);
+                counts.computeIfPresent("Belirsiz / yanıtsız", (key, value) -> value + 1L);
             }
         }
 
@@ -1875,7 +1875,7 @@ public class OperationServiceImpl implements OperationService {
     private OpenEndedGroupingResolution resolveOpenEndedGrouping(SurveyQuestion question, SurveyAnswer answer) {
         List<String> configuredCodes = extractConfiguredOpenEndedThemeCodes(question);
         if (configuredCodes.isEmpty()) {
-            return new OpenEndedGroupingResolution(null, List.of(), "Bu soru icin grup kategorileri tanimli degil.");
+            return new OpenEndedGroupingResolution(null, List.of(), "Bu soru için grup kategorileri tanımlı değil.");
         }
 
         List<String> storedCodes = extractStoredThemeCodes(answer).stream()
@@ -1898,9 +1898,9 @@ public class OperationServiceImpl implements OperationService {
             return new OpenEndedGroupingResolution(storedCodes.getFirst(), storedCodes, null);
         }
         if (storedCodes.size() > 1) {
-            return new OpenEndedGroupingResolution(null, storedCodes, "Birden fazla grup eslesmesi bulundu.");
+            return new OpenEndedGroupingResolution(null, storedCodes, "Birden fazla grup eşleşmesi bulundu.");
         }
-        return new OpenEndedGroupingResolution(null, List.of(), "Cevap net bir gruba eslestirilemedi.");
+        return new OpenEndedGroupingResolution(null, List.of(), "Cevap net bir gruba eşleştirilemedi.");
     }
 
     private List<String> extractDefaultOpenEndedThemeCodes() {
@@ -1932,7 +1932,7 @@ public class OperationServiceImpl implements OperationService {
 
         String respondentName = buildContactDisplayName(surveyResponse.contactFirstName(), surveyResponse.contactLastName());
         if (respondentName == null) {
-            respondentName = "Katilimci";
+            respondentName = "Katılımcı";
         }
 
         return new OperationAnalyticsSampleResponseDto(
@@ -2280,8 +2280,8 @@ public class OperationServiceImpl implements OperationService {
         if (totalContacts == 0) {
             items.add(new OperationAnalyticsInsightItemDto(
                     "awaiting-contacts",
-                    "Analitik icin kisi bekleniyor",
-                    "Bu operasyona kisi eklendiginde cagri ve yanit analitigi burada gercek veriden uretilir.",
+                    "Analitik için kişi bekleniyor",
+                    "Bu operasyona kişi eklendiğinde çağrı ve yanıt analitiği burada gerçek veriden üretilir.",
                     "neutral"
             ));
             return items;
@@ -2289,10 +2289,10 @@ public class OperationServiceImpl implements OperationService {
 
         items.add(new OperationAnalyticsInsightItemDto(
                 "reach",
-                "Temas kapsami",
+                "Temas kapsamı",
                 totalCallsAttempted > 0
-                        ? totalCallsAttempted + " kisiye cagri denemesi ulasildi. Temas orani %" + contactReachRate + "."
-                        : "Henuz cagri denemesi yok. Operasyon basladiginda temas orani olusacak.",
+                        ? totalCallsAttempted + " kişiye çağrı denemesi ulaşıldı. Temas oranı %" + contactReachRate + "."
+                        : "Henüz çağrı denemesi yok. Operasyon başladığında temas oranı oluşacak.",
                 totalCallsAttempted > 0 ? "positive" : "neutral"
         ));
 
@@ -2308,8 +2308,8 @@ public class OperationServiceImpl implements OperationService {
             if (topChoice != null && topChoice.count() > 0) {
                 items.add(new OperationAnalyticsInsightItemDto(
                         "top-choice",
-                        "En guclu cevap sinyali",
-                        "\"" + topChoiceQuestion.questionTitle() + "\" sorusunda en cok secilen cevap "
+                        "En güçlü cevap sinyali",
+                        "\"" + topChoiceQuestion.questionTitle() + "\" sorusunda en çok seçilen cevap "
                                 + topChoice.label() + " oldu (%" + topChoice.percentage() + ").",
                         "positive"
                 ));
@@ -2325,7 +2325,7 @@ public class OperationServiceImpl implements OperationService {
             items.add(new OperationAnalyticsInsightItemDto(
                     "rating",
                     "Ortalama puan",
-                    "\"" + ratingQuestion.questionTitle() + "\" icin ortalama puan " + ratingQuestion.averageRating() + ".",
+                    "\"" + ratingQuestion.questionTitle() + "\" için ortalama puan " + ratingQuestion.averageRating() + ".",
                     ratingQuestion.averageRating() >= 4 ? "positive" : "warning"
             ));
         }
@@ -2335,16 +2335,16 @@ public class OperationServiceImpl implements OperationService {
                     "attention",
                     "Takip gerektiren sinyal",
                     failedCallJobs > 0
-                            ? failedCallJobs + " cagri isi basarisiz sonuclandi. Eksik kalan veri ve cagri nedenleri incelenmeli."
-                            : "Yanitlarin ortalama tamamlama orani %" + averageCompletionPercent
-                                    + ". Kismi gorusmeler soru tamamlama kalitesini dusuruyor.",
+                            ? failedCallJobs + " çağrı işi başarısız sonuçlandı. Eksik kalan veri ve çağrı nedenleri incelenmeli."
+                            : "Yanıtların ortalama tamamlama oranı %" + averageCompletionPercent
+                                    + ". Kısmi görüşmeler soru tamamlama kalitesini düşürüyor.",
                     "warning"
             ));
         } else if (responseRate < 35) {
             items.add(new OperationAnalyticsInsightItemDto(
                     "response-rate",
-                    "Cevap orani izlenmeli",
-                    "Cevap orani %" + responseRate + " seviyesinde. Daha fazla tamamlanan gorusme icin akis izlenmeli.",
+                    "Cevap oranı izlenmeli",
+                    "Cevap oranı %" + responseRate + " seviyesinde. Daha fazla tamamlanan görüşme için akış izlenmeli.",
                     "warning"
             ));
         }
@@ -2372,30 +2372,30 @@ public class OperationServiceImpl implements OperationService {
             double responseRate
     ) {
         if (totalContacts == 0) {
-            return "Bu operasyon icin henuz kisi yuklenmedi. Analitik, yurutme oncesi hazirlik asamasinda bekliyor.";
+            return "Bu operasyon için henüz kişi yüklenmedi. Analitik, yürütme öncesi hazırlık aşamasında bekliyor.";
         }
 
         if (completedResponses == 0 && partialResponses == 0) {
             return operation.getStatus() == OperationStatus.READY
-                    ? "Tum on kosullar tamam. Yurutme basladiginda cevap ve soru dagilimlari burada canli olarak gorunur."
-                    : "Henuz geri donen gorusme yaniti yok. Yurutme basladiktan sonra operasyonel sonuclar bu alana akar.";
+                    ? "Tüm ön koşullar tamam. Yürütme başladığında cevap ve soru dağılımları burada canlı olarak görünür."
+                    : "Henüz geri dönen görüşme yanıtı yok. Yürütme başladıktan sonra operasyonel sonuçlar bu alana akar.";
         }
 
         if (operation.getStatus() == OperationStatus.FAILED) {
-            return "Operasyon durmus olsa da toplanan kismi veri korunuyor. En kritik sonraki adim, basarisiz isleri inceleyip yeniden hazirlama karari vermek.";
+            return "Operasyon durmuş olsa da toplanan kısmi veri korunuyor. En kritik sonraki adım, başarısız işleri inceleyip yeniden hazırlama kararı vermek.";
         }
 
         if (operation.getStatus() == OperationStatus.RUNNING) {
-            return "Canli veri akisi devam ediyor. Su anki tablo, cevap oraninin "
+            return "Canlı veri akışı devam ediyor. Şu anki tablo, cevap oranının "
                     + String.format(Locale.US, "%.1f", responseRate)
-                    + "% seviyesine geldigini ve gorusmeler tamamlandikca dagilimlarin guncellendigini gosteriyor.";
+                    + "% seviyesine geldiğini ve görüşmeler tamamlandıkça dağılımların güncellendiğini gösteriyor.";
         }
 
         if (failedCallJobs > 0) {
-            return "Operasyon kapandi. Tamamlanan cevaplara ek olarak inceleme gerektiren basarisiz cagri isleri de mevcut.";
+            return "Operasyon kapandı. Tamamlanan cevaplara ek olarak inceleme gerektiren başarısız çağrı işleri de mevcut.";
         }
 
-        return "Operasyon tamamlandi. Bu sayfa, sonuc ozetini ve soru bazli dagilimlari tek yuzeyde toplar.";
+        return "Operasyon tamamlandı. Bu sayfa, sonuç özetini ve soru bazlı dağılımları tek yüzeyde toplar.";
     }
 
     private String trimSample(String value) {
@@ -2473,20 +2473,19 @@ public class OperationServiceImpl implements OperationService {
                 .trim();
     }
 
+    // Turkish letters are folded so "Katılmayı kabul etti" keeps the key "katilmayi-kabul-etti".
     private String slugify(String input) {
-        return input.toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9]+", "-")
-                .replaceAll("(^-|-$)", "");
+        return normalize(input).replace(' ', '-');
     }
 
     private String buildStateBlockingReason(OperationStatus status) {
         return switch (status) {
-            case RUNNING -> "Operasyon zaten yurutmede.";
-            case COMPLETED -> "Tamamlanmis operasyon yeniden baslatilamaz.";
-            case FAILED -> "Basarisiz operasyon once incelenmeli.";
-            case PAUSED -> "Duraklatilmis operasyon devam ettirilmeden yeniden baslatilamaz.";
-            case CANCELLED -> "Iptal edilmis operasyon yeniden baslatilamaz.";
-            default -> "Operasyonun mevcut durumu baslatmaya uygun degil.";
+            case RUNNING -> "Operasyon zaten yürütmede.";
+            case COMPLETED -> "Tamamlanmış operasyon yeniden başlatılamaz.";
+            case FAILED -> "Başarısız operasyon önce incelenmeli.";
+            case PAUSED -> "Duraklatılmış operasyon devam ettirilmeden yeniden başlatılamaz.";
+            case CANCELLED -> "İptal edilmiş operasyon yeniden başlatılamaz.";
+            default -> "Operasyonun mevcut durumu başlatmaya uygun değil.";
         };
     }
 

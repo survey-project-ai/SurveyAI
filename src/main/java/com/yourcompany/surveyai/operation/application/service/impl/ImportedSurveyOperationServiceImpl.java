@@ -130,15 +130,15 @@ public class ImportedSurveyOperationServiceImpl implements ImportedSurveyOperati
         Survey survey = surveyRepository.findByIdAndCompany_IdAndDeletedAtIsNull(surveyId, companyId)
                 .orElseThrow(() -> new NotFoundException("Survey not found for company: " + surveyId));
         if (survey.getStatus() == SurveyStatus.ARCHIVED) {
-            throw new ValidationException("Arsivlenmis ankete veri eklenemez.");
+            throw new ValidationException("Arşivlenmiş ankete veri eklenemez.");
         }
         if (file == null || file.isEmpty()) {
-            throw new ValidationException("Ice aktarmak icin dolu bir Excel veya CSV dosyasi secin.");
+            throw new ValidationException("İçe aktarmak için dolu bir Excel veya CSV dosyası seçin.");
         }
 
         List<SurveyQuestion> questions = surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(surveyId);
         if (questions.isEmpty()) {
-            throw new ValidationException("Bu ankete veri eklemek icin once soru seti tanimlanmalidir.");
+            throw new ValidationException("Bu ankete veri eklemek için önce soru seti tanımlanmalıdır.");
         }
 
         Map<UUID, List<SurveyQuestionOption>> optionsByQuestionId = surveyQuestionOptionRepository
@@ -168,10 +168,10 @@ public class ImportedSurveyOperationServiceImpl implements ImportedSurveyOperati
         List<List<String>> matrix = switch (extension(fileName)) {
             case "xlsx", "xls" -> readExcel(file);
             case "csv" -> readCsv(file);
-            default -> throw new ValidationException("Yalnizca xlsx, xls ve csv destekleniyor.");
+            default -> throw new ValidationException("Yalnızca xlsx, xls ve csv destekleniyor.");
         };
         if (matrix.size() < 2) {
-            throw new ValidationException("Baslik satiri ve en az bir cevap satiri gereklidir.");
+            throw new ValidationException("Başlık satırı ve en az bir cevap satırı gereklidir.");
         }
 
         List<String> headers = matrix.get(0).stream().map(value -> value == null ? "" : value.trim()).toList();
@@ -190,7 +190,7 @@ public class ImportedSurveyOperationServiceImpl implements ImportedSurveyOperati
             }
         }
         if (rows.isEmpty()) {
-            throw new ValidationException("Dosyada ice aktarilabilir cevap satiri bulunamadi.");
+            throw new ValidationException("Dosyada içe aktarılabilir cevap satırı bulunamadı.");
         }
 
         List<MappedQuestionColumn> mappedColumns = new ArrayList<>();
@@ -205,18 +205,18 @@ public class ImportedSurveyOperationServiceImpl implements ImportedSurveyOperati
             }
             SurveyQuestion question = matchQuestion(header, questions);
             if (question == null) {
-                warnings.add("Kolon mevcut anket sorulari ile eslesmedigi icin atlandi: " + header);
+                warnings.add("Kolon mevcut anket soruları ile eşleşmediği için atlandı: " + header);
                 continue;
             }
             mappedColumns.add(new MappedQuestionColumn(index, question, optionsByQuestionId.getOrDefault(question.getId(), List.of())));
         }
         if (mappedColumns.isEmpty()) {
-            throw new ValidationException("Excel kolonlari mevcut anket sorulari ile eslesmedi. Kolon adlarini soru kodu veya soru basligi ile hizalayin.");
+            throw new ValidationException("Excel kolonları mevcut anket soruları ile eşleşmedi. Kolon adlarını soru kodu veya soru başlığı ile hizalayın.");
         }
         for (SurveyQuestion question : questions) {
             boolean matched = mappedColumns.stream().anyMatch(column -> column.question().getId().equals(question.getId()));
             if (!matched) {
-                warnings.add("Bu soru icin import kolonu bulunamadi: " + question.getTitle());
+                warnings.add("Bu soru için import kolonu bulunamadı: " + question.getTitle());
             }
         }
 
@@ -341,14 +341,14 @@ public class ImportedSurveyOperationServiceImpl implements ImportedSurveyOperati
             answer.setAnswerText(normalizedNumber == null ? rawValue : normalizedNumber.stripTrailingZeros().toPlainString());
             if (normalizedNumber == null) {
                 answer.setValid(false);
-                answer.setInvalidReason("Sayisal deger sayiya cevrilemedi");
+                answer.setInvalidReason("Sayısal değer sayıya çevrilemedi");
             }
         } else if (column.question().getQuestionType() == QuestionType.RATING) {
             normalizedNumber = parseDecimal(rawValue);
             answer.setAnswerNumber(normalizedNumber);
             if (normalizedNumber == null) {
                 answer.setValid(false);
-                answer.setInvalidReason("Puan degeri sayiya cevrilemedi");
+                answer.setInvalidReason("Puan değeri sayıya çevrilemedi");
             }
         } else if (column.question().getQuestionType() == QuestionType.SINGLE_CHOICE) {
             SurveyQuestionOption matched = matchOption(column.options(), rawValue);
@@ -356,7 +356,7 @@ public class ImportedSurveyOperationServiceImpl implements ImportedSurveyOperati
             answer.setAnswerText(matched != null ? matched.getLabel() : rawValue);
             if (matched == null) {
                 answer.setValid(false);
-                answer.setInvalidReason("Secenek eslestirilemedi");
+                answer.setInvalidReason("Seçenek eşleştirilemedi");
             } else {
                 normalizedValues = List.of(matched.getLabel());
             }
@@ -369,7 +369,7 @@ public class ImportedSurveyOperationServiceImpl implements ImportedSurveyOperati
             answer.setAnswerText(matched.isEmpty() ? rawValue : String.join(", ", matched));
             if (matched.isEmpty()) {
                 answer.setValid(false);
-                answer.setInvalidReason("Coklu secim secenekleri eslestirilemedi");
+                answer.setInvalidReason("Çoklu seçim seçenekleri eşleştirilemedi");
             } else {
                 normalizedValues = matched;
             }
@@ -437,7 +437,7 @@ public class ImportedSurveyOperationServiceImpl implements ImportedSurveyOperati
             }
             return rows;
         } catch (IOException exception) {
-            throw new ValidationException("Excel dosyasi okunamadi.");
+            throw new ValidationException("Excel dosyası okunamadı.");
         }
     }
 
@@ -445,7 +445,7 @@ public class ImportedSurveyOperationServiceImpl implements ImportedSurveyOperati
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
             return reader.lines().map(this::parseCsvLine).toList();
         } catch (IOException exception) {
-            throw new ValidationException("CSV dosyasi okunamadi.");
+            throw new ValidationException("CSV dosyası okunamadı.");
         }
     }
 
@@ -481,7 +481,7 @@ public class ImportedSurveyOperationServiceImpl implements ImportedSurveyOperati
     private String buildOperationPayload(ImportedSheet sheet, Survey survey) {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("importKind", "completed_survey_results");
-        payload.put("displayMessage", "Operasyon Import edilmistir.");
+        payload.put("displayMessage", "Operasyon Import edilmiştir.");
         payload.put("surveyId", survey.getId().toString());
         payload.put("surveyName", survey.getName());
         payload.put("fileName", sheet.fileName());

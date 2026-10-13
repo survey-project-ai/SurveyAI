@@ -76,12 +76,12 @@ public class GoogleFormsImportServiceImpl implements GoogleFormsImportService {
         JsonNode form = googleFormsClient.fetchForm(request.getAccessToken(), formId);
 
         JsonNode info = form.path("info");
-        String title = requireText(info.path("title").asText(null), "Google Form basligi bulunamadi.");
+        String title = requireText(info.path("title").asText(null), "Google Form başlığı bulunamadı.");
         String description = trimToNull(info.path("description").asText(null));
         List<ImportedQuestion> importedQuestions = mapQuestions(form.path("items"));
 
         if (importedQuestions.isEmpty()) {
-            throw new ValidationException("Google Form icinde ice aktarilabilir soru bulunamadi.");
+            throw new ValidationException("Google Form içinde içe aktarılabilir soru bulunamadı.");
         }
 
         CreateSurveyRequest createSurveyRequest = new CreateSurveyRequest();
@@ -150,11 +150,11 @@ public class GoogleFormsImportServiceImpl implements GoogleFormsImportService {
                 continue;
             }
             if (!item.has("questionItem")) {
-                throw new ValidationException("Form icinde desteklenmeyen bir oge bulundu. Yalnizca soru ogeleri ice aktarilabilir.");
+                throw new ValidationException("Form içinde desteklenmeyen bir öğe bulundu. Yalnızca soru öğeleri içe aktarılabilir.");
             }
 
             JsonNode question = item.path("questionItem").path("question");
-            String title = requireText(item.path("title").asText(null), "Bir sorunun basligi eksik.");
+            String title = requireText(item.path("title").asText(null), "Bir sorunun başlığı eksik.");
             String description = trimToNull(item.path("description").asText(null));
             boolean required = question.path("required").asBoolean(false);
             String sourceExternalId = trimToNull(question.path("questionId").asText(null));
@@ -240,11 +240,11 @@ public class GoogleFormsImportServiceImpl implements GoogleFormsImportService {
         Iterator<JsonNode> iterator = choiceQuestion.path("options").elements();
         while (iterator.hasNext()) {
             JsonNode option = iterator.next();
-            options.add(requireText(option.path("value").asText(null), "Bir secenegin metni eksik."));
+            options.add(requireText(option.path("value").asText(null), "Bir seçeneğin metni eksik."));
         }
 
         if (options.isEmpty()) {
-            throw new ValidationException("Secimli sorularda en az bir secenek bulunmalidir: " + title);
+            throw new ValidationException("Seçimli sorularda en az bir seçenek bulunmalıdır: " + title);
         }
 
         return switch (choiceType) {
@@ -266,7 +266,7 @@ public class GoogleFormsImportServiceImpl implements GoogleFormsImportService {
         int low = scaleQuestion.path("low").asInt(1);
         int high = scaleQuestion.path("high").asInt(5);
         if (low != 1 || (high != 5 && high != 10)) {
-            throw new ValidationException("Yalnizca 1-5 veya 1-10 olcekli sorular ice aktarilabilir: " + title);
+            throw new ValidationException("Yalnızca 1-5 veya 1-10 ölçekli sorular içe aktarılabilir: " + title);
         }
 
         return createImportedQuestion(
@@ -393,7 +393,7 @@ public class GoogleFormsImportServiceImpl implements GoogleFormsImportService {
             appendChoiceAliases(node, importedQuestion.options());
             return objectMapper.writeValueAsString(node);
         } catch (Exception exception) {
-            throw new ValidationException("Import ayarlari hazirlanamadi.");
+            throw new ValidationException("Import ayarları hazırlanamadı.");
         }
     }
 
@@ -405,7 +405,7 @@ public class GoogleFormsImportServiceImpl implements GoogleFormsImportService {
             payload.put("description", trimToNull(info.path("description").asText(null)));
             return objectMapper.writeValueAsString(payload);
         } catch (Exception exception) {
-            throw new ValidationException("Google Forms kaynak bilgisi hazirlanamadi.");
+            throw new ValidationException("Google Forms kaynak bilgisi hazırlanamadı.");
         }
     }
 
@@ -413,12 +413,12 @@ public class GoogleFormsImportServiceImpl implements GoogleFormsImportService {
         try {
             return objectMapper.writeValueAsString(item);
         } catch (Exception exception) {
-            throw new ValidationException("Google Forms soru metadatasi hazirlanamadi.");
+            throw new ValidationException("Google Forms soru metadatası hazırlanamadı.");
         }
     }
 
     private List<ImportedQuestion> mapQuestionGroupItem(JsonNode item) {
-        String title = requireText(item.path("title").asText(null), "Bir soru grubunun basligi eksik.");
+        String title = requireText(item.path("title").asText(null), "Bir soru grubunun başlığı eksik.");
         String description = trimToNull(item.path("description").asText(null));
         JsonNode group = item.path("questionGroupItem");
         List<String> options = readQuestionGroupOptions(group.path("grid"), title);
@@ -429,7 +429,7 @@ public class GoogleFormsImportServiceImpl implements GoogleFormsImportService {
         for (JsonNode groupQuestion : group.path("questions")) {
             String rowLabel = requireText(
                     groupQuestion.path("rowQuestion").path("title").asText(null),
-                    "Soru grubunda satir basligi eksik."
+                    "Soru grubunda satır başlığı eksik."
             );
             boolean required = groupQuestion.path("required").asBoolean(false);
             String sourceExternalId = trimToNull(groupQuestion.path("questionId").asText(null));
@@ -451,7 +451,7 @@ public class GoogleFormsImportServiceImpl implements GoogleFormsImportService {
         }
 
         if (questions.isEmpty()) {
-            throw new ValidationException("Google Forms soru grubunda ice aktarilabilir satir bulunamadi: " + title);
+            throw new ValidationException("Google Forms soru grubunda içe aktarılabilir satır bulunamadı: " + title);
         }
         return questions;
     }
@@ -461,10 +461,10 @@ public class GoogleFormsImportServiceImpl implements GoogleFormsImportService {
         Iterator<JsonNode> iterator = grid.path("columns").path("options").elements();
         while (iterator.hasNext()) {
             JsonNode option = iterator.next();
-            options.add(requireText(option.path("value").asText(null), "Soru grubunda secenek metni eksik."));
+            options.add(requireText(option.path("value").asText(null), "Soru grubunda seçenek metni eksik."));
         }
         if (options.isEmpty()) {
-            throw new ValidationException("Soru grubunda en az bir sutun secenegi bulunmalidir: " + title);
+            throw new ValidationException("Soru grubunda en az bir sütun seçeneği bulunmalıdır: " + title);
         }
         return List.copyOf(options);
     }
@@ -492,7 +492,7 @@ public class GoogleFormsImportServiceImpl implements GoogleFormsImportService {
             options.forEach(optionArray::add);
             return objectMapper.writeValueAsString(payload);
         } catch (Exception exception) {
-            throw new ValidationException("Google Forms grup soru metadatasi hazirlanamadi.");
+            throw new ValidationException("Google Forms grup soru metadatası hazırlanamadı.");
         }
     }
 
@@ -666,7 +666,7 @@ public class GoogleFormsImportServiceImpl implements GoogleFormsImportService {
         String normalizedUrl = requireText(formUrl, "Form URL zorunludur.");
         Matcher matcher = FORM_ID_PATTERN.matcher(normalizedUrl);
         if (!matcher.find()) {
-            throw new ValidationException("Google Forms URL'sinden form kimligi cikarilamadi.");
+            throw new ValidationException("Google Forms URL'sinden form kimliği çıkarılamadı.");
         }
         return matcher.group(1);
     }

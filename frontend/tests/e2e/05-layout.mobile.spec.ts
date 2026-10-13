@@ -12,7 +12,7 @@ test.describe("Mobile layout", () => {
     await page.goto("/login", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(1500);
 
-    await expect(page.getByRole("heading", { name: /Oturum ac/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Oturum aç/i })).toBeVisible();
     await expect(page.getByLabel("E-posta")).toBeVisible();
 
     const overflow = await page.evaluate(() => {

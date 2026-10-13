@@ -95,20 +95,20 @@ export async function login(page: Page): Promise<void> {
  * Attempts a UI login and resolves with the outcome instead of throwing, so
  * callers can distinguish "frontend broken" from "credentials rejected".
  * Returns { success:false, error } when the backend rejects the credentials
- * (the inline "Oturum acilamadi" error appears) or the redirect never happens.
+ * (the inline "Oturum açılamadı" error appears) or the redirect never happens.
  */
 export async function tryLogin(page: Page): Promise<{ success: boolean; error: string | null }> {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
   await page.getByLabel("E-posta").fill(TEST_EMAIL);
-  await page.getByLabel("Sifre").fill(TEST_PASSWORD);
-  await page.getByRole("button", { name: /Calisma alanini ac/i }).click();
+  await page.getByLabel("Şifre").fill(TEST_PASSWORD);
+  await page.getByRole("button", { name: /Çalışma alanını aç/i }).click();
 
   const redirected = page
     .waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 20_000 })
     .then(() => "redirected" as const)
     .catch(() => null);
   const rejected = page
-    .getByText(/Oturum acilamadi/i)
+    .getByText(/Oturum açılamadı/i)
     .waitFor({ state: "visible", timeout: 20_000 })
     .then(() => "rejected" as const)
     .catch(() => null);

@@ -20,12 +20,12 @@ export function getNavigationItems(t: Translate): NavItem[] {
         {
           href: "/surveys",
           label: "Anketler Dashboard",
-          description: "Tum anketleri gor",
+          description: "Tüm anketleri gör",
         },
         {
           href: "/surveys/new",
-          label: "Yeni Anket Olustur",
-          description: "Sifirdan yeni anket kur",
+          label: "Yeni Anket Oluştur",
+          description: "Sıfırdan yeni anket kur",
         },
       ],
     },
@@ -38,12 +38,12 @@ export function getNavigationItems(t: Translate): NavItem[] {
         {
           href: "/operations",
           label: "Operasyon Dashboard",
-          description: "Tum operasyonlari gor",
+          description: "Tüm operasyonları gör",
         },
         {
           href: "/operations/new",
           label: "Yeni Operasyon",
-          description: "Yeni arama akisi baslat",
+          description: "Yeni arama akışı başlat",
         },
       ],
     },

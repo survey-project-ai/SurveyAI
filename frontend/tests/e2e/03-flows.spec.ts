@@ -48,7 +48,7 @@ test.describe("Authenticated flows", () => {
     await page.goto("/operations/new", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(2500);
 
-    const createBtn = page.getByRole("button", { name: /^Operasyonu olustur$/i });
+    const createBtn = page.getByRole("button", { name: /^Operasyonu oluştur$/i });
     if (!(await createBtn.isEnabled().catch(() => false))) {
       // Disabled when no published surveys exist — that is itself a valid state.
       test.info().annotations.push({ type: "note", description: "Create button disabled (likely no published surveys). Validation path not exercised." });
@@ -57,7 +57,7 @@ test.describe("Authenticated flows", () => {
 
     await createBtn.click();
     // With empty name + no survey, inline validation errors must appear.
-    await expect(page.getByText(/Operasyon adi gerekli/i)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Operasyon adı gerekli/i)).toBeVisible({ timeout: 5000 });
   });
 
   test("surveys list renders", async ({ page }) => {

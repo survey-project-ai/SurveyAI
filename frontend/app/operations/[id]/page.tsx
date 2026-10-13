@@ -69,18 +69,18 @@ type OperationFirstLookPreview = {
 };
 
 const JOB_FILTERS: Array<["All" | CallJob["status"], string]> = [
-  ["All", "Tum durumlar"],
+  ["All", "Tüm durumlar"],
   ["Queued", "Kuyrukta"],
-  ["InProgress", "Suruyor"],
-  ["Completed", "Tamamlandi"],
-  ["Failed", "Basarisiz"],
-  ["Skipped", "Atlandi"],
+  ["InProgress", "Sürüyor"],
+  ["Completed", "Tamamlandı"],
+  ["Failed", "Başarısız"],
+  ["Skipped", "Atlandı"],
 ];
 
 const jobColumns: TableColumn<CallJob>[] = [
   {
     key: "person",
-    label: "Kisi",
+    label: "Kişi",
     render: (job) => (
       <Link href={`/operations/${job.operationId ?? ""}/jobs/${job.id}`} className="table-link-block">
         <div className="table-title">{job.personName}</div>
@@ -111,18 +111,18 @@ const jobColumns: TableColumn<CallJob>[] = [
         <div className="table-title">
           {buildJobResultTitle(job)}
         </div>
-        <div className="table-subtitle">{job.lastErrorMessage ?? job.lastResultSummary ?? "Durum ozeti"}</div>
+        <div className="table-subtitle">{job.lastErrorMessage ?? job.lastResultSummary ?? "Durum özeti"}</div>
       </div>
     ),
   },
   {
     key: "createdAt",
-    label: "Olusturuldu",
+    label: "Oluşturuldu",
     render: (job) => job.createdAt,
   },
   {
     key: "updatedAt",
-    label: "Guncellendi",
+    label: "Güncellendi",
     render: (job) => job.updatedAt,
   },
   {
@@ -130,7 +130,7 @@ const jobColumns: TableColumn<CallJob>[] = [
     label: "Detay",
     render: (job) => (
       <Link href={`/operations/${job.operationId ?? ""}/jobs/${job.id}`} className="button-secondary compact-button table-action-link">
-        Incele
+        İncele
       </Link>
     ),
   },
@@ -239,7 +239,7 @@ export default function OperationDetailPage() {
           return;
         }
 
-        const message = error instanceof Error ? error.message : "Operasyon detayi yuklenemedi.";
+        const message = error instanceof Error ? error.message : "Operasyon detayı yüklenemedi.";
         if (message.includes("(404)")) {
           setIsMissing(true);
           return;
@@ -333,7 +333,7 @@ export default function OperationDetailPage() {
           return;
         }
 
-        setJobsErrorMessage(error instanceof Error ? error.message : "Cagri isi listesi yuklenemedi.");
+        setJobsErrorMessage(error instanceof Error ? error.message : "Çağrı işi listesi yüklenemedi.");
       } finally {
         if (!controller.signal.aborted) {
           setIsJobsLoading(false);
@@ -374,27 +374,27 @@ export default function OperationDetailPage() {
 
     return [
       {
-        label: "Hedef kisi",
+        label: "Hedef kişi",
         value: String(contactCount),
-        detail: "Operasyona yuklenen kisiler",
+        detail: "Operasyona yüklenen kişiler",
         tone: "neutral" as const,
       },
       {
-        label: "Cagri denemesi",
+        label: "Çağrı denemesi",
         value: String(analytics?.totalCallsAttempted ?? operation?.executionSummary.totalCallJobs ?? 0),
-        detail: "Yurutme verisi geldikce guncellenir",
+        detail: "Yürütme verisi geldikçe güncellenir",
         tone: "neutral" as const,
       },
       {
-        label: "Yanit veren kisi",
+        label: "Yanıt veren kişi",
         value: String(analytics?.respondedContacts ?? 0),
-        detail: "Tam ve kismi yanit veren kisi sayisi",
+        detail: "Tam ve kısmi yanıt veren kişi sayısı",
         tone: "neutral" as const,
       },
       {
-        label: "Cevap orani",
+        label: "Cevap oranı",
         value: `%${analytics?.responseRate ?? 0}`,
-        detail: "Yanit veren kisi / hedef kisi",
+        detail: "Yanıt veren kişi / hedef kişi",
         tone: "neutral" as const,
       },
     ];
@@ -437,7 +437,7 @@ export default function OperationDetailPage() {
           onClick={() => setActiveTab("analysis")}
           aria-pressed={activeTab === "analysis"}
         >
-          Sonuclar
+          Sonuçlar
         </button>
         <button
           type="button"
@@ -445,7 +445,7 @@ export default function OperationDetailPage() {
           onClick={() => setActiveTab("firstLook")}
           aria-pressed={activeTab === "firstLook"}
         >
-          Ilk bakis
+          İlk bakış
         </button>
         <button
           type="button"
@@ -512,11 +512,11 @@ export default function OperationDetailPage() {
       await refreshAfterMutation();
       setStartSuccessMessage(
         nextOperation.executionSummary.newlyPreparedCallJobs > 0
-          ? `Operasyon baslatildi. ${nextOperation.executionSummary.newlyPreparedCallJobs} yeni cagri isi hazirlandi.`
-          : "Operasyon baslatildi. Mevcut cagri isleri yeniden kullanildi.",
+          ? `Operasyon başlatıldı. ${nextOperation.executionSummary.newlyPreparedCallJobs} yeni çağrı işi hazırlandı.`
+          : "Operasyon başlatıldı. Mevcut çağrı işleri yeniden kullanıldı.",
       );
     } catch (error) {
-      setStartErrorMessage(error instanceof Error ? error.message : "Operasyon baslatilamadi.");
+      setStartErrorMessage(error instanceof Error ? error.message : "Operasyon başlatılamadı.");
     } finally {
       setIsStarting(false);
     }
@@ -542,18 +542,18 @@ export default function OperationDetailPage() {
       await refreshAfterMutation();
 
       if (primaryAction.intent === "pause") {
-        setStartSuccessMessage("Operasyon duraklatildi. Mevcut gorusme bittiginde yeni cagri baslatilmayacak.");
+        setStartSuccessMessage("Operasyon duraklatıldı. Mevcut görüşme bittiğinde yeni çağrı başlatılmayacak.");
       } else if (primaryAction.intent === "resume") {
-        setStartSuccessMessage("Operasyon devam ettirildi. Siradaki bekleyen cagri akisa alinacak.");
+        setStartSuccessMessage("Operasyon devam ettirildi. Sıradaki bekleyen çağrı akışa alınacak.");
       } else {
         setStartSuccessMessage(
           nextOperation.executionSummary.newlyPreparedCallJobs > 0
-            ? `Operasyon baslatildi. ${nextOperation.executionSummary.newlyPreparedCallJobs} yeni cagri isi hazirlandi.`
-            : "Operasyon baslatildi. Mevcut cagri isleri yeniden kullanildi.",
+            ? `Operasyon başlatıldı. ${nextOperation.executionSummary.newlyPreparedCallJobs} yeni çağrı işi hazırlandı.`
+            : "Operasyon başlatıldı. Mevcut çağrı işleri yeniden kullanıldı.",
         );
       }
     } catch (error) {
-      setStartErrorMessage(error instanceof Error ? error.message : "Islem tamamlanamadi.");
+      setStartErrorMessage(error instanceof Error ? error.message : "İşlem tamamlanamadı.");
     } finally {
       setIsStarting(false);
     }
@@ -565,7 +565,7 @@ export default function OperationDetailPage() {
     }
 
     const confirmed = window.confirm(
-      `"${operation.name}" operasyonunu silmek istediginize emin misiniz? Bu islem geri alinmaz.`,
+      `"${operation.name}" operasyonunu silmek istediğinize emin misiniz? Bu işlem geri alınmaz.`,
     );
     if (!confirmed) {
       return;
@@ -596,23 +596,23 @@ export default function OperationDetailPage() {
   const headerPlaybackState = useMemo(() => {
     if (operationIsTerminal) {
       return {
-        statusLabel: "Tamamlandi",
+        statusLabel: "Tamamlandı",
         statusClassName: "operation-media-state is-complete",
         statusIconClassName: "operation-media-state-icon is-complete",
         StatusIcon: PauseIcon,
-        actionLabel: "Operasyon Tamamlandi",
+        actionLabel: "Operasyon Tamamlandı",
         actionClassName: "operation-media-action is-complete",
         actionIconClassName: "operation-media-action-icon is-complete",
         ActionIcon: PauseIcon,
         actionDisabled: true,
-        actionHint: "Bu operasyonun cagrilari tamamlandi. Yeni bir aksiyon alinmaz.",
+        actionHint: "Bu operasyonun çağrıları tamamlandı. Yeni bir aksiyon alınmaz.",
         showInlineHint: true,
       };
     }
 
     if (operation?.status === "Running") {
       return {
-        statusLabel: "Yurutuluyor",
+        statusLabel: "Yürütülüyor",
         statusClassName: "operation-media-state is-running",
         statusIconClassName: "operation-media-state-icon is-running",
         StatusIcon: PlayIcon,
@@ -628,7 +628,7 @@ export default function OperationDetailPage() {
 
     if (operation?.status === "Paused") {
       return {
-        statusLabel: "Duraklatildi",
+        statusLabel: "Duraklatıldı",
         statusClassName: "operation-media-state is-idle",
         statusIconClassName: "operation-media-state-icon is-idle",
         StatusIcon: PauseIcon,
@@ -643,7 +643,7 @@ export default function OperationDetailPage() {
     }
 
     return {
-      statusLabel: "Baslatilmadi",
+      statusLabel: "Başlatılmadı",
       statusClassName: "operation-media-state is-idle",
       statusIconClassName: "operation-media-state-icon is-idle",
       StatusIcon: PauseIcon,
@@ -669,11 +669,11 @@ export default function OperationDetailPage() {
           <strong>{attemptedContactCount}</strong>
         </div>
         <div className="operation-header-summary-item is-success">
-          <span>Basarili</span>
+          <span>Başarılı</span>
           <strong>{successfulContactCount}</strong>
         </div>
         <div className="operation-header-summary-item is-failure">
-          <span>Basarisiz</span>
+          <span>Başarısız</span>
           <strong>{failedContactCount}</strong>
         </div>
       </div>
@@ -742,10 +742,10 @@ export default function OperationDetailPage() {
       setImportSummary(result.summary);
 
       if (result.summary.totalRows === 0 && result.summary.ignoredRows === 0) {
-        setImportErrorMessage("Dosyada veri satiri bulunamadi.");
+        setImportErrorMessage("Dosyada veri satırı bulunamadı.");
       }
     } catch (error) {
-      setImportErrorMessage(error instanceof Error ? error.message : "Dosya okunamadi.");
+      setImportErrorMessage(error instanceof Error ? error.message : "Dosya okunamadı.");
     } finally {
       event.target.value = "";
     }
@@ -761,7 +761,7 @@ export default function OperationDetailPage() {
     setImportSuccessMessage(null);
 
     if (validRows.length === 0) {
-      setImportErrorMessage("Iceri aktarilacak gecerli kisi bulunamadi.");
+      setImportErrorMessage("İçeri aktarılacak geçerli kişi bulunamadı.");
       return;
     }
 
@@ -779,7 +779,7 @@ export default function OperationDetailPage() {
         } catch (error) {
           failedRows.push({
             rowNumber: row.rowNumber,
-            reason: error instanceof Error ? error.message : "Kisi eklenemedi.",
+            reason: error instanceof Error ? error.message : "Kişi eklenemedi.",
           });
         }
       }
@@ -787,20 +787,20 @@ export default function OperationDetailPage() {
       await refreshAfterMutation();
 
       if (importedRows.length > 0) {
-        const duplicateFeedback = importSummary.duplicateRows > 0 ? ` ${importSummary.duplicateRows} tekrar satiri disarida birakildi.` : "";
+        const duplicateFeedback = importSummary.duplicateRows > 0 ? ` ${importSummary.duplicateRows} tekrar satırı dışarıda bırakıldı.` : "";
         setImportSuccessMessage(
           failedRows.length > 0
-            ? `${importedRows.length} kisi operasyona eklendi.${duplicateFeedback} ${failedRows.length} satir backend tarafinda basarisiz oldu.`
-            : `${importedRows.length} kisi operasyona basariyla eklendi.${duplicateFeedback}`,
+            ? `${importedRows.length} kişi operasyona eklendi.${duplicateFeedback} ${failedRows.length} satır backend tarafında başarısız oldu.`
+            : `${importedRows.length} kişi operasyona başarıyla eklendi.${duplicateFeedback}`,
         );
       }
 
       if (failedRows.length > 0) {
-        const summaryText = failedRows.slice(0, 4).map((item) => `Satir ${item.rowNumber}: ${item.reason}`).join(" ");
+        const summaryText = failedRows.slice(0, 4).map((item) => `Satır ${item.rowNumber}: ${item.reason}`).join(" ");
         setImportErrorMessage(
           failedRows.length > 4
-            ? `${failedRows.length} satir ice aktarilamadi. ${summaryText} Daha fazla satir icin dosyayi gozden gecirin.`
-            : `${failedRows.length} satir ice aktarilamadi. ${summaryText}`,
+            ? `${failedRows.length} satır içe aktarılamadı. ${summaryText} Daha fazla satır için dosyayı gözden geçirin.`
+            : `${failedRows.length} satır içe aktarılamadı. ${summaryText}`,
         );
       }
 
@@ -838,7 +838,7 @@ export default function OperationDetailPage() {
         {errorMessage ? (
           <section className="panel-card">
             <div className="operation-inline-message is-danger">
-              <strong>Operasyon calisma alani yuklenemedi</strong>
+              <strong>Operasyon çalışma alanı yüklenemedi</strong>
               <span>{errorMessage}</span>
             </div>
           </section>
@@ -858,21 +858,21 @@ export default function OperationDetailPage() {
             <div className={`operation-inline-message ${importError ? "is-danger" : "is-accent"}`}>
               <strong>
                 {contactsSkipped
-                  ? "Operasyon olusturuldu"
+                  ? "Operasyon oluşturuldu"
                   : importError
-                    ? "Operasyon olusturuldu, kisi importu tamamlanamadi"
+                    ? "Operasyon oluşturuldu, kişi importu tamamlanamadı"
                     : importedCount > 0
-                      ? "Operasyon ve kisi importu tamamlandi"
-                      : "Operasyon olusturuldu, gecerli kisi bulunamadi"}
+                      ? "Operasyon ve kişi importu tamamlandı"
+                      : "Operasyon oluşturuldu, geçerli kişi bulunamadı"}
               </strong>
               <span>
                 {contactsSkipped
-                  ? "Kisi importu bu adimda atlandi. Gerekirse bu ekrandan daha sonra yukleyebilirsiniz."
+                  ? "Kişi importu bu adımda atlandı. Gerekirse bu ekrandan daha sonra yükleyebilirsiniz."
                   : importError
-                    ? `${importError}${invalidCount > 0 ? ` Gecersiz satir: ${invalidCount}.` : ""}`
+                    ? `${importError}${invalidCount > 0 ? ` Geçersiz satır: ${invalidCount}.` : ""}`
                     : importedCount > 0
-                      ? `${importedCount} gecerli kisi yeni operasyona baglandi.${invalidCount > 0 ? ` Gecersiz satir: ${invalidCount}.` : ""}${ignoredCount > 0 ? ` Bos gecilen satir: ${ignoredCount}.` : ""}`
-                      : `Dosya parse edildi ancak import edilecek gecerli kisi bulunamadi.${invalidCount > 0 ? ` Gecersiz satir: ${invalidCount}.` : ""}${ignoredCount > 0 ? ` Bos gecilen satir: ${ignoredCount}.` : ""}`}
+                      ? `${importedCount} geçerli kişi yeni operasyona bağlandı.${invalidCount > 0 ? ` Geçersiz satır: ${invalidCount}.` : ""}${ignoredCount > 0 ? ` Boş geçilen satır: ${ignoredCount}.` : ""}`
+                      : `Dosya parse edildi ancak import edilecek geçerli kişi bulunamadı.${invalidCount > 0 ? ` Geçersiz satır: ${invalidCount}.` : ""}${ignoredCount > 0 ? ` Boş geçilen satır: ${ignoredCount}.` : ""}`}
               </span>
             </div>
           </section>
@@ -895,25 +895,25 @@ export default function OperationDetailPage() {
             <div className="operation-detail-summary-strip">
               <div className="operation-detail-summary-copy">
                 <div className="operation-detail-hero-meta">
-                  <span className="operation-kicker">Ilk bakis</span>
+                  <span className="operation-kicker">İlk bakış</span>
                   <StatusBadge
                     status={firstLookSuggestions.length > 0 ? "Completed" : "Draft"}
-                    label={firstLookSuggestions.length > 0 ? "Hazirlandi" : "Bos"}
+                    label={firstLookSuggestions.length > 0 ? "Hazırlandı" : "Boş"}
                   />
                 </div>
-                <h2>Operation autoEntityLexicon onizlemesi</h2>
+                <h2>Operation autoEntityLexicon önizlemesi</h2>
                 <p>
-                  Operation olusturulurken cikarilan lexicon onerileri burada listelenir. Bu alan su an inceleme
-                  amaclidir; duzenleme akisini bir sonraki adimda ekleyebiliriz.
+                  Operation oluşturulurken çıkarılan lexicon önerileri burada listelenir. Bu alan şu an inceleme
+                  amaçlıdır; düzenleme akışını bir sonraki adımda ekleyebiliriz.
                 </p>
               </div>
               <div className="operation-detail-summary-note">
-                <span>Uretim ozetı</span>
-                <strong>{firstLookSuggestions.length} soru icin oneriler hazir</strong>
+                <span>Üretim özeti</span>
+                <strong>{firstLookSuggestions.length} soru için öneriler hazır</strong>
                 <small>
                   {firstLookPreview?.generatedAt
-                    ? `Uretim zamani: ${new Date(firstLookPreview.generatedAt).toLocaleString("tr-TR")}`
-                    : "Uretim zamani bilgisi bulunamadi."}
+                    ? `Üretim zamanı: ${new Date(firstLookPreview.generatedAt).toLocaleString("tr-TR")}`
+                    : "Üretim zamanı bilgisi bulunamadı."}
                 </small>
               </div>
             </div>
@@ -930,7 +930,7 @@ export default function OperationDetailPage() {
                 {firstLookKeywords.length > 0 ? (
                   <SectionCard
                     title="ASR anahtar kelimeleri"
-                    description="Provider tarafina keyword olarak gidecek birlesik liste."
+                    description="Provider tarafına keyword olarak gidecek birleşik liste."
                   >
                     <div className="operation-first-look-chip-grid">
                       {firstLookKeywords.map((keyword) => (
@@ -941,13 +941,13 @@ export default function OperationDetailPage() {
                 ) : null}
 
                 <SectionCard
-                  title="Soru bazli oneriler"
-                  description="Her soru icin cikarilan named entity lexicon girisleri burada gorunur."
+                  title="Soru bazlı öneriler"
+                  description="Her soru için çıkarılan named entity lexicon girişleri burada görünür."
                 >
                   {firstLookSuggestions.length === 0 ? (
                     <div className="operation-empty-state">
-                      <strong>Gosterilecek lexicon onerisi yok</strong>
-                      <p>Bu operation icin autoEntityLexicon onizlemesi uretilmedi ya da bos geldi.</p>
+                      <strong>Gösterilecek lexicon önerisi yok</strong>
+                      <p>Bu operation için autoEntityLexicon önizlemesi üretilmedi ya da boş geldi.</p>
                     </div>
                   ) : (
                     <div className="operation-first-look-list">
@@ -966,7 +966,7 @@ export default function OperationDetailPage() {
                             </div>
 
                             {entries.length === 0 ? (
-                              <p className="operation-first-look-empty">Bu soru icin entity girisi bulunamadi.</p>
+                              <p className="operation-first-look-empty">Bu soru için entity girişi bulunamadı.</p>
                             ) : (
                               <div className="operation-first-look-entries">
                                 {entries.map((entry) => (
@@ -990,8 +990,8 @@ export default function OperationDetailPage() {
               </>
             ) : (
               <div className="operation-empty-state">
-                <strong>Ilk bakis verisi bulunamadi</strong>
-                <p>Bu operation icin `sourcePayloadJson` icinde `autoEntityLexiconPreview` bulunmuyor.</p>
+                <strong>İlk bakış verisi bulunamadı</strong>
+                <p>Bu operation için `sourcePayloadJson` içinde `autoEntityLexiconPreview` bulunmuyor.</p>
               </div>
             )}
           </section>
@@ -1129,13 +1129,13 @@ export default function OperationDetailPage() {
                 <p>{statusConfig.summary}</p>
               </div>
               <div className="operation-detail-summary-note">
-                <span>Bagli anket</span>
-                <strong>{operation?.survey ?? "Anket baglanmadi"}</strong>
-                <small>{operation?.surveyGoal?.trim() || "Anket hedef ozeti tanimlanmamis."}</small>
+                <span>Bağlı anket</span>
+                <strong>{operation?.survey ?? "Anket bağlanmadı"}</strong>
+                <small>{operation?.surveyGoal?.trim() || "Anket hedef özeti tanımlanmamış."}</small>
                 {operation?.surveyId ? (
                   <Link href={`/surveys/${operation.surveyId}/preview`} className="operation-detail-link-card-cta">
                     <EyeIcon className="nav-icon" />
-                    Sorulari gor
+                    Soruları gör
                   </Link>
                 ) : null}
               </div>
@@ -1154,14 +1154,14 @@ export default function OperationDetailPage() {
             </div>
 
             <SectionCard
-              title={operationHasStarted ? "Kisi Ekle" : "Kisi Ice Aktar"}
+              title={operationHasStarted ? "Kişi Ekle" : "Kişi İçe Aktar"}
               description={operationHasStarted
-                ? "Akis baslatildiktan sonra mevcut liste degistirilmez. Eklenen kisiler mevcut cagri sirasinin sonuna eklenir."
-                : "Kisi listesini CSV veya Excel dosyasindan kucuk bir kontrol yuzeyiyle bu operasyona ekleyin."}
+                ? "Akış başlatıldıktan sonra mevcut liste değiştirilmez. Eklenen kişiler mevcut çağrı sırasının sonuna eklenir."
+                : "Kişi listesini CSV veya Excel dosyasından küçük bir kontrol yüzeyiyle bu operasyona ekleyin."}
               action={(
                 <div className="operation-detail-inline-actions">
                   <button type="button" className="button-secondary compact-button" onClick={downloadOperationContactsTemplate}>
-                    Ornek sablon
+                    Örnek şablon
                   </button>
                 </div>
               )}
@@ -1169,16 +1169,16 @@ export default function OperationDetailPage() {
               <div className="operation-detail-import-stack">
                 <div className="operation-detail-import-meta">
                   <div className="operation-contact-status-card">
-                    <span>Secilen dosya</span>
+                    <span>Seçilen dosya</span>
                     <div className="operation-contact-status-inline">
-                      <strong>{selectedFileName ?? "Dosya secilmedi"}</strong>
+                      <strong>{selectedFileName ?? "Dosya seçilmedi"}</strong>
                       <button
                         type="button"
                         className="button-secondary compact-button"
                         onClick={openImportPicker}
                         disabled={!canAppendContacts}
                       >
-                        Dosya sec
+                        Dosya seç
                       </button>
                     </div>
                   </div>
@@ -1186,39 +1186,39 @@ export default function OperationDetailPage() {
 
                 {(importSummary.totalRows > 0 || importSummary.ignoredRows > 0) ? (
                   <div className="operation-import-stats">
-                    <div className="operation-import-stat"><span>Toplam satir</span><strong>{importSummary.totalRows}</strong></div>
-                    <div className="operation-import-stat"><span>Gecerli</span><strong>{importSummary.validRows}</strong></div>
-                    <div className="operation-import-stat"><span>Gecersiz</span><strong>{importSummary.invalidRows}</strong></div>
-                    <div className="operation-import-stat"><span>Dosya tekrari</span><strong>{importSummary.duplicateInFileRows}</strong></div>
+                    <div className="operation-import-stat"><span>Toplam satır</span><strong>{importSummary.totalRows}</strong></div>
+                    <div className="operation-import-stat"><span>Geçerli</span><strong>{importSummary.validRows}</strong></div>
+                    <div className="operation-import-stat"><span>Geçersiz</span><strong>{importSummary.invalidRows}</strong></div>
+                    <div className="operation-import-stat"><span>Dosya tekrarı</span><strong>{importSummary.duplicateInFileRows}</strong></div>
                     <div className="operation-import-stat"><span>Operasyonda var</span><strong>{importSummary.duplicateInOperationRows}</strong></div>
-                    <div className="operation-import-stat"><span>Bos gecilen</span><strong>{importSummary.ignoredRows}</strong></div>
+                    <div className="operation-import-stat"><span>Boş geçilen</span><strong>{importSummary.ignoredRows}</strong></div>
                   </div>
                 ) : null}
 
                 {startErrorMessage ? (
                   <div className="operation-inline-message compact is-danger">
-                    <strong>Baslatma tamamlanamadi</strong>
+                    <strong>Başlatma tamamlanamadı</strong>
                     <span>{startErrorMessage}</span>
                   </div>
                 ) : null}
 
                 {startSuccessMessage ? (
                   <div className="operation-inline-message compact is-accent">
-                    <strong>Yurutme acildi</strong>
+                    <strong>Yürütme açıldı</strong>
                     <span>{startSuccessMessage}</span>
                   </div>
                 ) : null}
 
                 {importErrorMessage ? (
                   <div className="operation-inline-message compact is-danger">
-                    <strong>Toplu yukleme sorunu</strong>
+                    <strong>Toplu yükleme sorunu</strong>
                     <span>{importErrorMessage}</span>
                   </div>
                 ) : null}
 
                 {importSuccessMessage ? (
                   <div className="operation-inline-message compact is-accent">
-                    <strong>Toplu yukleme tamamlandi</strong>
+                    <strong>Toplu yükleme tamamlandı</strong>
                     <span>{importSuccessMessage}</span>
                   </div>
                 ) : null}
@@ -1226,14 +1226,14 @@ export default function OperationDetailPage() {
                 {importRows.length > 0 ? (
                   <div className="operation-import-preview operation-import-preview-compact">
                     <div className="operation-import-preview-head">
-                      <strong>Onizleme</strong>
-                      <span>Ilk {previewRows.length} satir gosteriliyor.</span>
+                      <strong>Önizleme</strong>
+                      <span>İlk {previewRows.length} satır gösteriliyor.</span>
                     </div>
                     <div className="operation-import-table-wrap">
                       <table className="operation-import-table">
                         <thead>
                           <tr>
-                            <th>Satir</th>
+                            <th>Satır</th>
                             <th>Ad soyad</th>
                             <th>Telefon</th>
                             <th>Durum</th>
@@ -1251,7 +1251,7 @@ export default function OperationDetailPage() {
                               <td>{row.rowNumber}</td>
                               <td>{row.name || "-"}</td>
                               <td>{row.normalizedPhoneNumber || row.phoneNumber || "-"}</td>
-                              <td>{row.isValid ? "Hazir" : row.reason}</td>
+                              <td>{row.isValid ? "Hazır" : row.reason}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1267,7 +1267,7 @@ export default function OperationDetailPage() {
                     disabled={isLoading || isImporting || !operation || !canAppendContacts || importSummary.validRows === 0}
                     onClick={() => void handleImportContacts()}
                   >
-                    {isImporting ? "Kisiler ice aktariliyor..." : "Ekle"}
+                    {isImporting ? "Kişiler içe aktarılıyor..." : "Ekle"}
                   </button>
                   {operation?.status === "Ready" ? (
                     <button
@@ -1304,14 +1304,14 @@ function buildJobResultTitle(job: CallJob): string {
   }
 
   if (job.status === "Failed") {
-    return job.lastResultSummary ?? "Cagri basarisiz oldu";
+    return job.lastResultSummary ?? "Çağrı başarısız oldu";
   }
 
   if (job.status === "Completed") {
-    return "Gecerli cevap kaydi yok";
+    return "Geçerli cevap kaydı yok";
   }
 
-  return "Henuz cevap yok";
+  return "Henüz cevap yok";
 }
 
 function createImportSummaryFromRows(rows: ImportPreviewRow[], ignoredRows: number): ImportSummary {

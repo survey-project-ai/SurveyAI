@@ -46,9 +46,9 @@ test.describe("Login flow", () => {
     test.skip(!result.success, `Backend rejected ${TEST_EMAIL}: "${result.error}".`);
 
     // Open the account menu (button.topbar-account toggles the panel),
-    // then click the "Cikis Yap" logout action inside it.
+    // then click the "Çıkış Yap" logout action inside it.
     await page.locator("button.topbar-account").first().click();
-    const logoutButton = page.getByRole("button", { name: "Cikis Yap" });
+    const logoutButton = page.getByRole("button", { name: "Çıkış Yap" });
     await expect(logoutButton).toBeVisible({ timeout: 5000 });
     await logoutButton.click();
 
@@ -64,11 +64,11 @@ test.describe("Login flow", () => {
   test("rejects invalid credentials with an inline error", async ({ page }) => {
     await page.goto("/login", { waitUntil: "domcontentloaded" });
     await page.getByLabel("E-posta").fill("not-a-real-user@example.invalid");
-    await page.getByLabel("Sifre").fill("wrong-password");
-    await page.getByRole("button", { name: /Calisma alanini ac/i }).click();
+    await page.getByLabel("Şifre").fill("wrong-password");
+    await page.getByRole("button", { name: /Çalışma alanını aç/i }).click();
 
     // Stays on /login and shows the error block.
-    await expect(page.getByText(/Oturum acilamadi/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/Oturum açılamadı/i)).toBeVisible({ timeout: 15_000 });
     expect(new URL(page.url()).pathname).toContain("/login");
   });
 });

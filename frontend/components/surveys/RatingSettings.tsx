@@ -6,7 +6,7 @@ export function RatingSettings({ type }: { type: SurveyQuestionType }) {
 
   return (
     <div className="builder-field-group">
-      <strong>Olcek onizlemesi</strong>
+      <strong>Ölçek önizlemesi</strong>
       <div className="rating-scale-preview">
         {range.map((value) => (
           <span key={value} className="rating-pill">

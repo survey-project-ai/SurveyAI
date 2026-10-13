@@ -56,7 +56,7 @@ export default function AnalyticsPage() {
         if (controller.signal.aborted) {
           return;
         }
-        setErrorMessage(error instanceof Error ? error.message : "Analitik verisi yuklenemedi.");
+        setErrorMessage(error instanceof Error ? error.message : "Analitik verisi yüklenemedi.");
       } finally {
         if (!controller.signal.aborted) {
           setIsLoading(false);
@@ -108,15 +108,15 @@ export default function AnalyticsPage() {
     <PageContainer>
       <section className="panel-card analytics-mixed-hero">
         <div className="analytics-mixed-hero-copy">
-          <span className="eyebrow">Birlesik Analitik</span>
-          <h2>Operasyon ve Import Sonuclari</h2>
+          <span className="eyebrow">Birleşik Analitik</span>
+          <h2>Operasyon ve Import Sonuçları</h2>
           <p>
-            Bu sayfa hem uygulama icindeki cagri operasyonlarinizi hem de Google Forms veya Excel/CSV import ile
-            eklenen tamamlanmis anket verilerini birlikte izler.
+            Bu sayfa hem uygulama içindeki çağrı operasyonlarınızı hem de Google Forms veya Excel/CSV import ile
+            eklenen tamamlanmış anket verilerini birlikte izler.
           </p>
         </div>
         <div className="analytics-mixed-hero-actions">
-          <Link href="/operations" className="button-primary">Operasyonlari Ac</Link>
+          <Link href="/operations" className="button-primary">Operasyonları Aç</Link>
           <Link href="/surveys" className="button-secondary">Anketten Veri Ekle</Link>
         </div>
       </section>
@@ -126,35 +126,35 @@ export default function AnalyticsPage() {
           <div className="survey-summary-kpi-copy">
             <span>Toplam Operasyon</span>
             <strong>{summary.totalOperations}</strong>
-            <small>Filtrelenen kaynaklara gore</small>
+            <small>Filtrelenen kaynaklara göre</small>
           </div>
         </article>
         <article className="survey-summary-kpi neutral">
           <div className="survey-summary-kpi-copy">
             <span>Uygulama Operasyonu</span>
             <strong>{summary.platformOperations}</strong>
-            <small>SurveyAI icinden olusturulanlar</small>
+            <small>SurveyAI içinden oluşturulanlar</small>
           </div>
         </article>
         <article className="survey-summary-kpi warning">
           <div className="survey-summary-kpi-copy">
             <span>Google Forms Import</span>
             <strong>{summary.importedOperations}</strong>
-            <small>Dosya importuyla olusanlar</small>
+            <small>Dosya importuyla oluşanlar</small>
           </div>
         </article>
         <article className="survey-summary-kpi neutral">
           <div className="survey-summary-kpi-copy">
-            <span>Toplam Yanit</span>
+            <span>Toplam Yanıt</span>
             <strong>{summary.totalResponses}</strong>
-            <small>Ortalama yanit orani %{summary.avgResponseRate.toFixed(1)}</small>
+            <small>Ortalama yanıt oranı %{summary.avgResponseRate.toFixed(1)}</small>
           </div>
         </article>
       </section>
 
       <SectionCard
         title="Kaynak Filtreleri"
-        description="Listeyi kaynak turune gore daraltarak operasyonlar ile importlari ayri veya birlikte takip edin."
+        description="Listeyi kaynak türüne göre daraltarak operasyonlar ile importları ayrı veya birlikte takip edin."
       >
         <div className="analytics-source-switch">
           <button
@@ -162,14 +162,14 @@ export default function AnalyticsPage() {
             className={sourceFilter === "ALL" ? "survey-view-switch-button is-active" : "survey-view-switch-button"}
             onClick={() => setSourceFilter("ALL")}
           >
-            Tum Kaynaklar
+            Tüm Kaynaklar
           </button>
           <button
             type="button"
             className={sourceFilter === "STANDARD" ? "survey-view-switch-button is-active" : "survey-view-switch-button"}
             onClick={() => setSourceFilter("STANDARD")}
           >
-            Uygulama Operasyonlari
+            Uygulama Operasyonları
           </button>
           <button
             type="button"
@@ -183,14 +183,14 @@ export default function AnalyticsPage() {
 
       <SectionCard
         title="Operasyon Analiz Listesi"
-        description="Her satir tek bir operasyonu temsil eder. Import operasyonlari da ayni analitik yapida listelenir."
+        description="Her satır tek bir operasyonu temsil eder. Import operasyonları da aynı analitik yapıda listelenir."
       >
-        {errorMessage ? <EmptyState title="Analitik yuklenemedi" description={errorMessage} tone="danger" /> : null}
-        {isLoading ? <EmptyState title="Analitik hazirlaniyor" description="Operasyonlar ve metrikler cekiliyor." /> : null}
+        {errorMessage ? <EmptyState title="Analitik yüklenemedi" description={errorMessage} tone="danger" /> : null}
+        {isLoading ? <EmptyState title="Analitik hazırlanıyor" description="Operasyonlar ve metrikler çekiliyor." /> : null}
         {!isLoading && !errorMessage && filteredRows.length === 0 ? (
           <EmptyState
             title="Bu filtrede operasyon yok"
-            description="Filtreyi degistirerek diger kaynak tiplerini gorebilir veya anket detayindan veri import edebilirsin."
+            description="Filtreyi değiştirerek diğer kaynak tiplerini görebilir veya anket detayından veri import edebilirsin."
           />
         ) : null}
 
@@ -199,8 +199,8 @@ export default function AnalyticsPage() {
             <div className="ops-control-table-head analytics-mixed-table-head">
               <span>Operasyon</span>
               <span>Kaynak</span>
-              <span>Yanit</span>
-              <span>Yanit Orani</span>
+              <span>Yanıt</span>
+              <span>Yanıt Oranı</span>
               <span>Durum</span>
               <span>Aksiyon</span>
             </div>

@@ -17,48 +17,48 @@ function resolveFallbackTarget(pathname: string): FallbackTarget {
     const operationPath = pathname.split("/contacts")[0];
     return {
       href: operationPath,
-      label: "Operasyona don",
+      label: "Operasyona dön",
     };
   }
 
   if (pathname.startsWith("/operations/")) {
     return {
       href: "/operations",
-      label: "Operasyonlara don",
+      label: "Operasyonlara dön",
     };
   }
 
   if (pathname.startsWith("/surveys/")) {
     return {
       href: "/surveys",
-      label: "Anketlere don",
+      label: "Anketlere dön",
     };
   }
 
   if (pathname.startsWith("/contacts")) {
     return {
       href: "/",
-      label: "Panele don",
+      label: "Panele dön",
     };
   }
 
   if (pathname.startsWith("/analytics")) {
     return {
       href: "/",
-      label: "Panele don",
+      label: "Panele dön",
     };
   }
 
   if (pathname.startsWith("/calling-ops")) {
     return {
       href: "/",
-      label: "Panele don",
+      label: "Panele dön",
     };
   }
 
   return {
     href: "/",
-    label: "Geri don",
+    label: "Geri dön",
   };
 }
 

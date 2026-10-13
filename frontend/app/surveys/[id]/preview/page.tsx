@@ -37,7 +37,7 @@ export default function SurveyPreviewPage() {
           return;
         }
 
-        const message = error instanceof Error ? error.message : "Anket onizlemesi yuklenemedi.";
+        const message = error instanceof Error ? error.message : "Anket önizlemesi yüklenemedi.";
         if (message.includes("(404)")) {
           setIsMissing(true);
           return;
@@ -62,15 +62,15 @@ export default function SurveyPreviewPage() {
   const headerAction = useMemo(
     () => (
       <Link href={`/surveys/${surveyId}`} className="button-secondary compact-button">
-        Ankete don
+        Ankete dön
       </Link>
     ),
     [surveyId],
   );
 
   usePageHeaderOverride({
-    title: survey?.name.trim() || "Anket Onizleme",
-    subtitle: "Anketin gorusme sirasinda nasil duyulacagini tek yuzeyde, sadece onizleme modunda inceleyin.",
+    title: survey?.name.trim() || "Anket Önizleme",
+    subtitle: "Anketin görüşme sırasında nasıl duyulacağını tek yüzeyde, sadece önizleme modunda inceleyin.",
     action: headerAction,
   });
 
@@ -79,7 +79,7 @@ export default function SurveyPreviewPage() {
       {errorMessage ? (
         <section className="panel-card">
           <div className="operation-inline-message is-danger">
-            <strong>Anket onizlemesi yuklenemedi</strong>
+            <strong>Anket önizlemesi yüklenemedi</strong>
             <span>{errorMessage}</span>
           </div>
         </section>
@@ -89,8 +89,8 @@ export default function SurveyPreviewPage() {
         <section className="panel-card">
           <div className="list-item">
             <div>
-              <strong>Anket onizlemesi yukleniyor</strong>
-              <span>Gorusme akisi hazirlaniyor.</span>
+              <strong>Anket önizlemesi yükleniyor</strong>
+              <span>Görüşme akışı hazırlanıyor.</span>
             </div>
           </div>
         </section>

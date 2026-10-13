@@ -227,12 +227,12 @@ export function OperationAnalyticsSection({
             [blob.type]: blob,
           }),
         ]);
-        setCopyFeedback((current) => ({ ...current, [key]: "Kopyalandi" }));
+        setCopyFeedback((current) => ({ ...current, [key]: "Kopyalandı" }));
       } else {
         throw new Error("Clipboard image API unavailable");
       }
     } catch {
-      setCopyFeedback((current) => ({ ...current, [key]: "Kopyalanamadi" }));
+      setCopyFeedback((current) => ({ ...current, [key]: "Kopyalanamadı" }));
     } finally {
       setCopyingKey(null);
       globalThis.setTimeout(() => {
@@ -408,11 +408,11 @@ export function OperationAnalyticsSection({
       {operation?.status === "Ready" && analytics ? (
         <div className="operation-analytics-preflight">
           <div className="operation-contact-status-card">
-            <span>Toplam kisi</span>
+            <span>Toplam kişi</span>
             <strong>{analytics.totalContacts}</strong>
           </div>
           <div className="operation-contact-status-card">
-            <span>Hazir is</span>
+            <span>Hazır iş</span>
             <strong>{analytics.totalPreparedJobs}</strong>
           </div>
         </div>
@@ -424,22 +424,22 @@ export function OperationAnalyticsSection({
     <article className="operation-chart-card">
       <div className="operation-chart-head">
         <div>
-          <span className="operation-kicker">Durum dagilimi</span>
-          <h3>Yurutme sonucu kirilimi</h3>
+          <span className="operation-kicker">Durum dağılımı</span>
+          <h3>Yürütme sonucu kırılımı</h3>
         </div>
-        {analytics?.partialData ? <span className="operation-live-pill">Canli / Kismi</span> : null}
+        {analytics?.partialData ? <span className="operation-live-pill">Canlı / Kısmi</span> : null}
       </div>
       {analytics && analytics.outcomeBreakdown.some((item) => item.count > 0) ? (
         renderBarRows(analytics.outcomeBreakdown)
       ) : (
-        <div className="operation-mini-empty">Dagilim olusmasi icin yurutme sonuclari bekleniyor.</div>
+        <div className="operation-mini-empty">Dağılım oluşması için yürütme sonuçları bekleniyor.</div>
       )}
     </article>
   );
 
   const renderConsentBreakdown = () => (
     <article className="operation-consent-summary">
-      <span className="operation-kicker">Katilim onayi</span>
+      <span className="operation-kicker">Katılım onayı</span>
       <div className="operation-consent-summary-metrics">
         <div className="operation-consent-summary-item">
           <span>Kabul</span>
@@ -457,16 +457,16 @@ export function OperationAnalyticsSection({
     <article className="operation-chart-card">
       <div className="operation-chart-head">
         <div>
-          <span className="operation-kicker">One cikan icgoruler</span>
-          <h3>Ozet yorum</h3>
+          <span className="operation-kicker">Öne çıkan içgörüler</span>
+          <h3>Özet yorum</h3>
         </div>
       </div>
       <div className="operation-insight-card">
-        <strong>{analytics?.insightSummary ?? "Bu operasyonda henuz ozet uretilecek kadar veri yok."}</strong>
+        <strong>{analytics?.insightSummary ?? "Bu operasyonda henüz özet üretilecek kadar veri yok."}</strong>
         <p>
           {analytics?.insightSummary
-            ? "Bu metin mevcut operasyon verisinden uretilen kisa bir yonlendirme ozeti sunar."
-            : "Ilk cagri ve yanit kayitlari geldikce burada kisa operasyon ozeti gorunur."}
+            ? "Bu metin mevcut operasyon verisinden üretilen kısa bir yönlendirme özeti sunar."
+            : "İlk çağrı ve yanıt kayıtları geldikçe burada kısa operasyon özeti görünür."}
         </p>
       </div>
       {analytics && analytics.insightItems.length > 0 ? (
@@ -478,7 +478,7 @@ export function OperationAnalyticsSection({
                 <span>{item.detail}</span>
               </div>
               <span className="operation-live-pill">
-                {item.tone === "warning" ? "Izle" : item.tone === "positive" ? "Pozitif" : "Hazir"}
+                {item.tone === "warning" ? "İzle" : item.tone === "positive" ? "Pozitif" : "Hazır"}
               </span>
             </div>
           ))}
@@ -486,15 +486,15 @@ export function OperationAnalyticsSection({
       ) : null}
       <div className="operation-response-health">
         <div className="operation-response-health-item">
-          <span>Cevap orani (kisi bazli)</span>
+          <span>Cevap oranı (kişi bazlı)</span>
           <strong>%{analytics?.personResponseRate ?? 0}</strong>
         </div>
         <div className="operation-response-health-item">
-          <span>Yanit veren kisi</span>
+          <span>Yanıt veren kişi</span>
           <strong>{analytics?.respondedContacts ?? 0}</strong>
         </div>
         <div className="operation-response-health-item">
-          <span>Tam yanit</span>
+          <span>Tam yanıt</span>
           <strong>{analytics?.completedResponses ?? 0}</strong>
         </div>
       </div>
@@ -516,11 +516,11 @@ export function OperationAnalyticsSection({
                 >
                   <div className="operation-chart-head">
                     <div>
-                      <span className="operation-kicker">{group.chartKind === "GROUPED_MULTI_CHOICE" ? "Coklu secim tablosu" : "Tablo dagilimi"}</span>
+                      <span className="operation-kicker">{group.chartKind === "GROUPED_MULTI_CHOICE" ? "Çoklu seçim tablosu" : "Tablo dağılımı"}</span>
                       <h3>{group.groupTitle}</h3>
                     </div>
                     <div className="operation-chart-head-actions">
-                      <span className="operation-live-pill">{group.rows.length} satir</span>
+                      <span className="operation-live-pill">{group.rows.length} satır</span>
                       <button
                         type="button"
                         className="operation-chart-copy-button"
@@ -535,8 +535,8 @@ export function OperationAnalyticsSection({
                         </span>
                         <span>
                           {copyingKey === `group-${group.groupCode}`
-                            ? "Kopyalaniyor..."
-                            : copyFeedback[`group-${group.groupCode}`] ?? "Grafigi kopyala"}
+                            ? "Kopyalanıyor..."
+                            : copyFeedback[`group-${group.groupCode}`] ?? "Grafiği kopyala"}
                         </span>
                       </button>
                     </div>
@@ -546,7 +546,7 @@ export function OperationAnalyticsSection({
                   </div>
                   {group.series.some((series) => series.data.some((value) => value > 0))
                     ? renderGroupedChoiceVisualization(group)
-                    : <div className="operation-mini-empty">{group.emptyStateMessage ?? "Bu tablo icin grafik olusacak kadar veri yok."}</div>}
+                    : <div className="operation-mini-empty">{group.emptyStateMessage ?? "Bu tablo için grafik oluşacak kadar veri yok."}</div>}
                 </article>
               );
             }
@@ -571,7 +571,7 @@ export function OperationAnalyticsSection({
                     <h3>{summary.questionTitle}</h3>
                   </div>
                   <div className="operation-chart-head-actions">
-                    <span className="operation-question-meta">{summary.answeredCount} yanit</span>
+                    <span className="operation-question-meta">{summary.answeredCount} yanıt</span>
                     {hasData ? (
                       <button
                         type="button"
@@ -587,8 +587,8 @@ export function OperationAnalyticsSection({
                         </span>
                         <span>
                           {copyingKey === `question-${summary.questionId}`
-                            ? "Kopyalaniyor..."
-                            : copyFeedback[`question-${summary.questionId}`] ?? "Grafigi kopyala"}
+                            ? "Kopyalanıyor..."
+                            : copyFeedback[`question-${summary.questionId}`] ?? "Grafiği kopyala"}
                         </span>
                       </button>
                     ) : null}
@@ -601,15 +601,15 @@ export function OperationAnalyticsSection({
                 ) : null}
                 {summary.chartKind === "OPEN_ENDED" ? (
                   <div className="operation-question-support-row">
-                    <span>Grafige dahil edilen net yanit</span>
+                    <span>Grafiğe dahil edilen net yanıt</span>
                     <strong>{summary.breakdown.reduce((sum, item) => sum + item.count, 0)}</strong>
                     <small>Ham cevap: {summary.rawResponses.length}</small>
                   </div>
                 ) : null}
                 {summary.dropOffCount > 0 ? (
                   <div className="operation-question-support-row">
-                    <span>Bu sorudan sonra akistan cikan</span>
-                    <strong>{summary.dropOffCount} kisi</strong>
+                    <span>Bu sorudan sonra akıştan çıkan</span>
+                    <strong>{summary.dropOffCount} kişi</strong>
                     <small>%{summary.dropOffRate}</small>
                   </div>
                 ) : null}
@@ -622,8 +622,8 @@ export function OperationAnalyticsSection({
                 {summary.specialAnswerBreakdown.length > 0 ? (
                   <div className="operation-question-special-answer-block">
                     <div className="operation-question-special-answer-head">
-                      <strong>Ozel cevaplar</strong>
-                      <span>Grafik disi tutulan yanitlar</span>
+                      <strong>Özel cevaplar</strong>
+                      <span>Grafik dışı tutulan yanıtlar</span>
                     </div>
                     {renderBarRows(summary.specialAnswerBreakdown)}
                   </div>
@@ -633,7 +633,7 @@ export function OperationAnalyticsSection({
           })}
         </div>
       ) : (
-        <div className="operation-mini-empty">Bu ankette henuz soru bazli gosterilecek cevap verisi yok.</div>
+        <div className="operation-mini-empty">Bu ankette henüz soru bazlı gösterilecek cevap verisi yok.</div>
       )}
     </div>
   );
@@ -673,7 +673,7 @@ export function OperationAnalyticsSection({
             })}
           </div>
         ) : (
-          <div className="operation-mini-empty">Bu soru icin henuz ham cevap yok.</div>
+          <div className="operation-mini-empty">Bu soru için henüz ham cevap yok.</div>
         )}
       </div>
       <div className="operation-open-ended-column">
@@ -690,8 +690,8 @@ export function OperationAnalyticsSection({
         <article className="operation-chart-card">
           <div className="operation-chart-head">
             <div>
-              <span className="operation-kicker">Demografik dagilim</span>
-              <h3>Yanitlardan uretilen kirilimlar</h3>
+              <span className="operation-kicker">Demografik dağılım</span>
+              <h3>Yanıtlardan üretilen kırılımlar</h3>
             </div>
           </div>
           {demographicBreakdowns.length > 0 ? (
@@ -703,25 +703,25 @@ export function OperationAnalyticsSection({
                       <span className="operation-kicker">{group.questionCode}</span>
                       <h3>{group.label}</h3>
                     </div>
-                    <span className="operation-question-meta">{group.answeredCount} yanit</span>
+                    <span className="operation-question-meta">{group.answeredCount} yanıt</span>
                   </div>
                   {group.breakdown.length > 0 ? renderAudienceChart(group.breakdown, group.answeredCount, group.label) : (
-                    <div className="operation-mini-empty">Bu soru icin dagilim olusturacak kadar gecerli cevap bulunmuyor.</div>
+                    <div className="operation-mini-empty">Bu soru için dağılım oluşturacak kadar geçerli cevap bulunmuyor.</div>
                   )}
                 </article>
               ))}
             </div>
           ) : (
             <div className="operation-audience-empty-state">
-              <strong>Demografik kirilim olusmadi</strong>
-              <p>Bu operasyona bagli ankette yas, sehir veya cinsiyet gibi demografik soru bulunmuyor ya da cevaplar kirilim uretmek icin yeterli degil.</p>
+              <strong>Demografik kırılım oluşmadı</strong>
+              <p>Bu operasyona bağlı ankette yaş, şehir veya cinsiyet gibi demografik soru bulunmuyor ya da cevaplar kırılım üretmek için yeterli değil.</p>
               <div className="operation-response-health operation-response-health-extended">
                 <div className="operation-response-health-item">
                   <span>Hedef kitle</span>
-                  <strong>{operation?.surveyAudience?.trim() || "Tanimsiz"}</strong>
+                  <strong>{operation?.surveyAudience?.trim() || "Tanımsız"}</strong>
                 </div>
                 <div className="operation-response-health-item">
-                  <span>Toplam yanit</span>
+                  <span>Toplam yanıt</span>
                   <strong>{analytics?.totalResponses ?? 0}</strong>
                 </div>
                 <div className="operation-response-health-item">
@@ -736,27 +736,27 @@ export function OperationAnalyticsSection({
         <article className="operation-chart-card">
           <div className="operation-chart-head">
             <div>
-              <span className="operation-kicker">Kitle baglami</span>
-              <h3>Bagli anket ozetleri</h3>
+              <span className="operation-kicker">Kitle bağlamı</span>
+              <h3>Bağlı anket özetleri</h3>
             </div>
           </div>
           <div className="operation-contact-glimpse-list">
             <div className="operation-contact-glimpse-item">
               <div>
                 <strong>Demografik soru durumu</strong>
-                <span>{demographicBreakdowns.length > 0 ? `${demographicBreakdowns.length} demografik soru analytics'e baglandi.` : "Analytics'te demografik soru tespit edilmedi."}</span>
+                <span>{demographicBreakdowns.length > 0 ? `${demographicBreakdowns.length} demografik soru analytics'e bağlandı.` : "Analytics'te demografik soru tespit edilmedi."}</span>
               </div>
             </div>
             <div className="operation-contact-glimpse-item">
               <div>
                 <strong>Hedef kitle</strong>
-                <span>{operation?.surveyAudience?.trim() || "Hedef kitle bilgisi henuz tanimli degil."}</span>
+                <span>{operation?.surveyAudience?.trim() || "Hedef kitle bilgisi henüz tanımlı değil."}</span>
               </div>
             </div>
             <div className="operation-contact-glimpse-item">
               <div>
                 <strong>Anket hedefi</strong>
-                <span>{operation?.surveyGoal?.trim() || "Anket hedef ozeti tanimlanmamis."}</span>
+                <span>{operation?.surveyGoal?.trim() || "Anket hedef özeti tanımlanmamış."}</span>
               </div>
             </div>
             <div className="operation-contact-glimpse-item">
@@ -782,17 +782,17 @@ export function OperationAnalyticsSection({
     <article className="operation-chart-card">
       <div className="operation-chart-head">
         <div>
-          <span className="operation-kicker">Saglik gostergeleri</span>
-          <h3>Cagri operasyon durumu</h3>
+          <span className="operation-kicker">Sağlık göstergeleri</span>
+          <h3>Çağrı operasyon durumu</h3>
         </div>
       </div>
       <div className="operation-response-health operation-response-health-extended">
         <div className="operation-response-health-item">
-          <span>Hazirlanan is</span>
+          <span>Hazırlanan iş</span>
           <strong>{analytics?.totalPreparedJobs ?? 0}</strong>
         </div>
         <div className="operation-response-health-item">
-          <span>Cagri denemesi</span>
+          <span>Çağrı denemesi</span>
           <strong>{analytics?.totalCallsAttempted ?? 0}</strong>
         </div>
         <div className="operation-response-health-item">
@@ -800,15 +800,15 @@ export function OperationAnalyticsSection({
           <strong>{analytics?.queuedJobs ?? 0}</strong>
         </div>
         <div className="operation-response-health-item">
-          <span>Aktif is</span>
+          <span>Aktif iş</span>
           <strong>{analytics?.inProgressJobs ?? 0}</strong>
         </div>
         <div className="operation-response-health-item">
-          <span>Basarisiz cagrilar</span>
+          <span>Başarısız çağrılar</span>
           <strong>{analytics?.failedCallJobs ?? 0}</strong>
         </div>
         <div className="operation-response-health-item">
-          <span>Atlanan cagrilar</span>
+          <span>Atlanan çağrılar</span>
           <strong>{analytics?.skippedCallJobs ?? 0}</strong>
         </div>
       </div>
@@ -819,29 +819,29 @@ export function OperationAnalyticsSection({
     <article className="operation-chart-card">
       <div className="operation-chart-head">
         <div>
-          <span className="operation-kicker">Oran ozeti</span>
-          <h3>Temas ve yanit kalitesi</h3>
+          <span className="operation-kicker">Oran özeti</span>
+          <h3>Temas ve yanıt kalitesi</h3>
         </div>
       </div>
       <div className="operation-response-health operation-response-health-extended">
         <div className="operation-response-health-item">
-          <span>Cevap orani (kisi bazli)</span>
+          <span>Cevap oranı (kişi bazlı)</span>
           <strong>%{analytics?.personResponseRate ?? 0}</strong>
         </div>
         <div className="operation-response-health-item">
-          <span>Yanit veren kisi</span>
+          <span>Yanıt veren kişi</span>
           <strong>{analytics?.respondedContacts ?? 0}</strong>
         </div>
         <div className="operation-response-health-item">
-          <span>Tamamlama orani (yanit bazli)</span>
+          <span>Tamamlama oranı (yanıt bazlı)</span>
           <strong>%{analytics?.completionRate ?? 0}</strong>
         </div>
         <div className="operation-response-health-item">
-          <span>Tam yanit</span>
+          <span>Tam yanıt</span>
           <strong>{analytics?.completedResponses ?? 0}</strong>
         </div>
         <div className="operation-response-health-item">
-          <span>Kismi yanit</span>
+          <span>Kısmi yanıt</span>
           <strong>{analytics?.partialResponses ?? 0}</strong>
         </div>
         <div className="operation-response-health-item">
@@ -880,8 +880,8 @@ export function OperationAnalyticsSection({
     if (isLoading) {
       return (
         <div className="operation-empty-state">
-          <strong>Analitik yukleniyor</strong>
-          <p>Operasyona ait cagri ve yanit toplamlari getiriliyor.</p>
+          <strong>Analitik yükleniyor</strong>
+          <p>Operasyona ait çağrı ve yanıt toplamları getiriliyor.</p>
         </div>
       );
     }
@@ -927,7 +927,7 @@ export function OperationAnalyticsSection({
             : renderBarRows(summary.breakdown);
         }
         if (summary.specialAnswerBreakdown.some((item) => item.count > 0)) {
-          return renderOpenEndedState("Bu soruda sadece ozel cevaplar kaydedildi.");
+          return renderOpenEndedState("Bu soruda sadece özel cevaplar kaydedildi.");
         }
         return renderOpenEndedState();
       default:
@@ -968,7 +968,7 @@ export function OperationAnalyticsSection({
             height={GROUP_CHART_HEIGHT}
             viewBox={`0 0 ${svgWidth} ${GROUP_CHART_HEIGHT}`}
             role="img"
-            aria-label={`${group.groupTitle} cevap dagilim grafigi`}
+            aria-label={`${group.groupTitle} cevap dağılım grafiği`}
           >
             {ticks.map((tick) => {
               const y = GROUP_CHART_TOP_GUTTER + chartHeight - ((maxValue > 0 ? tick / ticks[ticks.length - 1] : 0) * chartHeight);
@@ -1041,7 +1041,7 @@ export function OperationAnalyticsSection({
                     ))}
                   </text>
                   <text x={labelX} y={GROUP_CHART_HEIGHT - 16} textAnchor="middle" className="operation-grouped-chart-sublabel">
-                    {`${row.answeredCount} yanit • %${formatCompactPercent(row.responseRate)} kapsama`}
+                    {`${row.answeredCount} yanıt • %${formatCompactPercent(row.responseRate)} kapsama`}
                   </text>
                 </g>
               );
@@ -1115,7 +1115,7 @@ export function OperationAnalyticsSection({
 
     return (
       <div className="operation-summary-chart-grid">
-        <div className="operation-summary-donut-chart" aria-label={`${title} dagilim grafigi`}>
+        <div className="operation-summary-donut-chart" aria-label={`${title} dağılım grafiği`}>
           <svg className="operation-summary-donut-svg" width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img">
             {visibleItems.length > 0 ? (
               visibleItems.reduce<{ startAngle: number; nodes: ReactElement[] }>((acc, item, index) => {
@@ -1189,7 +1189,7 @@ export function OperationAnalyticsSection({
                 className="operation-summary-legend-pager-button"
                 onClick={() => setDonutLegendPages((current) => ({ ...current, [chartKey]: Math.max(0, legendPage - 1) }))}
                 disabled={legendPage === 0}
-                aria-label="Onceki legend sayfasi"
+                aria-label="Önceki legend sayfası"
               >
                 ▲
               </button>
@@ -1199,7 +1199,7 @@ export function OperationAnalyticsSection({
                 className="operation-summary-legend-pager-button is-next"
                 onClick={() => setDonutLegendPages((current) => ({ ...current, [chartKey]: Math.min(legendPageCount - 1, legendPage + 1) }))}
                 disabled={legendPage === legendPageCount - 1}
-                aria-label="Sonraki legend sayfasi"
+                aria-label="Sonraki legend sayfası"
               >
                 ▼
               </button>
@@ -1228,7 +1228,7 @@ export function OperationAnalyticsSection({
               <small>/10</small>
             </div>
           </div>
-          <div className="operation-rating-scale-meter" aria-label="Ortalama puan olcegi">
+          <div className="operation-rating-scale-meter" aria-label="Ortalama puan ölçeği">
             <div className="operation-rating-scale-meter-track">
               <div
                 className="operation-rating-scale-meter-fill"
@@ -1272,7 +1272,7 @@ export function OperationAnalyticsSection({
     );
   }
 
-  function renderOpenEndedState(message = "Bu soru icin henuz gosterilecek dagilim yok.") {
+  function renderOpenEndedState(message = "Bu soru için henüz gösterilecek dağılım yok.") {
     return (
       <div className="operation-mini-empty">
         {message}
@@ -1284,7 +1284,7 @@ export function OperationAnalyticsSection({
     <SectionCard
       action={(
         <button type="button" className="button-secondary compact-button" onClick={() => void handleExportPdf()} disabled={isExportingPdf}>
-          {isExportingPdf ? "PDF hazirlaniyor..." : "PDF indir"}
+          {isExportingPdf ? "PDF hazırlanıyor..." : "PDF indir"}
         </button>
       )}
     >

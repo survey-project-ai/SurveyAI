@@ -37,7 +37,7 @@ export default function SurveyEditPage() {
           return;
         }
 
-        const message = error instanceof Error ? error.message : "Anket duzenleme alani yuklenemedi.";
+        const message = error instanceof Error ? error.message : "Anket düzenleme alanı yüklenemedi.";
         if (message.includes("(404)")) {
           setIsMissing(true);
           return;
@@ -62,15 +62,15 @@ export default function SurveyEditPage() {
   const headerAction = useMemo(
     () => (
       <Link href={`/surveys/${surveyId}`} className="button-secondary compact-button">
-        Ankete don
+        Ankete dön
       </Link>
     ),
     [surveyId],
   );
 
   usePageHeaderOverride({
-    title: survey?.name.trim() || "Anket Duzenle",
-    subtitle: "Taslak anketin soru akisini, acilis metinlerini ve yayin hazirligini tek ekranda guncelleyin.",
+    title: survey?.name.trim() || "Anket Düzenle",
+    subtitle: "Taslak anketin soru akışını, açılış metinlerini ve yayın hazırlığını tek ekranda güncelleyin.",
     action: headerAction,
   });
 
@@ -79,7 +79,7 @@ export default function SurveyEditPage() {
       {errorMessage ? (
         <section className="panel-card">
           <div className="operation-inline-message is-danger">
-            <strong>Anket duzenleme alani yuklenemedi</strong>
+            <strong>Anket düzenleme alanı yüklenemedi</strong>
             <span>{errorMessage}</span>
           </div>
         </section>
@@ -89,8 +89,8 @@ export default function SurveyEditPage() {
         <section className="panel-card">
           <div className="list-item">
             <div>
-              <strong>Anket duzenleme alani yukleniyor</strong>
-              <span>Taslak akis ve soru yapisi hazirlaniyor.</span>
+              <strong>Anket düzenleme alanı yükleniyor</strong>
+              <span>Taslak akış ve soru yapısı hazırlanıyor.</span>
             </div>
           </div>
         </section>

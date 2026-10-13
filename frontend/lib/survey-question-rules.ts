@@ -77,7 +77,7 @@ export function applyQuestionRuleForm(
   if (groupCode) {
     nextSettings.groupCode = groupCode;
     nextSettings.groupTitle = groupTitle || question.title.trim() || "Grup";
-    nextSettings.rowLabel = rowLabel || question.title.trim() || "Satir";
+    nextSettings.rowLabel = rowLabel || question.title.trim() || "Satır";
     const rowCode = slugify(rowLabel || question.title);
     nextSettings.rowCode = rowCode;
     nextSettings.rowKey = rowCode;

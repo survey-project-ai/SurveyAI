@@ -41,8 +41,8 @@ export default function OperationJobDetailPage() {
 
   const pageHeader = useMemo(
     () => ({
-      title: detail?.personName ?? "Cagri isi detayi",
-      subtitle: detail ? `${detail.operationName} operasyonu icindeki tekil yurütme kaydi.` : "Cagri isi detayi yukleniyor.",
+      title: detail?.personName ?? "Çağrı işi detayı",
+      subtitle: detail ? `${detail.operationName} operasyonu içindeki tekil yürütme kaydı.` : "Çağrı işi detayı yükleniyor.",
     }),
     [detail],
   );
@@ -74,7 +74,7 @@ export default function OperationJobDetailPage() {
           return;
         }
 
-        const message = error instanceof Error ? error.message : "Cagri isi detayi yuklenemedi.";
+        const message = error instanceof Error ? error.message : "Çağrı işi detayı yüklenemedi.";
         if (message.includes("(404)")) {
           setIsMissing(true);
           return;
@@ -117,11 +117,11 @@ export default function OperationJobDetailPage() {
       setRetryMessage(null);
       setRetryErrorMessage(null);
       const nextDetail = await redialOperationCallJob(operationId, callJobId);
-      setRetryMessage("Ayni operasyon icinde yeni bir cagri isi olusturuldu. Yeni detay ekranina yonlendiriliyorsunuz.");
+      setRetryMessage("Aynı operasyon içinde yeni bir çağrı işi oluşturuldu. Yeni detay ekranına yönlendiriliyorsunuz.");
       router.push(`/operations/${operationId}/jobs/${nextDetail.id}`);
       router.refresh();
     } catch (error) {
-      setRetryErrorMessage(error instanceof Error ? error.message : "Cagri yeniden baslatilamadi.");
+      setRetryErrorMessage(error instanceof Error ? error.message : "Çağrı yeniden başlatılamadı.");
     } finally {
       setIsRetrying(false);
     }
@@ -159,22 +159,22 @@ export default function OperationJobDetailPage() {
       const nextDrafts = createAnswerDrafts(nextDetail.surveyResponse?.answers ?? []);
       setAnswerDrafts(nextDrafts);
       setInitialAnswerSignature(serializeAnswerDrafts(nextDrafts));
-      setSaveSuccessMessage("Yanitlar guncellendi. Analitikler yeni degerlere gore hesaplanacak.");
+      setSaveSuccessMessage("Yanıtlar güncellendi. Analitikler yeni değerlere göre hesaplanacak.");
     } catch (error) {
-      setSaveErrorMessage(error instanceof Error ? error.message : "Yanitlar kaydedilemedi.");
+      setSaveErrorMessage(error instanceof Error ? error.message : "Yanıtlar kaydedilemedi.");
     } finally {
       setIsSavingAnswers(false);
     }
   }
 
-  const responseStatus = detail?.surveyResponse?.status ?? (detail?.partialResponseDataExists ? "Kismi veri var" : "Yanıt yok");
+  const responseStatus = detail?.surveyResponse?.status ?? (detail?.partialResponseDataExists ? "Kısmi veri var" : "Yanıt yok");
   const responseDetail = detail?.surveyResponse
     ? detail.surveyResponse.usableResponse
-      ? `${detail.surveyResponse.validAnswerCount} gecerli cevap islenmis.`
-      : `Yanit kaydi var fakat kullanilabilir eslesen cevap sayisi ${detail.surveyResponse.validAnswerCount}.`
+      ? `${detail.surveyResponse.validAnswerCount} geçerli cevap işlenmiş.`
+      : `Yanıt kaydı var fakat kullanılabilir eşleşen cevap sayısı ${detail.surveyResponse.validAnswerCount}.`
     : detail?.partialResponseDataExists
-      ? "Transcript veya kisitli veri mevcut, ama bagli bir survey_response secilemiyor."
-      : "Bu is icin henuz survey_response kaydi yok.";
+      ? "Transcript veya kısıtlı veri mevcut, ama bağlı bir survey_response seçilemiyor."
+      : "Bu iş için henüz survey_response kaydı yok.";
   const hasUnsavedAnswerChanges = serializeAnswerDrafts(answerDrafts) !== initialAnswerSignature;
 
   return (
@@ -182,7 +182,7 @@ export default function OperationJobDetailPage() {
       {errorMessage ? (
         <section className="panel-card">
           <div className="operation-inline-message is-danger">
-            <strong>Cagri isi detayi yuklenemedi</strong>
+            <strong>Çağrı işi detayı yüklenemedi</strong>
             <span>{errorMessage}</span>
           </div>
         </section>
@@ -191,7 +191,7 @@ export default function OperationJobDetailPage() {
       {retryErrorMessage ? (
         <section className="panel-card">
           <div className="operation-inline-message is-danger compact">
-            <strong>Yeniden deneme baslatilamadi</strong>
+            <strong>Yeniden deneme başlatılamadı</strong>
             <span>{retryErrorMessage}</span>
           </div>
         </section>
@@ -210,26 +210,26 @@ export default function OperationJobDetailPage() {
         <div className="operation-workspace-hero-head">
           <div>
             <div className="eyebrow">Call Job Detail</div>
-            <h2 className="hero-title">{detail?.personName ?? "Cagri isi yukleniyor"}</h2>
+            <h2 className="hero-title">{detail?.personName ?? "Çağrı işi yükleniyor"}</h2>
             <p className="hero-text">
               {detail
-                ? `${detail.operationName} icindeki tekil cagri isi, deneme gecmisi ve survey response iliskisi bu yuzeyde bir araya gelir.`
-                : "Secili cagri isi, deneme gecmisi ve geri donen veri yukleniyor."}
+                ? `${detail.operationName} içindeki tekil çağrı işi, deneme geçmişi ve survey response ilişkisi bu yüzeyde bir araya gelir.`
+                : "Seçili çağrı işi, deneme geçmişi ve geri dönen veri yükleniyor."}
             </p>
           </div>
           <div className="operation-hero-status-cluster">
             <StatusBadge status={detail?.status ?? "Pending"} />
             <span className={detail?.retryable ? "operation-readiness-pill is-ready" : "operation-readiness-pill is-blocked"}>
-              {detail?.retryable ? "Retry uygun" : "Retry kapali"}
+              {detail?.retryable ? "Retry uygun" : "Retry kapalı"}
             </span>
             <span className={detail?.redialable ? "operation-readiness-pill is-ready" : "operation-readiness-pill is-blocked"}>
-              {detail?.redialable ? "Tekrar ara uygun" : "Tekrar ara kapali"}
+              {detail?.redialable ? "Tekrar ara uygun" : "Tekrar ara kapalı"}
             </span>
           </div>
         </div>
         <div className="chip-row">
-          <span className="chip">Operasyon: {detail?.operationName ?? operation?.name ?? "Yukleniyor"}</span>
-          <span className="chip">Anket: {detail?.surveyName ?? operation?.survey ?? "Yukleniyor"}</span>
+          <span className="chip">Operasyon: {detail?.operationName ?? operation?.name ?? "Yükleniyor"}</span>
+          <span className="chip">Anket: {detail?.surveyName ?? operation?.survey ?? "Yükleniyor"}</span>
           <span className="chip">Telefon: {detail?.phoneNumber ?? "-"}</span>
           <span className="chip">Deneme: {detail ? `${detail.attemptCount} / ${detail.maxAttempts}` : "..."}</span>
         </div>
@@ -239,8 +239,8 @@ export default function OperationJobDetailPage() {
         <section className="panel-card">
           <div className="list-item">
             <div>
-              <strong>Cagri isi detayi yukleniyor</strong>
-              <span>Attempt gecmisi, transcript ve response baglantisi backend uzerinden getiriliyor.</span>
+              <strong>Çağrı işi detayı yükleniyor</strong>
+              <span>Attempt geçmişi, transcript ve response bağlantısı backend üzerinden getiriliyor.</span>
             </div>
           </div>
         </section>
@@ -248,12 +248,12 @@ export default function OperationJobDetailPage() {
         <div className="operation-workspace-grid call-job-detail-grid">
           <div className="operation-workspace-main">
             <SectionCard
-              title="Operasyonel ozet"
-              description="Job durumu, hata gorunurlugu ve retry kontrolu ayni yerde tutulur."
+              title="Operasyonel özet"
+              description="Job durumu, hata görünürlüğü ve retry kontrolü aynı yerde tutulur."
               action={(
                 <div className="operation-top-actions">
                   <Link href={`/operations/${operationId}/jobs`} className="button-secondary compact-button">
-                    Listeye don
+                    Listeye dön
                   </Link>
                   <button
                     type="button"
@@ -261,27 +261,27 @@ export default function OperationJobDetailPage() {
                     disabled={isRetrying}
                     onClick={() => void handleRecall()}
                   >
-                    {isRetrying ? "Cagri yeniden baslatiliyor..." : "Cagriyi tekrar baslat"}
+                    {isRetrying ? "Çağrı yeniden başlatılıyor..." : "Çağrıyı tekrar başlat"}
                   </button>
                 </div>
               )}
             >
               <KeyValueList
                 items={[
-                  { label: "Olusturulma", value: detail.createdAt },
-                  { label: "Son guncelleme", value: detail.updatedAt },
+                  { label: "Oluşturulma", value: detail.createdAt },
+                  { label: "Son güncelleme", value: detail.updatedAt },
                   { label: "Planlanan zaman", value: detail.scheduledFor },
-                  { label: "Tekrar uygunlugu", value: detail.retryable ? "Uygun" : "Uygun degil" },
-                  { label: "Yeni arama uygunlugu", value: detail.redialable ? "Uygun" : "Uygun degil" },
-                  { label: "Failure reason", value: detail.failureReason ?? "Kayitli neden yok" },
-                  { label: "Son hata", value: detail.lastErrorMessage ?? "Kayitli hata yok" },
+                  { label: "Tekrar uygunluğu", value: detail.retryable ? "Uygun" : "Uygun değil" },
+                  { label: "Yeni arama uygunluğu", value: detail.redialable ? "Uygun" : "Uygun değil" },
+                  { label: "Failure reason", value: detail.failureReason ?? "Kayıtlı neden yok" },
+                  { label: "Son hata", value: detail.lastErrorMessage ?? "Kayıtlı hata yok" },
                 ]}
               />
             </SectionCard>
 
             <SectionCard
-              title="Cevap editoru"
-              description="Agent'in yanlis yorumladigi cevaplari transcripti kontrol ederek burada duzeltebilirsiniz."
+              title="Cevap editörü"
+              description="Agent'in yanlış yorumladığı cevapları transcripti kontrol ederek burada düzeltebilirsiniz."
               action={detail.surveyResponse ? (
                 <button
                   type="button"
@@ -289,28 +289,28 @@ export default function OperationJobDetailPage() {
                   disabled={isSavingAnswers || !hasUnsavedAnswerChanges}
                   onClick={() => void handleSaveAnswers()}
                 >
-                  {isSavingAnswers ? "Yanitlar kaydediliyor..." : "Yanitlari kaydet"}
+                  {isSavingAnswers ? "Yanıtlar kaydediliyor..." : "Yanıtları kaydet"}
                 </button>
               ) : null}
             >
               {saveErrorMessage ? (
                 <div className="operation-inline-message is-danger compact">
-                  <strong>Yanitlar kaydedilemedi</strong>
+                  <strong>Yanıtlar kaydedilemedi</strong>
                   <span>{saveErrorMessage}</span>
                 </div>
               ) : null}
 
               {saveSuccessMessage ? (
                 <div className="operation-inline-message is-accent compact">
-                  <strong>Yanitlar guncellendi</strong>
+                  <strong>Yanıtlar güncellendi</strong>
                   <span>{saveSuccessMessage}</span>
                 </div>
               ) : null}
 
               {!detail.surveyResponse ? (
                 <div className="operation-empty-state">
-                  <strong>Duzenlenebilir bir response kaydi yok</strong>
-                  <p>Bu job icin once survey response olusmali. Transcript varsa yine de asagida inceleyebilirsiniz.</p>
+                  <strong>Düzenlenebilir bir response kaydı yok</strong>
+                  <p>Bu job için önce survey response oluşmalı. Transcript varsa yine de aşağıda inceleyebilirsiniz.</p>
                 </div>
               ) : (
                 <div className="call-job-answer-editor-list">
@@ -328,7 +328,7 @@ export default function OperationJobDetailPage() {
                             </span>
                           </div>
                           <span className={answer.valid ? "operation-readiness-pill is-ready" : "operation-readiness-pill is-blocked"}>
-                            {answer.manuallyEdited ? "Manuel duzeltildi" : answer.valid ? "Gecerli" : "Kontrol gerekli"}
+                            {answer.manuallyEdited ? "Manuel düzeltildi" : answer.valid ? "Geçerli" : "Kontrol gerekli"}
                           </span>
                         </div>
 
@@ -360,7 +360,7 @@ export default function OperationJobDetailPage() {
 
                         {answer.questionType === "RATING" || answer.questionType === "NUMBER" ? (
                           <label className="call-job-answer-field">
-                            <span>{answer.questionType === "RATING" ? "Yeni puan" : "Yeni sayi"}</span>
+                            <span>{answer.questionType === "RATING" ? "Yeni puan" : "Yeni sayı"}</span>
                             <input
                               type="number"
                               value={draft.answerNumber}
@@ -374,7 +374,7 @@ export default function OperationJobDetailPage() {
 
                         {answer.questionType === "SINGLE_CHOICE" ? (
                           <label className="call-job-answer-field">
-                            <span>Secenek</span>
+                            <span>Seçenek</span>
                             <select
                               value={draft.selectedOptionId}
                               onChange={(event) => updateAnswerDraft(answer.questionId, (current) => ({
@@ -382,7 +382,7 @@ export default function OperationJobDetailPage() {
                                 selectedOptionId: event.target.value,
                               }))}
                             >
-                              <option value="">Secin</option>
+                              <option value="">Seçin</option>
                               {answer.options.map((option) => (
                                 <option key={option.id} value={option.id}>
                                   {option.label}
@@ -394,7 +394,7 @@ export default function OperationJobDetailPage() {
 
                         {answer.questionType === "MULTI_CHOICE" ? (
                           <div className="call-job-answer-field">
-                            <span>Secenekler</span>
+                            <span>Seçenekler</span>
                             <div className="call-job-answer-checkboxes">
                               {answer.options.map((option) => (
                                 <label key={option.id} className="call-job-answer-checkbox">
@@ -423,7 +423,7 @@ export default function OperationJobDetailPage() {
 
             <SectionCard
               title="Response ve transcript"
-              description="Bu cagri isinin kullanilabilir survey verisi uretip uretmedigi burada net gorunur."
+              description="Bu çağrı işinin kullanılabilir survey verisi üretip üretmediği burada net görünür."
             >
               <div className="stack-list">
                 <div className="detail-row">
@@ -431,15 +431,15 @@ export default function OperationJobDetailPage() {
                   <strong>{responseStatus}</strong>
                 </div>
                 <div className="detail-row">
-                  <span>Kullanilabilir veri</span>
+                  <span>Kullanılabilir veri</span>
                   <strong>{responseDetail}</strong>
                 </div>
                 <div className="detail-row">
-                  <span>Provider referansi</span>
+                  <span>Provider referansı</span>
                   <strong>{detail.latestProviderCallId ?? "Provider call id yok"}</strong>
                 </div>
                 <div className="detail-row">
-                  <span>Transcript referansi</span>
+                  <span>Transcript referansı</span>
                   <strong>{detail.latestTranscriptStorageKey ?? "Transcript storage key yok"}</strong>
                 </div>
               </div>
@@ -447,26 +447,26 @@ export default function OperationJobDetailPage() {
               <div className="section-card-body">
                 <div className="list-item">
                   <div>
-                    <strong>Transcript ozeti</strong>
-                    <span>{detail.transcriptSummary ?? "Ozet uretilmemis."}</span>
+                    <strong>Transcript özeti</strong>
+                    <span>{detail.transcriptSummary ?? "Özet üretilmemiş."}</span>
                   </div>
                 </div>
                 <div className="call-job-transcript">
                   <strong>Transcript blok</strong>
-                  <pre>{detail.transcriptText ?? "Bu is icin transcript metni henuz mevcut degil."}</pre>
+                  <pre>{detail.transcriptText ?? "Bu iş için transcript metni henüz mevcut değil."}</pre>
                 </div>
               </div>
             </SectionCard>
 
             <SectionCard
-              title="Attempt gecmisi"
-              description="Her retry ayni job altinda yeni bir execution attempt olarak saklanir."
+              title="Attempt geçmişi"
+              description="Her retry aynı job altında yeni bir execution attempt olarak saklanır."
             >
               <div className="call-job-attempt-list">
                 {detail.attempts.length === 0 ? (
                   <div className="operation-empty-state">
-                    <strong>Kayitli attempt yok</strong>
-                    <p>Job olusturulmus fakat henuz provider tarafina giden bir execution attempt kaydi gorunmuyor.</p>
+                    <strong>Kayıtlı attempt yok</strong>
+                    <p>Job oluşturulmuş fakat henüz provider tarafına giden bir execution attempt kaydı görünmüyor.</p>
                   </div>
                 ) : (
                   detail.attempts.map((attempt) => (
@@ -487,7 +487,7 @@ export default function OperationJobDetailPage() {
                         <span>Connected: {attempt.connectedAt}</span>
                         <span>Ended: {attempt.endedAt}</span>
                         <span>Provider call id: {attempt.providerCallId ?? "-"}</span>
-                        <span>Sure: {attempt.durationSeconds ?? 0} sn</span>
+                        <span>Süre: {attempt.durationSeconds ?? 0} sn</span>
                       </div>
                       {attempt.failureReason ? (
                         <div className="operation-inline-message is-danger compact">
@@ -498,14 +498,14 @@ export default function OperationJobDetailPage() {
                       <div className="call-job-attempt-body">
                         <div className="detail-row">
                           <span>Transcript key</span>
-                          <strong>{attempt.transcriptStorageKey ?? "Kayit yok"}</strong>
+                          <strong>{attempt.transcriptStorageKey ?? "Kayıt yok"}</strong>
                         </div>
                         <div className="detail-row">
                           <span>Survey response</span>
                           <strong>
                             {attempt.surveyResponse
-                              ? `${attempt.surveyResponse.status} · ${attempt.surveyResponse.validAnswerCount} gecerli cevap`
-                              : "Bagli response yok"}
+                              ? `${attempt.surveyResponse.status} · ${attempt.surveyResponse.validAnswerCount} geçerli cevap`
+                              : "Bağlı response yok"}
                           </strong>
                         </div>
                       </div>
@@ -518,16 +518,16 @@ export default function OperationJobDetailPage() {
 
           <aside className="operation-workspace-side">
             <SectionCard
-              title="Iliski baglami"
-              description="Bu job kaydinin operasyon, anket ve response iliskileri tek bakista gorunsun."
+              title="İlişki bağlamı"
+              description="Bu job kaydının operasyon, anket ve response ilişkileri tek bakışta görünsün."
             >
               <KeyValueList
                 items={[
                   { label: "Operasyon", value: detail.operationName },
                   { label: "Anket", value: detail.surveyName },
                   { label: "Job raw status", value: detail.rawStatus },
-                  { label: "Ilk attempt mi", value: detail.firstAttempt ? "Evet" : "Hayir" },
-                  { label: "Retry gecmisi", value: detail.retried ? "Var" : "Yok" },
+                  { label: "İlk attempt mi", value: detail.firstAttempt ? "Evet" : "Hayır" },
+                  { label: "Retry geçmişi", value: detail.retried ? "Var" : "Yok" },
                   { label: "Partial veri", value: detail.partialResponseDataExists ? "Var" : "Yok" },
                 ]}
               />
@@ -535,28 +535,28 @@ export default function OperationJobDetailPage() {
 
             <SectionCard
               title="Kenar durumlar"
-              description="Bu yuzey bekleyen, basarisiz, tamamlanmis ve yarim veri durumlarini ayrik gostermelidir."
+              description="Bu yüzey bekleyen, başarısız, tamamlanmış ve yarım veri durumlarını ayrık göstermelidir."
             >
               <div className="stack-list">
                 <div className="detail-row">
                   <span>Failed ve transcript yok</span>
-                  <strong>{detail.failed && !detail.transcriptText ? "Bu kayda uyuyor" : "Hayir"}</strong>
+                  <strong>{detail.failed && !detail.transcriptText ? "Bu kayda uyuyor" : "Hayır"}</strong>
                 </div>
                 <div className="detail-row">
                   <span>Completed ve response var</span>
-                  <strong>{detail.rawStatus === "COMPLETED" && detail.surveyResponse ? "Evet" : "Hayir"}</strong>
+                  <strong>{detail.rawStatus === "COMPLETED" && detail.surveyResponse ? "Evet" : "Hayır"}</strong>
                 </div>
                 <div className="detail-row">
                   <span>Completed ama usable cevap yok</span>
-                  <strong>{detail.rawStatus === "COMPLETED" && detail.surveyResponse && !detail.surveyResponse.usableResponse ? "Evet" : "Hayir"}</strong>
+                  <strong>{detail.rawStatus === "COMPLETED" && detail.surveyResponse && !detail.surveyResponse.usableResponse ? "Evet" : "Hayır"}</strong>
                 </div>
                 <div className="detail-row">
                   <span>Queued ve result bekleniyor</span>
-                  <strong>{detail.status === "Queued" && !detail.surveyResponse ? "Evet" : "Hayir"}</strong>
+                  <strong>{detail.status === "Queued" && !detail.surveyResponse ? "Evet" : "Hayır"}</strong>
                 </div>
                 <div className="detail-row">
-                  <span>Coklu retry gecmisi</span>
-                  <strong>{detail.attemptCount > 1 ? `${detail.attemptCount} attempt` : "Hayir"}</strong>
+                  <span>Çoklu retry geçmişi</span>
+                  <strong>{detail.attemptCount > 1 ? `${detail.attemptCount} attempt` : "Hayır"}</strong>
                 </div>
               </div>
             </SectionCard>
@@ -570,23 +570,23 @@ export default function OperationJobDetailPage() {
 function formatAttemptStatus(attempt: CallJobAttempt): string {
   switch (attempt.status) {
     case "INITIATED":
-      return "Hazirlaniyor";
+      return "Hazırlanıyor";
     case "RINGING":
       return "Ring";
     case "IN_PROGRESS":
-      return "Suruyor";
+      return "Sürüyor";
     case "COMPLETED":
-      return "Tamamlandi";
+      return "Tamamlandı";
     case "FAILED":
-      return "Basarisiz";
+      return "Başarısız";
     case "NO_ANSWER":
       return "Cevap yok";
     case "BUSY":
-      return "Mesgul";
+      return "Meşgul";
     case "VOICEMAIL":
-      return "Sesli mesaja dustu";
+      return "Sesli mesaja düştü";
     case "CANCELLED":
-      return "Iptal edildi";
+      return "İptal edildi";
     default:
       return attempt.status;
   }
@@ -626,15 +626,15 @@ function normalizeDraftText(value: string): string | null {
 function formatQuestionType(questionType: CallJobSurveyResponseAnswer["questionType"]): string {
   switch (questionType) {
     case "OPEN_ENDED":
-      return "Acik uc"
+      return "Açık uç"
     case "RATING":
       return "Puan"
     case "NUMBER":
-      return "Sayisal giris"
+      return "Sayısal giriş"
     case "SINGLE_CHOICE":
-      return "Tek secim"
+      return "Tek seçim"
     case "MULTI_CHOICE":
-      return "Coklu secim"
+      return "Çoklu seçim"
     default:
       return questionType;
   }

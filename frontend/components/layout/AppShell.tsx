@@ -92,8 +92,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       <div className="auth-shell-loading">
         <div className="panel-card auth-shell-loading-card">
           <span className="eyebrow">Oturum</span>
-          <h1>Calisma alani hazirlaniyor</h1>
-          <p>Kullanici ve sirket baglami dogrulaniyor. Ardindan panel acilacak.</p>
+          <h1>Çalışma alanı hazırlanıyor</h1>
+          <p>Kullanıcı ve şirket bağlamı doğrulanıyor. Ardından panel açılacak.</p>
         </div>
       </div>
     );
@@ -171,7 +171,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             {!isSidebarCollapsed ? (
               <div className="brand-copy">
                 <p className="brand-title">SurveyAI</p>
-                <p className="brand-subtitle">Arastirma Operasyonlari</p>
+                <p className="brand-subtitle">Araştırma Operasyonları</p>
               </div>
             ) : null}
             <button
@@ -336,7 +336,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 <span className="topbar-account-avatar">{currentUser.user.fullName.slice(0, 1).toUpperCase()}</span>
                 {!isSidebarCollapsed ? (
                   <div className="topbar-account-copy">
-                    <span className="topbar-account-label">Sirket</span>
+                    <span className="topbar-account-label">Şirket</span>
                     <strong>{currentUser.company.name}</strong>
                     <span>{currentUser.user.fullName}</span>
                   </div>
@@ -358,7 +358,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 </div>
                 <div className="topbar-account-panel-copy">
                   <strong>{currentUser.company.name}</strong>
-                  <span>Mevcut calisma alani</span>
+                  <span>Mevcut çalışma alanı</span>
                 </div>
                 <button
                   type="button"
@@ -368,7 +368,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                     void handleLogout();
                   }}
                 >
-                  Cikis Yap
+                  Çıkış Yap
                 </button>
               </div>
             </div>

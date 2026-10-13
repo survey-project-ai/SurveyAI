@@ -503,7 +503,7 @@ export async function fetchOperationAnalytics(
     if (typeof sample === "string") {
       return {
         callJobId: `legacy-${questionId}-${sampleIndex}`,
-        respondentName: "Katilimci",
+        respondentName: "Katılımcı",
         capturedAt: null,
         responseText: sample,
         rawResponseText: sample,
@@ -889,11 +889,11 @@ async function readApiError(response: Response, resourceName: string): Promise<s
   try {
     const payload = (await response.json()) as ApiErrorResponse;
     const details = payload.details?.filter(Boolean) ?? [];
-    const fallback = `${resourceName} yuklenemedi (${response.status})`;
+    const fallback = `${resourceName} yüklenemedi (${response.status})`;
     const message = payload.message?.trim() || fallback;
     return details.length > 0 ? `${message}: ${details.join(" ")}` : message;
   } catch {
-    return `${resourceName} yuklenemedi (${response.status})`;
+    return `${resourceName} yüklenemedi (${response.status})`;
   }
 }
 

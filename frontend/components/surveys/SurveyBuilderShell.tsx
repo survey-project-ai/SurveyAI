@@ -340,7 +340,7 @@ export function SurveyBuilderShell({
               {isCreatingDraftCopy ? (language === "tr" ? "Kopya hazırlanıyor..." : "Preparing copy...") : (language === "tr" ? "Taslak Kopya Oluştur" : "Create draft copy")}
             </button>
           </div>
-          <div className="survey-header-notice" role="note" aria-label="Yayin uyarisi">
+          <div className="survey-header-notice" role="note" aria-label="Yayın uyarısı">
             <SurveyIcon className="nav-icon" />
             <div>
               <strong>{language === "tr" ? "Yayınlandı" : "Published"}</strong>
@@ -394,7 +394,7 @@ export function SurveyBuilderShell({
           <StatCard
             label="Anket durumu"
             value={resolveStatusLabel(survey.status, language)}
-            detail={mode === "create" ? "Yeni tasarim akisi taslak olarak baslar." : "Mevcut anketin yasam durumu."}
+            detail={mode === "create" ? "Yeni tasarım akışı taslak olarak başlar." : "Mevcut anketin yaşam durumu."}
             icon={<SurveyIcon className="nav-icon" />}
           />
           <StatCard
@@ -402,21 +402,21 @@ export function SurveyBuilderShell({
             value={questionStats.total}
             detail={
               questionStats.total > 0
-                ? `${questionStats.distinctTypes} farkli tip, ${questionStats.required} zorunlu soru`
-                : "Ilk soruyu ekleyerek akis mimarisini baslatin."
+                ? `${questionStats.distinctTypes} farklı tip, ${questionStats.required} zorunlu soru`
+                : "İlk soruyu ekleyerek akış mimarisini başlatın."
             }
             icon={<AnalyticsIcon className="nav-icon" />}
           />
           <StatCard
             label="Dil ve tekrar"
             value={`${(survey.languageCode || "tr").toUpperCase()} / ${survey.maxRetryPerQuestion}`}
-            detail="Soru basi tekrar sayisi sesli gorusmedeki ikinci deneme sayisini belirler."
+            detail="Soru başı tekrar sayısı sesli görüşmedeki ikinci deneme sayısını belirler."
             icon={<PlayIcon className="nav-icon" />}
           />
           <StatCard
-            label="Onizleme hazirligi"
-            value={survey.introPrompt.trim() && survey.closingPrompt.trim() ? "Hazir" : "Eksik"}
-            detail="Acilis ve kapanis mesajlari canli gorusme ritmini belirler."
+            label="Önizleme hazırlığı"
+            value={survey.introPrompt.trim() && survey.closingPrompt.trim() ? "Hazır" : "Eksik"}
+            detail="Açılış ve kapanış mesajları canlı görüşme ritmini belirler."
             icon={<EyeIcon className="nav-icon" />}
           />
         </section>
@@ -596,8 +596,8 @@ export function SurveyBuilderShell({
             {showReadinessPanel ? (
               <SectionCard
                 eyebrow="Kontrol"
-                title="Yayin Hazirligi"
-                description="Sistem, anketin sahaya cikmadan once dikkat edilmesi gereken noktalarini burada toplar."
+                title="Yayın Hazırlığı"
+                description="Sistem, anketin sahaya çıkmadan önce dikkat edilmesi gereken noktalarını burada toplar."
                 action={<StatusBadge status={readiness.status} label={readiness.label} />}
               >
                 <div className="ops-builder-governance-list">
@@ -616,13 +616,13 @@ export function SurveyBuilderShell({
 
             {showSurveySummaryPanel ? (
               <SectionCard
-                eyebrow="Ozet"
-                title="Anket Ozeti"
-                description="Bu panel, operasyon ekiplerinin sahaya neyin cikacagini tek bakista kontrol etmesini saglar."
+                eyebrow="Özet"
+                title="Anket Özeti"
+                description="Bu panel, operasyon ekiplerinin sahaya neyin çıkacağını tek bakışta kontrol etmesini sağlar."
               >
                 <div className="ops-builder-summary-grid">
                   <div className="ops-builder-summary-item">
-                    <span>Son guncelleme</span>
+                    <span>Son güncelleme</span>
                     <strong>{survey.updatedAt}</strong>
                   </div>
                   <div className="ops-builder-summary-item">
@@ -630,26 +630,26 @@ export function SurveyBuilderShell({
                     <strong>{questionStats.required}</strong>
                   </div>
                   <div className="ops-builder-summary-item">
-                    <span>Secimli soru</span>
+                    <span>Seçimli soru</span>
                     <strong>{questionStats.choice}</strong>
                   </div>
                   <div className="ops-builder-summary-item">
-                    <span>Olcek sorusu</span>
+                    <span>Ölçek sorusu</span>
                     <strong>{questionStats.rating}</strong>
                   </div>
                 </div>
 
                 <div className="ops-builder-notes">
                   <div className="ops-builder-note-card">
-                    <strong>Kullanim baglami</strong>
-                    <p>{survey.summary.trim() || "Bu anket icin operasyon baglami henuz yazilmadi."}</p>
+                    <strong>Kullanım bağlamı</strong>
+                    <p>{survey.summary.trim() || "Bu anket için operasyon bağlamı henüz yazılmadı."}</p>
                   </div>
                   <div className="ops-builder-note-card">
-                    <strong>Akis kapsami</strong>
+                    <strong>Akış kapsamı</strong>
                     <p>
                       {survey.questions.length > 0
-                        ? `Acilis, ${survey.questions.length} soru ve kapanisla ilerleyen bir gorusme akisi tanimli.`
-                        : "Acilis ve kapanis mesajlarini ekledikten sonra ilk soru ile akisi baslatabilirsiniz."}
+                        ? `Açılış, ${survey.questions.length} soru ve kapanışla ilerleyen bir görüşme akışı tanımlı.`
+                        : "Açılış ve kapanış mesajlarını ekledikten sonra ilk soru ile akışı başlatabilirsiniz."}
                     </p>
                   </div>
                 </div>
@@ -668,45 +668,45 @@ function buildReadinessRows(survey: SurveyBuilderSurvey, questionStats: ReturnTy
       key: "brief",
       title: "Anket brifi",
       detail: survey.name.trim() && survey.summary.trim()
-        ? "Baslik ve kullanim ozeti operasyon ekipleri icin okunabilir durumda."
-        : "Baslik ve ozet alani eksiksiz doldurulursa anket yeniden kullanimda daha net olur.",
-      label: survey.name.trim() && survey.summary.trim() ? "Hazir" : "Eksik",
+        ? "Başlık ve kullanım özeti operasyon ekipleri için okunabilir durumda."
+        : "Başlık ve özet alanı eksiksiz doldurulursa anket yeniden kullanımda daha net olur.",
+      label: survey.name.trim() && survey.summary.trim() ? "Hazır" : "Eksik",
       status: survey.name.trim() && survey.summary.trim() ? "Ready" : "Warning",
     },
     {
       key: "scripts",
-      title: "Acilis ve kapanis metinleri",
+      title: "Açılış ve kapanış metinleri",
       detail: survey.introPrompt.trim() && survey.closingPrompt.trim()
-        ? "Gorusme ritmi icin acilis ve kapanis metinleri tanimli."
-        : "En az bir akis metni eksik; gorusmenin tonu sahada net olmayabilir.",
-      label: survey.introPrompt.trim() && survey.closingPrompt.trim() ? "Hazir" : "Eksik",
+        ? "Görüşme ritmi için açılış ve kapanış metinleri tanımlı."
+        : "En az bir akış metni eksik; görüşmenin tonu sahada net olmayabilir.",
+      label: survey.introPrompt.trim() && survey.closingPrompt.trim() ? "Hazır" : "Eksik",
       status: survey.introPrompt.trim() && survey.closingPrompt.trim() ? "Ready" : "Warning",
     },
     {
       key: "questions",
-      title: "Soru butunlugu",
+      title: "Soru bütünlüğü",
       detail:
         questionStats.total > 0 && questionStats.blankTitles === 0
-          ? `${questionStats.total} soru basliklandirildi ve akis okunabilir durumda.`
-          : "En az bir soru ekleyin ve her soruya operasyonel bir baslik verin.",
-      label: questionStats.total > 0 && questionStats.blankTitles === 0 ? "Hazir" : "Bekliyor",
+          ? `${questionStats.total} soru başlıklandırıldı ve akış okunabilir durumda.`
+          : "En az bir soru ekleyin ve her soruya operasyonel bir başlık verin.",
+      label: questionStats.total > 0 && questionStats.blankTitles === 0 ? "Hazır" : "Bekliyor",
       status: questionStats.total > 0 && questionStats.blankTitles === 0 ? "Ready" : "Pending",
     },
     {
       key: "options",
-      title: "Secenek tutarliligi",
+      title: "Seçenek tutarlılığı",
       detail:
         questionStats.optionGaps === 0
-          ? "Secimli soru tiplerinde bos veya eksik secenek gorunmuyor."
-          : `${questionStats.optionGaps} secimli soruda secenek kontrolu gerekiyor.`,
-      label: questionStats.optionGaps === 0 ? "Hazir" : "Riskli",
+          ? "Seçimli soru tiplerinde boş veya eksik seçenek görünmüyor."
+          : `${questionStats.optionGaps} seçimli soruda seçenek kontrolü gerekiyor.`,
+      label: questionStats.optionGaps === 0 ? "Hazır" : "Riskli",
       status: questionStats.optionGaps === 0 ? "Ready" : "Warning",
     },
   ];
 
   const readyCount = rows.filter((row) => row.status === "Ready").length;
   const status = isPublished ? "Active" : readyCount >= 4 ? "Ready" : readyCount >= 2 ? "Warning" : "Pending";
-  const label = isPublished ? "Yayinda" : readyCount >= 4 ? "Hazir" : readyCount >= 2 ? "Kismen hazir" : "Hazirlikta";
+  const label = isPublished ? "Yayında" : readyCount >= 4 ? "Hazır" : readyCount >= 2 ? "Kısmen hazır" : "Hazırlıkta";
 
   return {
     rows,
@@ -774,9 +774,9 @@ function buildDraftCopySurvey(survey: SurveyBuilderSurvey): SurveyBuilderSurvey 
     id: `draft-copy-${globalThis.crypto.randomUUID()}`,
     name: `${survey.name.trim() || "Anket"} - Taslak Kopya`,
     status: "Draft",
-    createdAt: "Henuz olusmadi",
+    createdAt: "Henüz oluşmadı",
     publishedAt: null,
-    updatedAt: "Bugun",
+    updatedAt: "Bugün",
     questions: survey.questions.map((question, questionIndex) => ({
       ...question,
       id: `draft-question-${globalThis.crypto.randomUUID()}`,

@@ -13,18 +13,18 @@ import { fetchOperationById, fetchOperationCallJobsPage, type CallJobPage } from
 import { CallJob, Operation, TableColumn } from "@/lib/types";
 
 const JOB_FILTERS: Array<["All" | CallJob["status"], string]> = [
-  ["All", "Tum durumlar"],
+  ["All", "Tüm durumlar"],
   ["Queued", "Kuyrukta"],
-  ["InProgress", "Suruyor"],
-  ["Completed", "Tamamlandi"],
-  ["Failed", "Basarisiz"],
-  ["Skipped", "Atlandi"],
+  ["InProgress", "Sürüyor"],
+  ["Completed", "Tamamlandı"],
+  ["Failed", "Başarısız"],
+  ["Skipped", "Atlandı"],
 ];
 
 const jobColumns: TableColumn<CallJob>[] = [
   {
     key: "person",
-    label: "Kisi",
+    label: "Kişi",
     render: (job) => (
       <Link href={`/operations/${job.operationId ?? ""}/jobs/${job.id}`} className="table-link-block">
         <div className="table-title">{job.personName}</div>
@@ -55,18 +55,18 @@ const jobColumns: TableColumn<CallJob>[] = [
         <div className="table-title">
           {buildJobResultTitle(job)}
         </div>
-        <div className="table-subtitle">{job.lastErrorMessage ?? job.lastResultSummary ?? "Durum ozeti"}</div>
+        <div className="table-subtitle">{job.lastErrorMessage ?? job.lastResultSummary ?? "Durum özeti"}</div>
       </div>
     ),
   },
   {
     key: "createdAt",
-    label: "Olusturuldu",
+    label: "Oluşturuldu",
     render: (job) => job.createdAt,
   },
   {
     key: "updatedAt",
-    label: "Guncellendi",
+    label: "Güncellendi",
     render: (job) => job.updatedAt,
   },
   {
@@ -74,7 +74,7 @@ const jobColumns: TableColumn<CallJob>[] = [
     label: "Detay",
     render: (job) => (
       <Link href={`/operations/${job.operationId ?? ""}/jobs/${job.id}`} className="button-secondary compact-button table-action-link">
-        Incele
+        İncele
       </Link>
     ),
   },
@@ -202,11 +202,11 @@ export default function OperationJobsPage() {
             <strong><StatusBadge status={operation?.status ?? "Pending"} /></strong>
           </div>
           <div className="operation-summary-row">
-            <span>Toplam hazirlanan is</span>
+            <span>Toplam hazırlanan iş</span>
             <strong>{operation?.executionSummary.totalCallJobs ?? 0}</strong>
           </div>
           <div className="operation-summary-row">
-            <span>Acik is havuzu</span>
+            <span>Açık iş havuzu</span>
             <strong>{operation?.executionSummary.pendingCallJobs ?? 0}</strong>
           </div>
         </div>
@@ -272,7 +272,7 @@ export default function OperationJobsPage() {
             <DataTable
               columns={jobColumns}
               rows={jobsPage.items}
-              toolbar={<span className="table-meta">{jobsPage.totalItems} is / sayfa {jobsPage.page + 1} / {Math.max(jobsPage.totalPages, 1)}</span>}
+              toolbar={<span className="table-meta">{jobsPage.totalItems} iş / sayfa {jobsPage.page + 1} / {Math.max(jobsPage.totalPages, 1)}</span>}
             />
             <div className="operation-pagination">
               <button
@@ -312,14 +312,14 @@ function buildJobResultTitle(job: CallJob): string {
   }
 
   if (job.status === "Failed") {
-    return job.lastResultSummary ?? "Cagri basarisiz oldu";
+    return job.lastResultSummary ?? "Çağrı başarısız oldu";
   }
 
   if (job.status === "Completed") {
-    return "Gecerli cevap kaydi yok";
+    return "Geçerli cevap kaydı yok";
   }
 
-  return "Henuz cevap yok";
+  return "Henüz cevap yok";
 }
 
 function getEmptyState(

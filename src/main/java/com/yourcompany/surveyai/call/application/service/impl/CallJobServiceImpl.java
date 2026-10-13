@@ -516,7 +516,7 @@ public class CallJobServiceImpl implements CallJobService {
         String firstName = contact.getFirstName() == null ? "" : contact.getFirstName().trim();
         String lastName = contact.getLastName() == null ? "" : contact.getLastName().trim();
         String fullName = (firstName + " " + lastName).trim();
-        return fullName.isBlank() ? "Adsiz kisi" : fullName;
+        return fullName.isBlank() ? "Adsız kişi" : fullName;
     }
 
     private CallJobListStatusDto mapListStatus(CallJobStatus status) {
@@ -533,13 +533,13 @@ public class CallJobServiceImpl implements CallJobService {
         if (latestAttempt != null) {
             switch (latestAttempt.getStatus()) {
                 case BUSY:
-                    return "Hat mesgul.";
+                    return "Hat meşgul.";
                 case NO_ANSWER:
-                    return "Cagri yanitlanmadi.";
+                    return "Çağrı yanıtlanmadı.";
                 case VOICEMAIL:
-                    return "Cagri sesli mesaja dustu.";
+                    return "Çağrı sesli mesaja düştü.";
                 case CANCELLED:
-                    return "Cagri iptal edildi.";
+                    return "Çağrı iptal edildi.";
                 default:
                     break;
             }
@@ -550,11 +550,11 @@ public class CallJobServiceImpl implements CallJobService {
         }
 
         return switch (mapListStatus(callJob.getStatus())) {
-            case QUEUED -> "Is sirada bekliyor.";
-            case IN_PROGRESS -> "Cagri yurutme adimi devam ediyor.";
-            case COMPLETED -> "Is basariyla tamamlandi.";
-            case FAILED -> "Son deneme basarisiz oldu.";
-            case SKIPPED -> "Is islenmeden kapatildi.";
+            case QUEUED -> "İş sırada bekliyor.";
+            case IN_PROGRESS -> "Çağrı yürütme adımı devam ediyor.";
+            case COMPLETED -> "İş başarıyla tamamlandı.";
+            case FAILED -> "Son deneme başarısız oldu.";
+            case SKIPPED -> "İş işlenmeden kapatıldı.";
         };
     }
 
@@ -780,7 +780,7 @@ public class CallJobServiceImpl implements CallJobService {
                 answer.setAnswerText(trimmedText);
                 answer.setValid(trimmedText != null);
                 if (trimmedText == null) {
-                    answer.setInvalidReason("Manuel olarak bos birakildi");
+                    answer.setInvalidReason("Manuel olarak boş bırakıldı");
                 }
             }
             case NUMBER -> {
@@ -789,7 +789,7 @@ public class CallJobServiceImpl implements CallJobService {
                 answer.setAnswerText(request.getAnswerNumber() == null ? trimmedText : request.getAnswerNumber().stripTrailingZeros().toPlainString());
                 answer.setValid(request.getAnswerNumber() != null);
                 if (request.getAnswerNumber() == null) {
-                    answer.setInvalidReason("Gecerli bir sayi girilmedi");
+                    answer.setInvalidReason("Geçerli bir sayı girilmedi");
                 }
             }
             case RATING -> {
@@ -798,7 +798,7 @@ public class CallJobServiceImpl implements CallJobService {
                 answer.setAnswerText(request.getAnswerNumber() == null ? trimmedText : request.getAnswerNumber().stripTrailingZeros().toPlainString());
                 answer.setValid(request.getAnswerNumber() != null);
                 if (request.getAnswerNumber() == null) {
-                    answer.setInvalidReason("Gecerli bir puan secilmedi");
+                    answer.setInvalidReason("Geçerli bir puan seçilmedi");
                 }
             }
             case SINGLE_CHOICE -> {
@@ -808,7 +808,7 @@ public class CallJobServiceImpl implements CallJobService {
                 answer.setRawInputText(matched != null ? matched.getLabel() : trimmedText);
                 answer.setValid(matched != null);
                 if (matched == null) {
-                    answer.setInvalidReason("Gecerli bir secenek secilmedi");
+                    answer.setInvalidReason("Geçerli bir seçenek seçilmedi");
                 }
             }
             case MULTI_CHOICE -> {
@@ -817,7 +817,7 @@ public class CallJobServiceImpl implements CallJobService {
                 answer.setRawInputText(labels.isEmpty() ? trimmedText : String.join(", ", labels));
                 answer.setValid(!matchedOptions.isEmpty());
                 if (matchedOptions.isEmpty()) {
-                    answer.setInvalidReason("En az bir secenek secilmedi");
+                    answer.setInvalidReason("En az bir seçenek seçilmedi");
                 }
             }
         }
@@ -1088,21 +1088,21 @@ public class CallJobServiceImpl implements CallJobService {
             List<UUID> selectedOptionIds
     ) {
         if (answer == null) {
-            return "Henuz cevap yok";
+            return "Henüz cevap yok";
         }
         return switch (question.getQuestionType()) {
-            case OPEN_ENDED -> trimToNull(answer.getAnswerText()) == null ? "Bos" : answer.getAnswerText().trim();
-            case NUMBER -> answer.getAnswerNumber() == null ? "Bos" : answer.getAnswerNumber().stripTrailingZeros().toPlainString();
-            case RATING -> answer.getAnswerNumber() == null ? "Bos" : answer.getAnswerNumber().stripTrailingZeros().toPlainString();
+            case OPEN_ENDED -> trimToNull(answer.getAnswerText()) == null ? "Boş" : answer.getAnswerText().trim();
+            case NUMBER -> answer.getAnswerNumber() == null ? "Boş" : answer.getAnswerNumber().stripTrailingZeros().toPlainString();
+            case RATING -> answer.getAnswerNumber() == null ? "Boş" : answer.getAnswerNumber().stripTrailingZeros().toPlainString();
             case SINGLE_CHOICE, MULTI_CHOICE -> {
                 if (!selectedOptionIds.isEmpty()) {
                     yield options.stream()
                             .filter(option -> selectedOptionIds.contains(option.getId()))
                             .map(SurveyQuestionOption::getLabel)
                             .reduce((left, right) -> left + ", " + right)
-                            .orElse(answer.getAnswerText() == null ? "Bos" : answer.getAnswerText());
+                            .orElse(answer.getAnswerText() == null ? "Boş" : answer.getAnswerText());
                 }
-                yield trimToNull(answer.getAnswerText()) == null ? "Bos" : answer.getAnswerText().trim();
+                yield trimToNull(answer.getAnswerText()) == null ? "Boş" : answer.getAnswerText().trim();
             }
         };
     }

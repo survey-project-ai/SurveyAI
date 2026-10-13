@@ -200,7 +200,7 @@ class CallJobServiceImplTest {
 
         assertThat(page.items()).hasSize(1);
         assertThat(page.items().get(0).answerCount()).isZero();
-        assertThat(page.items().get(0).lastResultSummary()).isEqualTo("Hat mesgul.");
+        assertThat(page.items().get(0).lastResultSummary()).isEqualTo("Hat meşgul.");
     }
 
     @Test

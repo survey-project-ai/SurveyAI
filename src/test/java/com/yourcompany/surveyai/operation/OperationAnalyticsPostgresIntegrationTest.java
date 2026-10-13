@@ -126,7 +126,7 @@ class OperationAnalyticsPostgresIntegrationTest {
         assertThat(analytics.partialResponses()).isZero();
         assertThat(analytics.consentBreakdown())
                 .extracting(item -> item.label() + ":" + item.count())
-                .contains("Katilmayi kabul etti:" + RESPONDENT_COUNT);
+                .contains("Katılmayı kabul etti:" + RESPONDENT_COUNT);
 
         OperationAnalyticsQuestionSummaryDto choiceSummary = analytics.questionSummaries().get(0);
         assertThat(choiceSummary.answeredCount()).isEqualTo(RESPONDENT_COUNT);

@@ -35,7 +35,7 @@ export async function readOperationContactImportRows(file: File): Promise<unknow
   }
 
   if (!fileName.endsWith(".xlsx")) {
-    throw new Error("Desteklenen dosya formatlari: .csv ve .xlsx");
+    throw new Error("Desteklenen dosya formatları: .csv ve .xlsx");
   }
 
   const { readSheet } = await import("read-excel-file/browser");

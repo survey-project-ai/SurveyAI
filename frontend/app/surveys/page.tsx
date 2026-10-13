@@ -24,7 +24,7 @@ import { questionTypeLabels } from "@/lib/survey-builder";
 import { fetchCompanySurveys, importGoogleForm } from "@/lib/surveys";
 import type { Operation, Survey, SurveyQuestionType, TableColumn } from "@/lib/types";
 
-type SurveyTab = "Aktif" | "Taslak" | "Arsivlenmis" | "Tumu";
+type SurveyTab = "Aktif" | "Taslak" | "Arşivlenmiş" | "Tümü";
 type PortfolioView = "portfolio" | "analytics";
 
 type SurveyRow = Survey & {
@@ -48,7 +48,7 @@ type SurveyAnalyticsRow = {
   metricNote: string;
 };
 
-const tabs: SurveyTab[] = ["Aktif", "Taslak", "Arsivlenmis", "Tumu"];
+const tabs: SurveyTab[] = ["Aktif", "Taslak", "Arşivlenmiş", "Tümü"];
 const surveyPageSize = 5;
 
 export default function SurveysPage() {
@@ -93,7 +93,7 @@ export default function SurveysPage() {
           onClick={() => setIsContactImportModalOpen(true)}
         >
           <ContactIcon className="nav-icon" />
-          Kisi Ice Aktar
+          Kişi İçe Aktar
         </button>
       </div>
     ),
@@ -101,7 +101,7 @@ export default function SurveysPage() {
   );
 
   usePageHeaderOverride({
-    title: "Anket Yonetim Paneli",
+    title: "Anket Yönetim Paneli",
     subtitle: "",
     action: headerAction,
   });
@@ -178,7 +178,7 @@ export default function SurveysPage() {
 
         if (detailResults.some((result) => result.status === "rejected")) {
           setDetailWarning(
-            "Bazi anketlerde soru sayisi alinmadi; eksik alanlar tahmini olarak gosteriliyor.",
+            "Bazı anketlerde soru sayısı alınmadı; eksik alanlar tahmini olarak gösteriliyor.",
           );
         }
 
@@ -199,7 +199,7 @@ export default function SurveysPage() {
         }
 
         setErrorMessage(
-          error instanceof Error ? error.message : "Anket listesi yuklenemedi.",
+          error instanceof Error ? error.message : "Anket listesi yüklenemedi.",
         );
       } finally {
         if (isMounted) {
@@ -260,7 +260,7 @@ export default function SurveysPage() {
     });
 
     if (detailResults.some((result) => result.status === "rejected")) {
-      setDetailWarning("Bazi anketlerde soru sayisi alinmadi; eksik alanlar tahmini olarak gosteriliyor.");
+      setDetailWarning("Bazı anketlerde soru sayısı alınmadı; eksik alanlar tahmini olarak gösteriliyor.");
     }
 
     const rows = baseSurveys.map((survey) => ({
@@ -299,7 +299,7 @@ export default function SurveysPage() {
       await reloadPage();
       router.push(`/surveys/${result.surveyId}`);
     } catch (error) {
-      setGoogleImportError(error instanceof Error ? error.message : "Google Forms importu basarisiz oldu.");
+      setGoogleImportError(error instanceof Error ? error.message : "Google Forms importu başarısız oldu.");
     } finally {
       setIsGoogleImporting(false);
     }
@@ -311,9 +311,9 @@ export default function SurveysPage() {
         return surveys.filter((survey) => survey.status === "Live");
       case "Taslak":
         return surveys.filter((survey) => survey.status === "Draft");
-      case "Arsivlenmis":
+      case "Arşivlenmiş":
         return surveys.filter((survey) => survey.status === "Archived");
-      case "Tumu":
+      case "Tümü":
       default:
         return surveys;
     }
@@ -358,7 +358,7 @@ export default function SurveysPage() {
     () => [
       {
         key: "name",
-        label: "Anket Adi",
+        label: "Anket Adı",
         render: (survey) => (
           <div className="table-title-block survey-name-cell">
             <div className="survey-hover-preview">
@@ -374,7 +374,7 @@ export default function SurveysPage() {
       },
       {
         key: "questions",
-        label: "Soru Sayisi",
+        label: "Soru Sayısı",
         render: (survey) => (
           <div className="ops-table-stack ops-table-stack-questions">
             <strong>{survey.questionCount}</strong>
@@ -383,7 +383,7 @@ export default function SurveysPage() {
       },
       {
         key: "operations",
-        label: "Bagli Operasyon Sayisi",
+        label: "Bağlı Operasyon Sayısı",
         render: (survey) => {
           const activeOperations = survey.linkedOperations.filter(
             (operation) =>
@@ -428,7 +428,7 @@ export default function SurveysPage() {
                 <span className="ops-inline-badge is-active">Aktif: {activeOperations}</span>
                 <span className="ops-inline-badge is-draft">Taslak: {draftOperations}</span>
                 {otherOperations > 0 ? (
-                  <span className="ops-inline-badge is-total">Diger: {otherOperations}</span>
+                  <span className="ops-inline-badge is-total">Diğer: {otherOperations}</span>
                 ) : (
                   <span className="ops-inline-badge is-total">Toplam: {totalOperations}</span>
                 )}
@@ -439,7 +439,7 @@ export default function SurveysPage() {
       },
       {
         key: "updatedAt",
-        label: "Son Guncelleme",
+        label: "Son Güncelleme",
         render: (survey) => (
           <span className="survey-updated-at">{survey.updatedAt}</span>
         ),
@@ -474,14 +474,14 @@ export default function SurveysPage() {
                 href={`/surveys/${survey.id}/edit`}
                 className="button-secondary compact-button"
               >
-                Duzenle
+                Düzenle
               </Link>
             ) : null}
             <button
               type="button"
               className="button-secondary compact-button survey-delete-button"
               disabled
-              title="Anket silme akisi bu ekranda henuz desteklenmiyor"
+              title="Anket silme akışı bu ekranda henüz desteklenmiyor"
             >
               Anketi Sil
             </button>
@@ -526,10 +526,10 @@ export default function SurveysPage() {
             : "live";
         const metricNote =
           metricState === "empty"
-            ? "Operasyona baglanmadi"
+            ? "Operasyona bağlanmadı"
             : metricState === "pending"
               ? "Operasyon beklemede"
-              : "Operasyon verisi bagli";
+              : "Operasyon verisi bağlı";
 
         return {
           id: survey.id,
@@ -559,17 +559,17 @@ export default function SurveysPage() {
             <strong>{row.name}</strong>
             <span>
               {row.metricState === "empty"
-                ? "Bu anket henuz herhangi bir operasyona baglanmadi"
+                ? "Bu anket henüz herhangi bir operasyona bağlanmadı"
                 : row.metricState === "pending"
-                  ? "Bagli operasyon var, yanit verisi henuz olusmadi"
-                  : `${row.answeredCount} / ${row.totalContacts} kisi yanit akisi`}
+                  ? "Bağlı operasyon var, yanıt verisi henüz oluşmadı"
+                  : `${row.answeredCount} / ${row.totalContacts} kişi yanıt akışı`}
             </span>
           </div>
         ),
       },
       {
         key: "questions",
-        label: "Soru Dagilimi",
+        label: "Soru Dağılımı",
         render: (row) => (
           <QuestionDistribution
             questionCount={row.questionCount}
@@ -584,14 +584,14 @@ export default function SurveysPage() {
           <MetricBar
             value={row.completionRate}
             tone="green"
-            detail={row.metricState === "live" ? `${row.questionCount} soru akisi` : row.metricNote}
+            detail={row.metricState === "live" ? `${row.questionCount} soru akışı` : row.metricNote}
             state={row.metricState}
           />
         ),
       },
       {
         key: "engagement",
-        label: "Etkilesim Skoru",
+        label: "Etkileşim Skoru",
         render: (row) => (
           <MetricBar
             value={row.engagementRate}
@@ -622,33 +622,33 @@ export default function SurveysPage() {
       return [
         {
           key: "active",
-          title: "Aktif Kullanilan",
+          title: "Aktif Kullanılan",
           value: String(activeSurveyCount),
-          detail: "Calisan operasyonlara bagli anket",
+          detail: "Çalışan operasyonlara bağlı anket",
           icon: <PlayIcon className="nav-icon" />,
           tone: "is-info",
         },
         {
           key: "ready",
-          title: "Yayina Hazir Anket",
+          title: "Yayına Hazır Anket",
           value: String(readySurveyCount),
-          detail: `${readySurveyCount} canli, ${draftSurveyCount} hazirlik bekliyor`,
+          detail: `${readySurveyCount} canlı, ${draftSurveyCount} hazırlık bekliyor`,
           icon: <SurveyIcon className="nav-icon" />,
           tone: "is-success",
         },
         {
           key: "not-ready",
-          title: "Hazirlik Bekleyen",
+          title: "Hazırlık Bekleyen",
           value: String(draftSurveyCount),
-          detail: draftSurveyCount > 0 ? "Taslak durumundaki sablonlar" : "Bekleyen taslak bulunmuyor",
+          detail: draftSurveyCount > 0 ? "Taslak durumundaki şablonlar" : "Bekleyen taslak bulunmuyor",
           icon: <SurveyIcon className="nav-icon" />,
           tone: "is-warning",
         },
         {
           key: "people",
-          title: "Toplam Kisi Hacmi",
+          title: "Toplam Kişi Hacmi",
           value: totalPeopleCount.toLocaleString("tr-TR"),
-          detail: "Bagli operasyon kisi/adet toplami",
+          detail: "Bağlı operasyon kişi/adet toplamı",
           icon: <ContactIcon className="nav-icon" />,
           tone: "is-neutral",
         },
@@ -672,7 +672,7 @@ export default function SurveysPage() {
               <div className="surveys-import-modal-head">
                 <div>
                   <span className="section-eyebrow">Google Forms Import</span>
-                  <h2 id="surveys-google-import-modal-title">Hazir formu taslak ankete cevir</h2>
+                  <h2 id="surveys-google-import-modal-title">Hazır formu taslak ankete çevir</h2>
                 </div>
                 <button
                   type="button"
@@ -684,8 +684,8 @@ export default function SurveysPage() {
                 </button>
               </div>
               <p>
-                Bu akis Google Forms API uzerinden formu okuyup SurveyAI icinde yeni bir taslak anket olarak kaydeder.
-                Tokenin `forms.body.readonly` yetkisine sahip olmasi gerekir.
+                Bu akış Google Forms API üzerinden formu okuyup SurveyAI içinde yeni bir taslak anket olarak kaydeder.
+                Tokenin `forms.body.readonly` yetkisine sahip olması gerekir.
               </p>
 
               <div className="surveys-google-import-grid">
@@ -697,7 +697,7 @@ export default function SurveysPage() {
                     placeholder="https://docs.google.com/forms/d/..."
                     disabled={isGoogleImporting}
                   />
-                  <span>Form linkini yapistirin. Edit veya view URL olabilir.</span>
+                  <span>Form linkini yapıştırın. Edit veya view URL olabilir.</span>
                 </label>
 
                 <label className="builder-field surveys-google-import-field surveys-google-import-field-full">
@@ -709,7 +709,7 @@ export default function SurveysPage() {
                     placeholder="ya29...."
                     disabled={isGoogleImporting}
                   />
-                  <span>Google Forms API icin gecici OAuth access token kullanilir.</span>
+                  <span>Google Forms API için geçici OAuth access token kullanılır.</span>
                 </label>
 
                 <label className="builder-field surveys-google-import-field">
@@ -720,11 +720,11 @@ export default function SurveysPage() {
                     placeholder="tr"
                     disabled={isGoogleImporting}
                   />
-                  <span>Import edilen anketin gorusme dili.</span>
+                  <span>Import edilen anketin görüşme dili.</span>
                 </label>
 
                 <label className="builder-field surveys-google-import-field">
-                  <strong>Soru basi tekrar</strong>
+                  <strong>Soru başı tekrar</strong>
                   <input
                     type="number"
                     min={0}
@@ -733,31 +733,31 @@ export default function SurveysPage() {
                     onChange={(event) => setGoogleRetryCount(event.target.value)}
                     disabled={isGoogleImporting}
                   />
-                  <span>Voice akista tekrar deneme sayisi.</span>
+                  <span>Voice akışta tekrar deneme sayısı.</span>
                 </label>
 
                 <label className="builder-field surveys-google-import-field">
-                  <strong>Acilis metni</strong>
+                  <strong>Açılış metni</strong>
                   <textarea
                     rows={4}
                     value={googleIntroPrompt}
                     onChange={(event) => setGoogleIntroPrompt(event.target.value)}
-                    placeholder="Merhaba, kisa bir arastirma gorusmesi icin sizi ariyoruz..."
+                    placeholder="Merhaba, kısa bir araştırma görüşmesi için sizi arıyoruz..."
                     disabled={isGoogleImporting}
                   />
-                  <span>Google Forms&apos;ta olmayan voice acilis metni burada eklenir.</span>
+                  <span>Google Forms&apos;ta olmayan voice açılış metni burada eklenir.</span>
                 </label>
 
                 <label className="builder-field surveys-google-import-field">
-                  <strong>Kapanis metni</strong>
+                  <strong>Kapanış metni</strong>
                   <textarea
                     rows={4}
                     value={googleClosingPrompt}
                     onChange={(event) => setGoogleClosingPrompt(event.target.value)}
-                    placeholder="Zaman ayirdiginiz icin tesekkur ederiz..."
+                    placeholder="Zaman ayırdığınız için teşekkür ederiz..."
                     disabled={isGoogleImporting}
                   />
-                  <span>Voice kapanis cumlesi import sirasinda atanir.</span>
+                  <span>Voice kapanış cümlesi import sırasında atanır.</span>
                 </label>
               </div>
 
@@ -771,7 +771,7 @@ export default function SurveysPage() {
                   disabled={isGoogleImporting}
                 >
                   <SurveyIcon className="nav-icon" />
-                  {isGoogleImporting ? "Ice Aktariliyor" : "Google Forms'tan Ice Aktar"}
+                  {isGoogleImporting ? "İçe Aktarılıyor" : "Google Forms'tan İçe Aktar"}
                 </button>
                 <button
                   type="button"
@@ -779,7 +779,7 @@ export default function SurveysPage() {
                   onClick={() => setIsGoogleImportModalOpen(false)}
                   disabled={isGoogleImporting}
                 >
-                  Vazgec
+                  Vazgeç
                 </button>
               </div>
             </section>
@@ -797,8 +797,8 @@ export default function SurveysPage() {
             >
               <div className="surveys-import-modal-head">
                 <div>
-                  <span className="section-eyebrow">Kisi Ice Aktar</span>
-                  <h2 id="surveys-import-modal-title">Kisi yukleme operasyon baglaminda ilerler</h2>
+                  <span className="section-eyebrow">Kişi İçe Aktar</span>
+                  <h2 id="surveys-import-modal-title">Kişi yükleme operasyon bağlamında ilerler</h2>
                 </div>
                 <button
                   type="button"
@@ -809,8 +809,8 @@ export default function SurveysPage() {
                 </button>
               </div>
               <p>
-                Mevcut backend akisi kisileri dogrudan anket listesine degil, secili veya yeni bir operasyon uzerinden ice
-                aktariyor. Kisi importunu guvenli sekilde baslatmak icin operasyon olusturma akisini kullanabilirsiniz.
+                Mevcut backend akışı kişileri doğrudan anket listesine değil, seçili veya yeni bir operasyon üzerinden içe
+                aktarıyor. Kişi importunu güvenli şekilde başlatmak için operasyon oluşturma akışını kullanabilirsiniz.
               </p>
               <div className="surveys-import-modal-actions">
                 <Link href="/operations/new" className="button-primary compact-button" onClick={() => setIsContactImportModalOpen(false)}>
@@ -844,14 +844,14 @@ export default function SurveysPage() {
 
       {detailWarning ? (
         <EmptyState
-          title="Kismi veri uyarisi"
+          title="Kısmi veri uyarısı"
           description={detailWarning}
           tone="warning"
         />
       ) : null}
       {errorMessage ? (
         <EmptyState
-          title="Anket listesi yuklenemedi"
+          title="Anket listesi yüklenemedi"
           description={errorMessage}
           tone="danger"
         />
@@ -859,14 +859,14 @@ export default function SurveysPage() {
 
         <SectionCard
           title={
-            <div className="survey-view-switch" role="tablist" aria-label="Anket portfoyu gorunumleri">
+            <div className="survey-view-switch" role="tablist" aria-label="Anket portföyü görünümleri">
               <button
                 type="button"
                 className={["survey-view-switch-button", portfolioView === "portfolio" ? "is-active" : ""].filter(Boolean).join(" ")}
                 onClick={() => setPortfolioView("portfolio")}
                 aria-pressed={portfolioView === "portfolio"}
               >
-                Portfoy
+                Portföy
               </button>
               <button
                 type="button"
@@ -893,7 +893,7 @@ export default function SurveysPage() {
                     .join(" ")}
                   onClick={() => setActiveTab(tab)}
                 >
-                  {tab === "Tumu" ? "Tumu" : tab}
+                  {tab === "Tümü" ? "Tümü" : tab}
                 </button>
               ))}
             </div>
@@ -906,7 +906,7 @@ export default function SurveysPage() {
                   onClick={() =>
                     setSurveyPage((current) => Math.max(current - 1, 0))
                   }
-                  aria-label="Onceki anketler"
+                  aria-label="Önceki anketler"
                 >
                   <ArrowLeftIcon className="nav-icon" />
                 </button>
@@ -933,13 +933,13 @@ export default function SurveysPage() {
       >
         {isLoading ? (
           <EmptyState
-            title="Anketler yukleniyor"
-            description="Sablonlar ve bagli operasyon kullanimi getiriliyor."
+            title="Anketler yükleniyor"
+            description="Şablonlar ve bağlı operasyon kullanımı getiriliyor."
           />
         ) : filteredSurveys.length === 0 ? (
           <EmptyState
-            title="Bu gorunumde anket yok"
-            description="Filtreyi degistirin veya yeni bir anket sablonu olusturun."
+            title="Bu görünümde anket yok"
+            description="Filtreyi değiştirin veya yeni bir anket şablonu oluşturun."
             action={
               <Link
                 href="/surveys/new"
@@ -961,8 +961,8 @@ export default function SurveysPage() {
                   rowKey={(survey) => survey.id}
                   toolbar={
                     <span className="table-meta">
-                      {paginatedSurveys.length} / {filteredSurveys.length} sablon
-                      gosteriliyor
+                      {paginatedSurveys.length} / {filteredSurveys.length} şablon
+                      gösteriliyor
                     </span>
                   }
                   renderExpandedRow={(survey) => <SurveyBreakdown survey={survey} />}
@@ -976,7 +976,7 @@ export default function SurveysPage() {
                   rowKey={(row) => row.id}
                   toolbar={
                     <span className="table-meta">
-                      Soru cevaplanma, tamamlama ve etkilesim oranlari bu sayfadaki anketler icin gosteriliyor
+                      Soru cevaplanma, tamamlama ve etkileşim oranları bu sayfadaki anketler için gösteriliyor
                     </span>
                   }
                 />
@@ -1065,13 +1065,13 @@ function QuestionDistribution({
           chartItems.map((item, index) => (
             <span key={`${item.type}-${index}`}>
               <i style={{ backgroundColor: palette[index] ?? palette[palette.length - 1] }} />
-              {item.type === "other" ? "Diger" : questionTypeLabels[item.type]} %{questionCount > 0 ? Math.round((item.count / questionCount) * 100) : 0}
+              {item.type === "other" ? "Diğer" : questionTypeLabels[item.type]} %{questionCount > 0 ? Math.round((item.count / questionCount) * 100) : 0}
             </span>
           ))
         ) : (
           <span>
             <i style={{ backgroundColor: "rgba(255, 255, 255, 0.22)" }} />
-            Dagilim verisi yok
+            Dağılım verisi yok
           </span>
         )}
       </div>
@@ -1085,9 +1085,9 @@ function SurveyBreakdown({ survey }: { survey: SurveyRow }) {
       <div className="ops-nested-empty">
         <SurveyIcon className="nav-icon" />
         <div>
-          <strong>Bu sablon henuz operasyona baglanmadi</strong>
+          <strong>Bu şablon henüz operasyona bağlanmadı</strong>
           <span>
-            Hazir oldugunda ayni sablonu birden fazla operasyonda
+            Hazır olduğunda aynı şablonu birden fazla operasyonda
             kullanabilirsiniz.
           </span>
         </div>
@@ -1098,8 +1098,8 @@ function SurveyBreakdown({ survey }: { survey: SurveyRow }) {
   return (
     <div className="ops-nested-stack">
       <div className="ops-nested-head">
-        <strong>Operasyon kirilimi</strong>
-        <span>Her satir bagli operasyonu ve tamamlama durumunu gosterir.</span>
+        <strong>Operasyon kırılımı</strong>
+        <span>Her satır bağlı operasyonu ve tamamlama durumunu gösterir.</span>
       </div>
       {survey.linkedOperations.map((operation) => {
         const totalJobs = Math.max(operation.executionSummary.totalCallJobs, 1);
@@ -1113,7 +1113,7 @@ function SurveyBreakdown({ survey }: { survey: SurveyRow }) {
               <strong>{operation.name}</strong>
               <span>
                 {operation.sourceType === "IMPORTED_SURVEY_RESULTS"
-                  ? "Operasyon import edilmistir"
+                  ? "Operasyon import edilmiştir"
                   : operation.updatedAt}
               </span>
             </div>
@@ -1126,7 +1126,7 @@ function SurveyBreakdown({ survey }: { survey: SurveyRow }) {
             </div>
             <div className="ops-nested-primary">
               <strong>{operation.executionSummary.totalCallJobs}</strong>
-              <span>Kisi / is</span>
+              <span>Kişi / iş</span>
             </div>
             <Link
               href={`/operations/${operation.id}`}

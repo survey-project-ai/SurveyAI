@@ -10,13 +10,13 @@ export const OPERATION_STATUS_BADGE_CONFIG: Record<
   { tone: "neutral" | "ready" | "live" | "warning" | "success" | "danger"; label: string }
 > = {
   Draft: { tone: "neutral", label: "Taslak" },
-  Ready: { tone: "ready", label: "Hazir" },
-  Scheduled: { tone: "ready", label: "Planlandi" },
-  Running: { tone: "live", label: "Yurutuluyor" },
-  Paused: { tone: "warning", label: "Duraklatildi" },
-  Completed: { tone: "success", label: "Tamamlandi" },
-  Failed: { tone: "danger", label: "Basarisiz" },
-  Cancelled: { tone: "warning", label: "Iptal edildi" },
+  Ready: { tone: "ready", label: "Hazır" },
+  Scheduled: { tone: "ready", label: "Planlandı" },
+  Running: { tone: "live", label: "Yürütülüyor" },
+  Paused: { tone: "warning", label: "Duraklatıldı" },
+  Completed: { tone: "success", label: "Tamamlandı" },
+  Failed: { tone: "danger", label: "Başarısız" },
+  Cancelled: { tone: "warning", label: "İptal edildi" },
 };
 
 export function getOperationStatusConfig(operation: Operation | null, contactCount: number) {
@@ -27,78 +27,78 @@ export function getOperationStatusConfig(operation: Operation | null, contactCou
     case "Draft":
       return {
         badge,
-        title: "Hazirlik tamamlanmadi",
-        summary: "Bu operasyon henuz yurutmeye acilacak noktada degil.",
-        nextStepTitle: contactCount > 0 ? "Eksik onkosullari tamamla" : "Kisi yukle",
+        title: "Hazırlık tamamlanmadı",
+        summary: "Bu operasyon henüz yürütmeye açılacak noktada değil.",
+        nextStepTitle: contactCount > 0 ? "Eksik önkoşulları tamamla" : "Kişi yükle",
         nextStepText: !operation?.readiness.surveyPublished
-          ? "Bagli anketin yayin durumunu netlestirin. Yayinlanmamis anketle akis baslatilmaz."
+          ? "Bağlı anketin yayın durumunu netleştirin. Yayınlanmamış anketle akış başlatılmaz."
           : contactCount === 0
-            ? "Bir sonraki mantikli adim kisi yuklemek. En az bir kisi olmadan akis baslatilamaz."
-            : "Hazirlik listesinde kalan blokajlari kapatarak operasyonu Hazir durumuna tasiyin.",
+            ? "Bir sonraki mantıklı adım kişi yüklemek. En az bir kişi olmadan akış başlatılamaz."
+            : "Hazırlık listesinde kalan blokajları kapatarak operasyonu Hazır durumuna taşıyın.",
       };
     case "Ready":
       return {
         badge,
-        title: "Operasyon baslatmaya hazir",
-        summary: "Tum temel onkosullar tamam. Bu sayfa artik operasyonun baslatma ve ilk izleme yuzeyi.",
-        nextStepTitle: "Akisi baslat",
-        nextStepText: "Akis baslatildiginda cagri isleri hazirlanir ve cevap analitigi bu sayfada canli guncellenir.",
+        title: "Operasyon başlatmaya hazır",
+        summary: "Tüm temel önkoşullar tamam. Bu sayfa artık operasyonun başlatma ve ilk izleme yüzeyi.",
+        nextStepTitle: "Akışı başlat",
+        nextStepText: "Akış başlatıldığında çağrı işleri hazırlanır ve cevap analitiği bu sayfada canlı güncellenir.",
       };
     case "Scheduled":
       return {
         badge,
-        title: "Operasyon yeniden baslatilmaya hazir",
-        summary: "Gecmis cagri verileri temizlendi. Kisi listesi korunarak akis sifirlandi.",
-        nextStepTitle: "Akisi yeniden baslat",
-        nextStepText: "Baslattiginizda kisiler icin yeni cagri isleri olusturulur ve operasyon bastan ilerler.",
+        title: "Operasyon yeniden başlatılmaya hazır",
+        summary: "Geçmiş çağrı verileri temizlendi. Kişi listesi korunarak akış sıfırlandı.",
+        nextStepTitle: "Akışı yeniden başlat",
+        nextStepText: "Başlattığınızda kişiler için yeni çağrı işleri oluşturulur ve operasyon baştan ilerler.",
       };
     case "Running":
       return {
         badge,
-        title: "Canli operasyon yurutuluyor",
-        summary: "Bu operasyon aktif calisiyor. Ilk bakista durum, is akisi ve donen cevaplar gorunmeli.",
-        nextStepTitle: "Yurutmeyi izle",
-        nextStepText: "Baslatma yeniden acilmaz. Bu asamada isleri ve canli sonuc dagilimlarini takip edin.",
+        title: "Canlı operasyon yürütülüyor",
+        summary: "Bu operasyon aktif çalışıyor. İlk bakışta durum, iş akışı ve dönen cevaplar görünmeli.",
+        nextStepTitle: "Yürütmeyi izle",
+        nextStepText: "Başlatma yeniden açılmaz. Bu aşamada işleri ve canlı sonuç dağılımlarını takip edin.",
       };
     case "Completed":
       return {
         badge,
-        title: "Operasyon tamamlandi",
-        summary: "Yurutme kapandi. Bu sayfa sonuc ozeti ve soru bazli icgoruler icin ana kontrol yuzeyi olmaya devam eder.",
-        nextStepTitle: "Sonuclari kullan",
-        nextStepText: "Sonuclari inceleyin, disa aktarim alin ve gerekirse daha detayli analytics akisina gecin.",
+        title: "Operasyon tamamlandı",
+        summary: "Yürütme kapandı. Bu sayfa sonuç özeti ve soru bazlı içgörüler için ana kontrol yüzeyi olmaya devam eder.",
+        nextStepTitle: "Sonuçları kullan",
+        nextStepText: "Sonuçları inceleyin, dışa aktarım alın ve gerekirse daha detaylı analytics akışına geçin.",
       };
     case "Paused":
       return {
         badge,
-        title: "Operasyon duraklatildi",
-        summary: "Aktif gorusme bittikten sonra sistem yeni cagrilara gecmez. Hazir oldugunuzda devam ettirebilirsiniz.",
-        nextStepTitle: "Akisi devam ettir",
-        nextStepText: "Devam ettir aksiyonu siradaki bekleyen cagri isini yeniden kuyruga alir.",
+        title: "Operasyon duraklatıldı",
+        summary: "Aktif görüşme bittikten sonra sistem yeni çağrılara geçmez. Hazır olduğunuzda devam ettirebilirsiniz.",
+        nextStepTitle: "Akışı devam ettir",
+        nextStepText: "Devam ettir aksiyonu sıradaki bekleyen çağrı işini yeniden kuyruğa alır.",
       };
     case "Failed":
       return {
         badge,
         title: "Operasyon durdu",
-        summary: "Yurutme sirasinda bir problem yasandi; buna ragmen toplanan veri saklandi.",
-        nextStepTitle: "Guvenli inceleme",
-        nextStepText: "Sorunlu isleri acin, toplanan kismi veriyi inceleyin ve gerekirse operasyonu yeniden hazirlayin.",
+        summary: "Yürütme sırasında bir problem yaşandı; buna rağmen toplanan veri saklandı.",
+        nextStepTitle: "Güvenli inceleme",
+        nextStepText: "Sorunlu işleri açın, toplanan kısmi veriyi inceleyin ve gerekirse operasyonu yeniden hazırlayın.",
       };
     case "Cancelled":
       return {
         badge,
         title: "Operasyon iptal edildi",
-        summary: "Akis manuel olarak sonlandirildi. Yeni cagrilar bu durumdayken baslamaz.",
-        nextStepTitle: "Durumu gozden gecir",
-        nextStepText: "Gerekirse yeni bir operasyon acin veya operasyonu yeniden planlayin.",
+        summary: "Akış manuel olarak sonlandırıldı. Yeni çağrılar bu durumdayken başlamaz.",
+        nextStepTitle: "Durumu gözden geçir",
+        nextStepText: "Gerekirse yeni bir operasyon açın veya operasyonu yeniden planlayın.",
       };
     default:
       return {
         badge: OPERATION_STATUS_BADGE_CONFIG.Draft,
-        title: "Durum bilgisi guncelleniyor",
+        title: "Durum bilgisi güncelleniyor",
         summary: "Operasyon durumu okunuyor.",
         nextStepTitle: "Bekleyin",
-        nextStepText: "Durum bilgisi yuklenirken bu kart guvenli varsayilan icerikle gosterilir.",
+        nextStepText: "Durum bilgisi yüklenirken bu kart güvenli varsayılan içerikle gösterilir.",
       };
   }
 }
@@ -107,73 +107,73 @@ export function getAnalyticsEmptyState(status: Operation["status"], contactCount
   switch (status) {
     case "Draft":
       return {
-        title: "Henuz cagri sonucu yok",
-        description: "Analitik paneller, yurutme baslayip gorusme yanitlari gelmeye basladiginda burada gorunur.",
+        title: "Henüz çağrı sonucu yok",
+        description: "Analitik paneller, yürütme başlayıp görüşme yanıtları gelmeye başladığında burada görünür.",
       };
     case "Ready":
     case "Scheduled":
       return {
-        title: "Yurutme oncesi gorunum",
-        description: `${contactCount} kisi icin operasyon hazir. Cevap grafikleri akis basladiktan sonra dolar.`,
+        title: "Yürütme öncesi görünüm",
+        description: `${contactCount} kişi için operasyon hazır. Cevap grafikleri akış başladıktan sonra dolar.`,
       };
     case "Running":
       return {
-        title: "Canli veri bekleniyor",
-        description: "Ilk yanitlar geldikce durum dagilimlari ve soru bazli paneller otomatik guncellenir.",
+        title: "Canlı veri bekleniyor",
+        description: "İlk yanıtlar geldikçe durum dağılımları ve soru bazlı paneller otomatik güncellenir.",
       };
     case "Failed":
       return {
-        title: "Kismi veri yok",
-        description: "Bu hata durumunda henuz gosterilecek cevap verisi birikmedi.",
+        title: "Kısmi veri yok",
+        description: "Bu hata durumunda henüz gösterilecek cevap verisi birikmedi.",
       };
     case "Cancelled":
       return {
         title: "Operasyon iptal edildi",
-        description: "Iptal edilen operasyonlarda yeni veri akisi olmaz.",
+        description: "İptal edilen operasyonlarda yeni veri akışı olmaz.",
       };
     case "Paused":
       return {
-        title: "Akis duraklatildi",
-        description: "Mevcut gorusme tamamlandiktan sonra yeni cagriya gecilmez. Devam ettirdiginizde veri akisi surer.",
+        title: "Akış duraklatıldı",
+        description: "Mevcut görüşme tamamlandıktan sonra yeni çağrıya geçilmez. Devam ettirdiğinizde veri akışı sürer.",
       };
     case "Completed":
     default:
       return {
-        title: "Sonuc verisi yok",
-        description: "Bu operasyon tamamlanmis olsa da cevap kaydi bulunmuyor.",
+        title: "Sonuç verisi yok",
+        description: "Bu operasyon tamamlanmış olsa da cevap kaydı bulunmuyor.",
       };
   }
 }
 
 export function getPrimaryAction(operation: Operation | null, isStarting: boolean) {
   if (!operation) {
-    return { label: "Akisi baslat", disabled: true, hint: "Operasyon bilgisi yukleniyor.", intent: "start" as const };
+    return { label: "Akışı başlat", disabled: true, hint: "Operasyon bilgisi yükleniyor.", intent: "start" as const };
   }
 
   if (operation.status === "Ready") {
     return {
-      label: isStarting ? "Akis baslatiliyor..." : "Akisi baslat",
+      label: isStarting ? "Akış başlatılıyor..." : "Akışı başlat",
       disabled: isStarting,
-      hint: "Operasyon hazir. Akisi bu aksiyondan baslatabilirsiniz.",
+      hint: "Operasyon hazır. Akışı bu aksiyondan başlatabilirsiniz.",
       intent: "start" as const,
     };
   }
 
   if (operation.status === "Scheduled") {
     return {
-      label: isStarting ? "Akis baslatiliyor..." : "Akisi yeniden baslat",
+      label: isStarting ? "Akış başlatılıyor..." : "Akışı yeniden başlat",
       disabled: isStarting,
-      hint: "Operasyon sifirlandi. Kisi listesi korunarak akisi yeniden baslatabilirsiniz.",
+      hint: "Operasyon sıfırlandı. Kişi listesi korunarak akışı yeniden başlatabilirsiniz.",
       intent: "start" as const,
     };
   }
 
   if (operation.status === "Draft") {
     return {
-      label: "Akisi baslat",
+      label: "Akışı başlat",
       disabled: true,
       hint: operation.readiness.blockingReasons[0]
-        ?? (operation.readiness.contactsLoaded ? "Baslatmadan once onkosullari tamamlayin." : "Baslatmadan once kisi yukleyin."),
+        ?? (operation.readiness.contactsLoaded ? "Başlatmadan önce önkoşulları tamamlayın." : "Başlatmadan önce kişi yükleyin."),
       intent: "start" as const,
     };
   }
@@ -182,7 +182,7 @@ export function getPrimaryAction(operation: Operation | null, isStarting: boolea
     return {
       label: "Durdur",
       disabled: false,
-      hint: "Mevcut gorusme tamamlandiktan sonra yeni cagrilar baslatilmaz.",
+      hint: "Mevcut görüşme tamamlandıktan sonra yeni çağrılar başlatılmaz.",
       intent: "pause" as const,
     };
   }
@@ -191,25 +191,25 @@ export function getPrimaryAction(operation: Operation | null, isStarting: boolea
     return {
       label: "Devam ettir",
       disabled: false,
-      hint: "Duraklatilan operasyonu siradaki bekleyen cagridan devam ettirir.",
+      hint: "Duraklatılan operasyonu sıradaki bekleyen çağrıdan devam ettirir.",
       intent: "resume" as const,
     };
   }
 
   if (operation.status === "Completed") {
     return {
-      label: "Akis tamamlandi",
+      label: "Akış tamamlandı",
         disabled: true,
-      hint: "Tamamlanan operasyonlarda baslatma aksiyonu yeniden acilmaz.",
+      hint: "Tamamlanan operasyonlarda başlatma aksiyonu yeniden açılmaz.",
       intent: "start" as const,
     };
   }
 
   if (operation.status === "Failed") {
     return {
-      label: "Akis durdu",
+      label: "Akış durdu",
       disabled: true,
-      hint: "Operasyon hata ile durdu. Detaylari inceleyip yeniden hazirlamaniz gerekir.",
+      hint: "Operasyon hata ile durdu. Detayları inceleyip yeniden hazırlamanız gerekir.",
       intent: "start" as const,
     };
   }
@@ -218,15 +218,15 @@ export function getPrimaryAction(operation: Operation | null, isStarting: boolea
     return {
       label: "Operasyon iptal edildi",
       disabled: true,
-      hint: "Iptal edilen operasyon bu ekrandan yeniden baslatilamaz.",
+      hint: "İptal edilen operasyon bu ekrandan yeniden başlatılamaz.",
       intent: "start" as const,
     };
   }
 
   return {
-    label: "Akisi baslat",
+    label: "Akışı başlat",
     disabled: true,
-    hint: "Bu durumdayken akis baslatilamaz.",
+    hint: "Bu durumdayken akış başlatılamaz.",
     intent: "start" as const,
   };
 }
@@ -242,51 +242,51 @@ export function getAnalyticsKpis(operation: Operation | null, analytics: Operati
 
   return [
     {
-      label: "Toplam kisi",
+      label: "Toplam kişi",
       value: String(analytics.totalContacts),
-      detail: "Operasyona yuklenen kisiler",
+      detail: "Operasyona yüklenen kişiler",
       tone: "neutral" as const,
     },
     {
-      label: "Toplam cagri isi",
+      label: "Toplam çağrı işi",
       value: String(analytics.totalCallJobs),
-      detail: `${analytics.totalPreparedJobs} hazir is kaydi`,
+      detail: `${analytics.totalPreparedJobs} hazır iş kaydı`,
       tone: "neutral" as const,
     },
     {
-      label: "Cagri denemesi",
+      label: "Çağrı denemesi",
       value: String(analytics.totalCallsAttempted),
-      detail: isRunning ? "Canli olarak artar" : "Kuyruktan cikan isler",
+      detail: isRunning ? "Canlı olarak artar" : "Kuyruktan çıkan işler",
       tone: "neutral" as const,
     },
     {
-      label: "Tamamlanan cagri",
+      label: "Tamamlanan çağrı",
       value: String(analytics.totalCompletedCalls),
-      detail: "Basariyla kapanan aramalar",
+      detail: "Başarıyla kapanan aramalar",
       tone: "positive" as const,
     },
     {
-      label: "Basarisiz cagri",
+      label: "Başarısız çağrı",
       value: String(analytics.failedCallJobs),
-      detail: "Takip gerektiren cagri isleri",
+      detail: "Takip gerektiren çağrı işleri",
       tone: isFailed ? "danger" as const : "warning" as const,
     },
     {
-      label: "Toplam yanit",
+      label: "Toplam yanıt",
       value: String(analytics.respondedContacts),
-      detail: `${analytics.completedResponses} tam yanit, ${analytics.partialResponses} kismi yanit`,
+      detail: `${analytics.completedResponses} tam yanıt, ${analytics.partialResponses} kısmi yanıt`,
       tone: hasResponses ? "positive" as const : "neutral" as const,
     },
     {
-      label: "Tamamlanma orani",
+      label: "Tamamlanma oranı",
       value: `%${analytics.completionRate}`,
-      detail: hasResponses ? "Tamamlanan yanit / toplam yanit" : "Henuz yanit yok",
+      detail: hasResponses ? "Tamamlanan yanıt / toplam yanıt" : "Henüz yanıt yok",
       tone: hasResponses ? "positive" as const : "neutral" as const,
     },
     {
-      label: "Cevap orani",
+      label: "Cevap oranı",
       value: `%${analytics.personResponseRate}`,
-      detail: "Yanit veren kisi / hedef kisi",
+      detail: "Yanıt veren kişi / hedef kişi",
       tone: isFailed ? "warning" as const : "positive" as const,
     },
   ];
@@ -304,29 +304,29 @@ export function getAnalyticsKpisCompact(operation: Operation | null, analytics: 
 
   return [
     {
-      label: "Hedef kisi",
+      label: "Hedef kişi",
       value: String(analytics.totalContacts),
       detail: "",
       tone: "neutral" as const,
     },
     {
-      label: "Cagri denemesi",
+      label: "Çağrı denemesi",
       value: String(analytics.totalCallsAttempted),
-      detail: isRunning ? "Canli olarak artar" : `${analytics.queuedJobs} kuyrukta, ${analytics.inProgressJobs} aktif`,
+      detail: isRunning ? "Canlı olarak artar" : `${analytics.queuedJobs} kuyrukta, ${analytics.inProgressJobs} aktif`,
       tone: "neutral" as const,
     },
     {
-      label: "Yanit veren kisi",
+      label: "Yanıt veren kişi",
       value: String(analytics.respondedContacts),
-      detail: `${analytics.completedResponses} tam yanit, ${analytics.partialResponses} kismi yanit`,
+      detail: `${analytics.completedResponses} tam yanıt, ${analytics.partialResponses} kısmi yanıt`,
       tone: hasResponses ? "positive" as const : "neutral" as const,
     },
     {
-      label: "Cevap orani",
+      label: "Cevap oranı",
       value: `%${analytics.personResponseRate}`,
       detail: hasResponses
-        ? `Yanit veren kisi / hedef kisi, %${analytics.completionRate} tamamlanan yanit`
-        : "Yanit veren kisi / hedef kisi",
+        ? `Yanıt veren kişi / hedef kişi, %${analytics.completionRate} tamamlanan yanıt`
+        : "Yanıt veren kişi / hedef kişi",
       tone: isFailed || riskLoad > 0 ? "warning" as const : "positive" as const,
     },
   ];
@@ -336,34 +336,34 @@ export function getQuestionChartPresentation(summary: OperationAnalyticsQuestion
   switch (summary.chartKind) {
     case "RATING":
       return {
-        eyebrow: "Puan dagilimi",
-        empty: summary.emptyStateMessage ?? "Puan verisi geldikce dagilim olusur.",
+        eyebrow: "Puan dağılımı",
+        empty: summary.emptyStateMessage ?? "Puan verisi geldikçe dağılım oluşur.",
       };
     case "NUMBER":
       return {
-        eyebrow: "Sayisal dagilim",
-        empty: summary.emptyStateMessage ?? "Sayisal veriler geldikce dagilim olusur.",
+        eyebrow: "Sayısal dağılım",
+        empty: summary.emptyStateMessage ?? "Sayısal veriler geldikçe dağılım oluşur.",
       };
     case "BINARY":
       return {
-        eyebrow: "Evet / Hayir dagilimi",
-        empty: summary.emptyStateMessage ?? "Ikili cevap dagilimi henuz olusmadi.",
+        eyebrow: "Evet / Hayır dağılımı",
+        empty: summary.emptyStateMessage ?? "İkili cevap dağılımı henüz oluşmadı.",
       };
     case "MULTI_CHOICE":
       return {
-        eyebrow: "Coklu secim dagilimi",
-        empty: summary.emptyStateMessage ?? "Coklu secim dagilimi henuz olusmadi.",
+        eyebrow: "Çoklu seçim dağılımı",
+        empty: summary.emptyStateMessage ?? "Çoklu seçim dağılımı henüz oluşmadı.",
       };
     case "OPEN_ENDED":
       return {
-        eyebrow: "Acik uclu yanitlar",
-        empty: summary.emptyStateMessage ?? "Bu soru icin henuz gosterilecek dagilim yok.",
+        eyebrow: "Açık uçlu yanıtlar",
+        empty: summary.emptyStateMessage ?? "Bu soru için henüz gösterilecek dağılım yok.",
       };
     case "CHOICE":
     default:
       return {
-        eyebrow: "Secenek dagilimi",
-        empty: summary.emptyStateMessage ?? "Secenek dagilimi henuz olusmadi.",
+        eyebrow: "Seçenek dağılımı",
+        empty: summary.emptyStateMessage ?? "Seçenek dağılımı henüz oluşmadı.",
       };
   }
 }

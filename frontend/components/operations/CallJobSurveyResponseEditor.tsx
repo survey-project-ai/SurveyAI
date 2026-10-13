@@ -35,8 +35,8 @@ export function CallJobSurveyResponseEditor({
   isSaving,
   saveErrorMessage,
   saveSuccessMessage,
-  title = "Cevap editoru",
-  description = "Agent'in yanlis yorumladigi cevaplari transcripti kontrol ederek burada duzeltebilirsiniz.",
+  title = "Cevap editörü",
+  description = "Agent'ın yanlış yorumladığı cevapları transcripti kontrol ederek burada düzeltebilirsiniz.",
 }: CallJobSurveyResponseEditorProps) {
   const [answerDrafts, setAnswerDrafts] = useState<SurveyAnswerDraft[]>([]);
   const [initialAnswerSignature, setInitialAnswerSignature] = useState("");
@@ -52,14 +52,14 @@ export function CallJobSurveyResponseEditor({
   }
 
   const hasUnsavedAnswerChanges = serializeAnswerDrafts(answerDrafts) !== initialAnswerSignature;
-  const responseStatus = detail.surveyResponse?.status ?? (detail.partialResponseDataExists ? "Kismi veri var" : "Yanit yok");
+  const responseStatus = detail.surveyResponse?.status ?? (detail.partialResponseDataExists ? "Kısmi veri var" : "Yanıt yok");
   const responseDetail = detail.surveyResponse
     ? detail.surveyResponse.usableResponse
-      ? `${detail.surveyResponse.validAnswerCount} gecerli cevap islenmis.`
-      : `Yanit kaydi var fakat kullanilabilir eslesen cevap sayisi ${detail.surveyResponse.validAnswerCount}.`
+      ? `${detail.surveyResponse.validAnswerCount} geçerli cevap işlenmiş.`
+      : `Yanıt kaydı var fakat kullanılabilir eşleşen cevap sayısı ${detail.surveyResponse.validAnswerCount}.`
     : detail.partialResponseDataExists
-      ? "Transcript veya kisitli veri mevcut, ama bagli bir survey_response secilemiyor."
-      : "Bu is icin henuz survey_response kaydi yok.";
+      ? "Transcript veya kısıtlı veri mevcut, ama bağlı bir survey_response seçilemiyor."
+      : "Bu iş için henüz survey_response kaydı yok.";
 
   function updateAnswerDraft(questionId: string, updater: (draft: SurveyAnswerDraft) => SurveyAnswerDraft) {
     setAnswerDrafts((current) => current.map((draft) => (
@@ -93,28 +93,28 @@ export function CallJobSurveyResponseEditor({
             disabled={isSaving || !hasUnsavedAnswerChanges}
             onClick={() => void handleSaveAnswers()}
           >
-            {isSaving ? "Yanitlar kaydediliyor..." : "Yanitlari kaydet"}
+            {isSaving ? "Yanıtlar kaydediliyor..." : "Yanıtları kaydet"}
           </button>
         ) : null}
       >
         {saveErrorMessage ? (
           <div className="operation-inline-message is-danger compact">
-            <strong>Yanitlar kaydedilemedi</strong>
+            <strong>Yanıtlar kaydedilemedi</strong>
             <span>{saveErrorMessage}</span>
           </div>
         ) : null}
 
         {saveSuccessMessage ? (
           <div className="operation-inline-message is-accent compact">
-            <strong>Yanitlar guncellendi</strong>
+            <strong>Yanıtlar güncellendi</strong>
             <span>{saveSuccessMessage}</span>
           </div>
         ) : null}
 
         {!detail.surveyResponse ? (
           <div className="operation-empty-state">
-            <strong>Duzenlenebilir bir response kaydi yok</strong>
-            <p>Bu job icin once survey response olusmali. Transcript varsa yine de asagida inceleyebilirsiniz.</p>
+            <strong>Düzenlenebilir bir response kaydı yok</strong>
+            <p>Bu job için önce survey response oluşmalı. Transcript varsa yine de aşağıda inceleyebilirsiniz.</p>
           </div>
         ) : (
           <div className="call-job-answer-editor-list">
@@ -132,7 +132,7 @@ export function CallJobSurveyResponseEditor({
                       </span>
                     </div>
                     <span className={answer.valid ? "operation-readiness-pill is-ready" : "operation-readiness-pill is-blocked"}>
-                      {answer.manuallyEdited ? "Manuel duzeltildi" : answer.valid ? "Gecerli" : "Kontrol gerekli"}
+                      {answer.manuallyEdited ? "Manuel düzeltildi" : answer.valid ? "Geçerli" : "Kontrol gerekli"}
                     </span>
                   </div>
 
@@ -164,7 +164,7 @@ export function CallJobSurveyResponseEditor({
 
                   {answer.questionType === "RATING" || answer.questionType === "NUMBER" ? (
                     <label className="call-job-answer-field">
-                      <span>{answer.questionType === "RATING" ? "Yeni puan" : "Yeni sayi"}</span>
+                      <span>{answer.questionType === "RATING" ? "Yeni puan" : "Yeni sayı"}</span>
                       <input
                         type="number"
                         value={draft.answerNumber}
@@ -178,7 +178,7 @@ export function CallJobSurveyResponseEditor({
 
                   {answer.questionType === "SINGLE_CHOICE" ? (
                     <label className="call-job-answer-field">
-                      <span>Secenek</span>
+                      <span>Seçenek</span>
                       <select
                         value={draft.selectedOptionId}
                         onChange={(event) => updateAnswerDraft(answer.questionId, (current) => ({
@@ -186,7 +186,7 @@ export function CallJobSurveyResponseEditor({
                           selectedOptionId: event.target.value,
                         }))}
                       >
-                        <option value="">Secin</option>
+                        <option value="">Seçin</option>
                         {answer.options.map((option) => (
                           <option key={option.id} value={option.id}>
                             {option.label}
@@ -198,7 +198,7 @@ export function CallJobSurveyResponseEditor({
 
                   {answer.questionType === "MULTI_CHOICE" ? (
                     <div className="call-job-answer-field">
-                      <span>Secenekler</span>
+                      <span>Seçenekler</span>
                       <div className="call-job-answer-checkboxes">
                         {answer.options.map((option) => (
                           <label key={option.id} className="call-job-answer-checkbox">
@@ -227,7 +227,7 @@ export function CallJobSurveyResponseEditor({
 
       <SectionCard
         title="Response ve transcript"
-        description="Bu cagri isinin kullanilabilir survey verisi uretip uretmedigi burada net gorunur."
+        description="Bu çağrı işinin kullanılabilir survey verisi üretip üretmediği burada net görünür."
       >
         <div className="stack-list">
           <div className="detail-row">
@@ -235,15 +235,15 @@ export function CallJobSurveyResponseEditor({
             <strong>{responseStatus}</strong>
           </div>
           <div className="detail-row">
-            <span>Kullanilabilir veri</span>
+            <span>Kullanılabilir veri</span>
             <strong>{responseDetail}</strong>
           </div>
           <div className="detail-row">
-            <span>Provider referansi</span>
+            <span>Provider referansı</span>
             <strong>{detail.latestProviderCallId ?? "Provider call id yok"}</strong>
           </div>
           <div className="detail-row">
-            <span>Transcript referansi</span>
+            <span>Transcript referansı</span>
             <strong>{detail.latestTranscriptStorageKey ?? "Transcript storage key yok"}</strong>
           </div>
         </div>
@@ -251,13 +251,13 @@ export function CallJobSurveyResponseEditor({
         <div className="section-card-body">
           <div className="list-item">
             <div>
-              <strong>Transcript ozeti</strong>
-              <span>{detail.transcriptSummary ?? "Ozet uretilmemis."}</span>
+              <strong>Transcript özeti</strong>
+              <span>{detail.transcriptSummary ?? "Özet üretilmemiş."}</span>
             </div>
           </div>
           <div className="call-job-transcript">
             <strong>Transcript blok</strong>
-            <pre>{detail.transcriptText ?? "Bu is icin transcript metni henuz mevcut degil."}</pre>
+            <pre>{detail.transcriptText ?? "Bu iş için transcript metni henüz mevcut değil."}</pre>
           </div>
         </div>
       </SectionCard>
@@ -302,15 +302,15 @@ function normalizeDraftText(value: string): string | null {
 function formatQuestionType(questionType: CallJobSurveyResponseAnswer["questionType"]): string {
   switch (questionType) {
     case "OPEN_ENDED":
-      return "Acik uc";
+      return "Açık uç";
     case "RATING":
       return "Puan";
     case "NUMBER":
-      return "Sayisal giris";
+      return "Sayısal giriş";
     case "SINGLE_CHOICE":
-      return "Tek secim";
+      return "Tek seçim";
     case "MULTI_CHOICE":
-      return "Coklu secim";
+      return "Çoklu seçim";
     default:
       return questionType;
   }

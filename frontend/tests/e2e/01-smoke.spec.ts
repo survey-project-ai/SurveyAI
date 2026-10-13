@@ -15,9 +15,9 @@ test.describe("Production smoke", () => {
     expect(response!.status(), "/login HTTP status").toBeLessThan(400);
 
     // Login form is visible
-    await expect(page.getByRole("heading", { name: /Oturum ac/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Oturum aç/i })).toBeVisible();
     await expect(page.getByLabel("E-posta")).toBeVisible();
-    await expect(page.getByLabel("Sifre")).toBeVisible();
+    await expect(page.getByLabel("Şifre")).toBeVisible();
 
     // Give the AuthProvider's /auth/me call time to fire.
     await page.waitForTimeout(2000);

@@ -10,12 +10,12 @@ import "./globals.css";
 
 const bodyFont = Manrope({
   variable: "--font-body",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
 });
 
 const displayFont = Space_Grotesk({
   variable: "--font-display",
-  subsets: ["latin"],
+  subsets: ["latin", "latin-ext"],
 });
 
 export const metadata: Metadata = {

@@ -3,21 +3,21 @@ import type { SurveyBuilderSurvey } from "@/lib/types";
 
 export function SurveyPreviewPanel({ survey }: { survey: SurveyBuilderSurvey }) {
   const introCopy =
-    survey.introPrompt.trim() || "Merhaba, kisa bir operasyonel anket ile gorusunuzu almak istiyoruz.";
-  const closingCopy = survey.closingPrompt.trim() || "Zaman ayirdiginiz icin tesekkur ederiz.";
+    survey.introPrompt.trim() || "Merhaba, kısa bir operasyonel anket ile görüşünüzü almak istiyoruz.";
+  const closingCopy = survey.closingPrompt.trim() || "Zaman ayırdığınız için teşekkür ederiz.";
 
   return (
     <section className="panel-card builder-preview-panel ops-builder-preview-panel">
       <div className="builder-side-panel-header ops-builder-side-panel-header">
-        <span className="builder-panel-kicker">Onizleme</span>
-        <h3>Gorusme akisi</h3>
-        <p>Anketin gorusme sirasinda nasil duyulacagini ve hangi bilgi ritminde ilerleyecegini hizla kontrol edin.</p>
+        <span className="builder-panel-kicker">Önizleme</span>
+        <h3>Görüşme akışı</h3>
+        <p>Anketin görüşme sırasında nasıl duyulacağını ve hangi bilgi ritminde ilerleyeceğini hızla kontrol edin.</p>
       </div>
 
       <div className="ops-builder-preview-surface">
         <div className="ops-builder-preview-stage is-intro">
-          <small>Acilis</small>
-          <strong>{survey.name.trim() || "Baslik bekleniyor"}</strong>
+          <small>Açılış</small>
+          <strong>{survey.name.trim() || "Başlık bekleniyor"}</strong>
           <p>{introCopy}</p>
         </div>
 
@@ -29,7 +29,7 @@ export function SurveyPreviewPanel({ survey }: { survey: SurveyBuilderSurvey }) 
                   <span>{index + 1}</span>
                   <span>{questionTypeLabels[question.type]}</span>
                 </div>
-                <strong>{question.title || "Soru basligi bekleniyor"}</strong>
+                <strong>{question.title || "Soru başlığı bekleniyor"}</strong>
                 {question.description ? <p>{question.description}</p> : null}
                 {renderPreviewInput(question)}
               </div>
@@ -37,13 +37,13 @@ export function SurveyPreviewPanel({ survey }: { survey: SurveyBuilderSurvey }) 
           </div>
         ) : (
           <div className="ops-builder-preview-empty">
-            <strong>Henuz soru yok</strong>
-            <span>Ilk soruyu eklediginizde gorusme akisi burada canli olarak gorunecek.</span>
+            <strong>Henüz soru yok</strong>
+            <span>İlk soruyu eklediğinizde görüşme akışı burada canlı olarak görünecek.</span>
           </div>
         )}
 
         <div className="ops-builder-preview-stage is-closing">
-          <small>Kapanis</small>
+          <small>Kapanış</small>
           <p>{closingCopy}</p>
         </div>
       </div>
@@ -98,7 +98,7 @@ function renderPreviewInput(question: SurveyBuilderSurvey["questions"][number]) 
     return (
       <div className="choice-pill-row">
         <span className="choice-pill">Evet</span>
-        <span className="choice-pill">Hayir</span>
+        <span className="choice-pill">Hayır</span>
       </div>
     );
   }
@@ -108,7 +108,7 @@ function renderPreviewInput(question: SurveyBuilderSurvey["questions"][number]) 
       return (
         <div className="choice-preview-stack">
           <div className="builder-select-mock">
-            <span>{question.options?.[0]?.label ?? "Bir secenek secin"}</span>
+            <span>{question.options?.[0]?.label ?? "Bir seçenek seçin"}</span>
             <span aria-hidden="true">v</span>
           </div>
           <div className="choice-list-preview">
@@ -157,7 +157,7 @@ function renderPreviewInput(question: SurveyBuilderSurvey["questions"][number]) 
   }
 
   if (question.type === "date") {
-    return <div className="builder-input-mock">Tarih secin</div>;
+    return <div className="builder-input-mock">Tarih seçin</div>;
   }
 
   if (question.type === "phone") {
@@ -168,5 +168,5 @@ function renderPreviewInput(question: SurveyBuilderSurvey["questions"][number]) 
     return <div className="builder-input-mock">0</div>;
   }
 
-  return <div className="builder-input-mock">{question.type === "long_text" ? "Yanit alani" : "Yanitiniz"}</div>;
+  return <div className="builder-input-mock">{question.type === "long_text" ? "Yanıt alanı" : "Yanıtınız"}</div>;
 }

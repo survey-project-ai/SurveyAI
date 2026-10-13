@@ -36,7 +36,7 @@ type DashboardTask = {
   id: string;
   title: string;
   area: string;
-  priority: "Yuksek" | "Orta" | "Dusuk";
+  priority: "Yüksek" | "Orta" | "Düşük";
   createdAt: string;
   actionLabel: string;
   href: string;
@@ -63,11 +63,11 @@ export default function DashboardPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [unavailableSections, setUnavailableSections] = useState<string[]>([]);
 
-  const welcomeName = currentUser?.user.fullName ?? "Kullanici";
+  const welcomeName = currentUser?.user.fullName ?? "Kullanıcı";
 
   usePageHeaderOverride({
-    title: `Hos geldiniz, ${welcomeName}`,
-    subtitle: "Arastirma operasyonlarini buradan yonetebilir ve takip edebilirsiniz.",
+    title: `Hoş geldiniz, ${welcomeName}`,
+    subtitle: "Araştırma operasyonlarını buradan yönetebilir ve takip edebilirsiniz.",
   });
 
   useEffect(() => {
@@ -123,10 +123,10 @@ export default function DashboardPage() {
 
         setUnavailableSections(
           [
-            surveysResult.status === "rejected" ? "Anket akisi" : null,
-            operationsResult.status === "rejected" ? "Operasyon akisi" : null,
-            contactResults.some((result) => result.status === "rejected") ? "Kisi listeleri" : null,
-            analyticsResults.some((result) => result.status === "rejected") ? "Analitik ozeti" : null,
+            surveysResult.status === "rejected" ? "Anket akışı" : null,
+            operationsResult.status === "rejected" ? "Operasyon akışı" : null,
+            contactResults.some((result) => result.status === "rejected") ? "Kişi listeleri" : null,
+            analyticsResults.some((result) => result.status === "rejected") ? "Analitik özeti" : null,
           ].filter((value): value is string => value !== null),
         );
       } catch (error) {
@@ -134,7 +134,7 @@ export default function DashboardPage() {
           return;
         }
 
-        setErrorMessage(error instanceof Error ? error.message : "Ana sayfa yuklenemedi.");
+        setErrorMessage(error instanceof Error ? error.message : "Ana sayfa yüklenemedi.");
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -165,8 +165,8 @@ export default function DashboardPage() {
   const compactQuickLinks: QuickLink[] = [
     { title: "Anketler", href: "/surveys", icon: <SurveyIcon className="nav-icon" /> },
     { title: "Operasyonlar", href: "/operations", icon: <OperationIcon className="nav-icon" /> },
-    { title: "Kisiler", href: "/contacts", icon: <ContactIcon className="nav-icon" /> },
-    { title: "Arama Operasyonlari", href: "/calling-ops", icon: <PlayIcon className="nav-icon" /> },
+    { title: "Kişiler", href: "/contacts", icon: <ContactIcon className="nav-icon" /> },
+    { title: "Arama Operasyonları", href: "/calling-ops", icon: <PlayIcon className="nav-icon" /> },
     { title: "Analitik", href: "/analytics", icon: <AnalyticsIcon className="nav-icon" /> },
   ];
 
@@ -183,11 +183,11 @@ export default function DashboardPage() {
         </Link>
       </section>
 
-      {errorMessage ? <EmptyState title="Ana sayfa yuklenemedi" description={errorMessage} tone="danger" /> : null}
+      {errorMessage ? <EmptyState title="Ana sayfa yüklenemedi" description={errorMessage} tone="danger" /> : null}
       {unavailableSections.length > 0 ? (
         <EmptyState
-          title="Bazi veri akislari eksik"
-          description={`${unavailableSections.join(", ")} su anda tam olarak alinmadi. Yuklenebilen bolumler gosterilmeye devam ediyor.`}
+          title="Bazı veri akışları eksik"
+          description={`${unavailableSections.join(", ")} şu anda tam olarak alınmadı. Yüklenebilen bölümler gösterilmeye devam ediyor.`}
           tone="warning"
         />
       ) : null}
@@ -240,7 +240,7 @@ export default function DashboardPage() {
               <div className="ops-dashboard-kpi-list-item">
                 <span className="ops-dot is-prepared" />
                 <div>
-                  <small>Hazirlikta</small>
+                  <small>Hazırlıkta</small>
                   <strong>{completion.prepared}</strong>
                 </div>
               </div>
@@ -250,16 +250,16 @@ export default function DashboardPage() {
 
         <section className="panel-card ops-dashboard-kpi-card">
           <div className="ops-dashboard-kpi-head">
-            <h2>Arama Sonuclari</h2>
+            <h2>Arama Sonuçları</h2>
           </div>
           {callResults.hasData ? (
             <>
               <div className="ops-dashboard-result-top">
                 <div>
                   <strong>{callResults.success}</strong>
-                  <span>Basarili arama</span>
+                  <span>Başarılı arama</span>
                 </div>
-                <div className="ops-dashboard-chip">Yuksek</div>
+                <div className="ops-dashboard-chip">Yüksek</div>
               </div>
               <div className="ops-dashboard-result-bars">
                 {callResults.items.map((item) => (
@@ -276,31 +276,31 @@ export default function DashboardPage() {
           ) : (
             <div className="ops-dashboard-kpi-empty">
               <strong>Arama sonucu yok</strong>
-              <span>Sonuclar geldikce basarili, bekleyen ve tekrar aramalar burada dagilacak.</span>
+              <span>Sonuçlar geldikçe başarılı, bekleyen ve tekrar aramalar burada dağılacak.</span>
             </div>
           )}
         </section>
 
         <section className="panel-card ops-dashboard-kpi-card">
           <div className="ops-dashboard-kpi-head">
-            <h2>Yanit Performansi</h2>
+            <h2>Yanıt Performansı</h2>
           </div>
           {responsePerformance.hasData ? (
             <>
-              <p className="ops-dashboard-kpi-caption">Ortalama Yanit Orani %{responsePerformance.average}</p>
+              <p className="ops-dashboard-kpi-caption">Ortalama Yanıt Oranı %{responsePerformance.average}</p>
               <ResponseTrendChart points={responsePerformance.points} percentLabel={responsePerformance.lastPercentLabel} />
             </>
           ) : (
             <div className="ops-dashboard-kpi-empty">
-              <strong>Yanit performansi hazir degil</strong>
-              <span>Yanit verisi olustugunda gunluk trend burada cizilecek.</span>
+              <strong>Yanıt performansı hazır değil</strong>
+              <span>Yanıt verisi oluştuğunda günlük trend burada çizilecek.</span>
             </div>
           )}
         </section>
 
         <section className="panel-card ops-dashboard-kpi-card">
           <div className="ops-dashboard-kpi-head">
-            <h2>Gunluk Cagri Hacmi</h2>
+            <h2>Günlük Çağrı Hacmi</h2>
           </div>
           {volumeSeries.hasData ? (
             <>
@@ -315,8 +315,8 @@ export default function DashboardPage() {
             </>
           ) : (
             <div className="ops-dashboard-kpi-empty">
-              <strong>Cagri hacmi olusmadi</strong>
-              <span>Gunluk cagri adedi geldikce sutun dagilimi burada gosterilecek.</span>
+              <strong>Çağrı hacmi oluşmadı</strong>
+              <span>Günlük çağrı adedi geldikçe sütun dağılımı burada gösterilecek.</span>
             </div>
           )}
         </section>
@@ -325,26 +325,26 @@ export default function DashboardPage() {
       <div className="ops-dashboard-reference-grid">
         <div className="ops-dashboard-reference-main">
           <SectionCard
-            title="Devam Eden Isler"
-            description="Oncelik verilmesi gereken isler ve operator aksiyonlari."
+            title="Devam Eden İşler"
+            description="Öncelik verilmesi gereken işler ve operatör aksiyonları."
             action={
               <Link href="/operations" className="ops-inline-link">
-                Tumunu goruntule
+                Tümünü görüntüle
                 <ArrowRightIcon className="nav-icon" />
               </Link>
             }
           >
             {isLoading ? (
-              <EmptyState title="Gorev listesi hazirlaniyor" description="Operasyonlardan turetilen oncelikli isler getiriliyor." />
+              <EmptyState title="Görev listesi hazırlanıyor" description="Operasyonlardan türetilen öncelikli işler getiriliyor." />
             ) : tasks.length === 0 ? (
-              <EmptyState title="Bekleyen gorev yok" description="Kritik aksiyon gerektiren is bulunmuyor." />
+              <EmptyState title="Bekleyen görev yok" description="Kritik aksiyon gerektiren iş bulunmuyor." />
             ) : (
               <div className="ops-dashboard-task-table">
                 <div className="ops-dashboard-task-head">
-                  <span>Gorev</span>
-                  <span>Ilgili Alan</span>
-                  <span>Oncelik</span>
-                  <span>Olusturulma</span>
+                  <span>Görev</span>
+                  <span>İlgili Alan</span>
+                  <span>Öncelik</span>
+                  <span>Oluşturulma</span>
                   <span>Aksiyon</span>
                 </div>
                 {tasks.map((task) => (
@@ -354,7 +354,7 @@ export default function DashboardPage() {
                       <Sparkline values={task.sparkline} />
                     </div>
                     <span className="ops-dashboard-muted">{task.area}</span>
-                    <StatusBadge status={task.priority === "Yuksek" ? "Warning" : task.priority === "Orta" ? "Pending" : "Ready"} label={task.priority} />
+                    <StatusBadge status={task.priority === "Yüksek" ? "Warning" : task.priority === "Orta" ? "Pending" : "Ready"} label={task.priority} />
                     <span className="ops-dashboard-muted">{task.createdAt}</span>
                     <Link href={task.href} className="button-secondary compact-button">
                       {task.actionLabel}
@@ -368,8 +368,8 @@ export default function DashboardPage() {
           <section className="panel-card ops-dashboard-shortcuts">
             <div className="section-header">
               <div className="section-copy">
-                <h2>Hizli Gecis</h2>
-                <p>Sik kullandiginiz alanlara hizli erisim.</p>
+                <h2>Hızlı Geçiş</h2>
+                <p>Sık kullandığınız alanlara hızlı erişim.</p>
               </div>
             </div>
             <div className="ops-dashboard-shortcuts-featured">
@@ -393,12 +393,12 @@ export default function DashboardPage() {
 
         <div className="ops-dashboard-reference-side">
           <SectionCard
-            title="Son Aktiviteler / Olay Akisi"
-            description="Son operasyon hareketleri ve ciktilar"
-            action={<Link href="/operations" className="button-secondary compact-button">Tumunu gor</Link>}
+            title="Son Aktiviteler / Olay Akışı"
+            description="Son operasyon hareketleri ve çıktılar"
+            action={<Link href="/operations" className="button-secondary compact-button">Tümünü gör</Link>}
           >
             {activityRows.length === 0 ? (
-              <EmptyState title="Aktivite bulunmuyor" description="Operasyon guncellemeleri burada listelenecek." />
+              <EmptyState title="Aktivite bulunmuyor" description="Operasyon güncellemeleri burada listelenecek." />
             ) : (
               <div className="ops-dashboard-activity-list">
                 {activityRows.map((row) => (
@@ -418,7 +418,7 @@ export default function DashboardPage() {
             )}
           </SectionCard>
 
-          <SectionCard title="Sistem Durumu" description="Calisma alani kontrol ozeti." action={<button className="button-secondary compact-button">Detaylar</button>}>
+          <SectionCard title="Sistem Durumu" description="Çalışma alanı kontrol özeti." action={<button className="button-secondary compact-button">Detaylar</button>}>
             <div className="ops-dashboard-system-progress">
               <div className="ops-dashboard-system-bar">
                 <span style={{ width: `${systemHealth.percent}%` }} />
@@ -442,7 +442,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="ops-dashboard-system-footer">
-              <span>Detaylar: Bugun {systemHealth.updatedAt}</span>
+              <span>Detaylar: Bugün {systemHealth.updatedAt}</span>
               <ArrowRightIcon className="nav-icon" />
             </div>
           </SectionCard>
@@ -502,17 +502,17 @@ function buildCallResultSummary(contacts: DashboardContact[]) {
     hasData: total > 0,
     success,
     items: [
-      { label: "Basarili", value: success, tone: "success", height: (success / max) * 100 },
-      { label: "Basarisiz", value: rejected, tone: "danger", height: (rejected / max) * 100 },
+      { label: "Başarılı", value: success, tone: "success", height: (success / max) * 100 },
+      { label: "Başarısız", value: rejected, tone: "danger", height: (rejected / max) * 100 },
       { label: "Bekleyen", value: pending, tone: "warning", height: (pending / max) * 100 },
       { label: "Tekrar", value: retry, tone: "warning", height: (retry / max) * 100 },
-      { label: "Gecersiz", value: invalid, tone: "info", height: (invalid / max) * 100 },
+      { label: "Geçersiz", value: invalid, tone: "info", height: (invalid / max) * 100 },
     ],
   };
 }
 
 function buildResponsePerformance(analytics: OperationAnalytics[]) {
-  const seed = ["Pzt", "Sal", "Car", "Per", "Cum", "Cmt"];
+  const seed = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
   const hasData = analytics.some((item) => item.totalResponses > 0 || item.totalCallsAttempted > 0);
   const analyticsAverage =
     analytics.length > 0 ? analytics.reduce((sum, item) => sum + item.responseRate, 0) / analytics.length : 0;
@@ -534,7 +534,7 @@ function buildResponsePerformance(analytics: OperationAnalytics[]) {
 function buildVolumeSeries(analytics: OperationAnalytics[], contacts: DashboardContact[]) {
   const baseTotal = analytics.reduce((sum, item) => sum + item.totalCallsAttempted, 0) || contacts.length;
   const hasData = baseTotal > 0;
-  const seed = ["Pzt", "Sal", "Car", "Per", "Cum", "Cmt"];
+  const seed = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
   const points = seed.map((label, index) => ({
     label,
     value: hasData ? Math.max(Math.round(baseTotal / Math.max(seed.length, 1) + index * 8 - (index % 2 === 0 ? 12 : 0)), 12) : 0,
@@ -559,11 +559,11 @@ function buildDashboardTasks(operations: Operation[], surveys: Survey[]): Dashbo
     blockedOperation
       ? {
           id: `blocked-${blockedOperation.id}`,
-          title: `${blockedOperation.name} operasyonundaki blokaji gider`,
+          title: `${blockedOperation.name} operasyonundaki blokajı gider`,
           area: "Operasyonlar",
-          priority: "Yuksek",
+          priority: "Yüksek",
           createdAt: blockedOperation.updatedAt,
-          actionLabel: "Duzelt",
+          actionLabel: "Düzelt",
           href: `/operations/${blockedOperation.id}`,
           sparkline: [18, 22, 21, 26, 28, 31],
         }
@@ -571,11 +571,11 @@ function buildDashboardTasks(operations: Operation[], surveys: Survey[]): Dashbo
     readyOperation
       ? {
           id: `ready-${readyOperation.id}`,
-          title: `${readyOperation.name} icin canli akisi ac`,
-          area: "Arama Operasyonlari",
+          title: `${readyOperation.name} için canlı akışı aç`,
+          area: "Arama Operasyonları",
           priority: "Orta",
           createdAt: readyOperation.updatedAt,
-          actionLabel: "Bagla",
+          actionLabel: "Bağla",
           href: `/operations/${readyOperation.id}`,
           sparkline: [8, 10, 12, 14, 15, 18],
         }
@@ -583,11 +583,11 @@ function buildDashboardTasks(operations: Operation[], surveys: Survey[]): Dashbo
     draftSurvey
       ? {
           id: `draft-${draftSurvey.id}`,
-          title: `${draftSurvey.name} anketinde yayin kontrolu yap`,
+          title: `${draftSurvey.name} anketinde yayın kontrolü yap`,
           area: "Anketler",
-          priority: "Dusuk",
+          priority: "Düşük",
           createdAt: draftSurvey.updatedAt,
-          actionLabel: "Incele",
+          actionLabel: "İncele",
           href: `/surveys/${draftSurvey.id}`,
           sparkline: [6, 8, 7, 9, 10, 11],
         }
@@ -595,11 +595,11 @@ function buildDashboardTasks(operations: Operation[], surveys: Survey[]): Dashbo
     retryOperation
       ? {
           id: `retry-${retryOperation.id}`,
-          title: `${retryOperation.name} cagri akislarini tekrar kuyruga al`,
-          area: "Arama Operasyonlari",
-          priority: "Dusuk",
+          title: `${retryOperation.name} çağrı akışlarını tekrar kuyruğa al`,
+          area: "Arama Operasyonları",
+          priority: "Düşük",
           createdAt: retryOperation.updatedAt,
-          actionLabel: "Kuyruga Al",
+          actionLabel: "Kuyruğa Al",
           href: `/operations/${retryOperation.id}`,
           sparkline: [10, 9, 12, 11, 13, 14],
         }
@@ -611,10 +611,10 @@ function buildDashboardTasks(operations: Operation[], surveys: Survey[]): Dashbo
 
 const contactStatusLabels: Record<OperationContact["status"], string> = {
   Active: "Aktif",
-  Completed: "Tamamlandi",
-  Failed: "Basarisiz",
+  Completed: "Tamamlandı",
+  Failed: "Başarısız",
   Retry: "Tekrar aranacak",
-  Invalid: "Gecersiz",
+  Invalid: "Geçersiz",
   Pending: "Beklemede",
 };
 
@@ -623,9 +623,9 @@ function buildDashboardActivityRows(operations: Operation[], contacts: Dashboard
     id: operation.id,
     time: extractTime(operation.updatedAt),
     actor: index % 2 === 0 ? "Sistem" : "Operasyon Sahibi",
-    event: index === 0 ? "Kisi yukleme" : index === 1 ? "Rapor tazelendi" : "Durum degisti",
+    event: index === 0 ? "Kişi yükleme" : index === 1 ? "Rapor tazelendi" : "Durum değişti",
     area: operation.name,
-    result: operation.readiness.blockingReasons[0] ?? `${operation.executionSummary.completedCallJobs} cagri tamamlandi`,
+    result: operation.readiness.blockingReasons[0] ?? `${operation.executionSummary.completedCallJobs} çağrı tamamlandı`,
     href: `/operations/${operation.id}`,
   }));
 
@@ -633,7 +633,7 @@ function buildDashboardActivityRows(operations: Operation[], contacts: Dashboard
     id: `contact-${contact.id}`,
     time: extractTime(contact.updatedAt),
     actor: "Sistem",
-    event: "Kisi kuyruga eklendi",
+    event: "Kişi kuyruğa eklendi",
     area: contact.operationName,
     result: `${contact.name} / ${contactStatusLabels[contact.status]}`,
     href: "/operations",
@@ -651,21 +651,21 @@ function buildSystemHealth(
   const items = [
     {
       title: "Arama Servisi",
-      detail: contacts.length > 0 ? "Cevrimici" : "Beklemede",
+      detail: contacts.length > 0 ? "Çevrimiçi" : "Beklemede",
       status: contacts.length > 0 ? "Ready" : "Pending",
-      label: contacts.length > 0 ? "Cevrimici" : "Beklemede",
+      label: contacts.length > 0 ? "Çevrimiçi" : "Beklemede",
     },
     {
-      title: "Anket Yayin Servisi",
-      detail: surveys.length > 0 ? "Cevrimici" : "Beklemede",
+      title: "Anket Yayın Servisi",
+      detail: surveys.length > 0 ? "Çevrimiçi" : "Beklemede",
       status: surveys.length > 0 ? "Ready" : "Pending",
-      label: surveys.length > 0 ? "Cevrimici" : "Beklemede",
+      label: surveys.length > 0 ? "Çevrimiçi" : "Beklemede",
     },
     {
       title: "Veri Senkronizasyonu",
-      detail: unavailableSections.length > 0 ? unavailableSections.join(", ") : "Guncel Bugun 09:42",
+      detail: unavailableSections.length > 0 ? unavailableSections.join(", ") : "Güncel Bugün 09:42",
       status: unavailableSections.length > 0 ? "Warning" : "Ready",
-      label: unavailableSections.length > 0 ? "Uyari" : "Guncel",
+      label: unavailableSections.length > 0 ? "Uyarı" : "Güncel",
     },
   ];
 
@@ -677,7 +677,7 @@ function buildSystemHealth(
     activeChecks,
     totalChecks,
     percent: (activeChecks / totalChecks) * 100,
-    pendingLabel: `${Math.max(totalChecks - activeChecks, 0)} yapilmasi gereken islem`,
+    pendingLabel: `${Math.max(totalChecks - activeChecks, 0)} yapılması gereken işlem`,
     updatedAt: "09:42",
   };
 }

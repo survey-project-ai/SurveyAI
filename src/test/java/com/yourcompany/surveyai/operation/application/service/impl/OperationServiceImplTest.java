@@ -238,7 +238,7 @@ class OperationServiceImplTest {
 
         assertThatThrownBy(() -> operationService.startOperation(companyId, operationId))
                 .isInstanceOf(ValidationException.class)
-                .hasMessageContaining("en az bir kisi gerekli");
+                .hasMessageContaining("en az bir kişi gerekli");
     }
 
     @Test
@@ -322,7 +322,7 @@ class OperationServiceImplTest {
 
         assertThatThrownBy(() -> operationService.deleteOperation(companyId, operationId))
                 .isInstanceOf(ValidationException.class)
-                .hasMessageContaining("Once duraklatin");
+                .hasMessageContaining("Önce duraklatın");
     }
 
     @Test
@@ -379,7 +379,7 @@ class OperationServiceImplTest {
         assertThat(response.questionSummaries().get(1).averageRating()).isEqualTo(5.0);
         assertThat(response.consentBreakdown())
                 .extracting(item -> item.label() + ":" + item.count())
-                .contains("Katilmayi kabul etti:1");
+                .contains("Katılmayı kabul etti:1");
     }
 
     @Test
@@ -491,9 +491,9 @@ class OperationServiceImplTest {
         assertThat(response.consentBreakdown())
                 .extracting(item -> item.label() + ":" + item.count())
                 .containsExactly(
-                        "Katilmayi kabul etti:0",
-                        "Katilmayi reddetti:0",
-                        "Belirsiz / yanitsiz:1"
+                        "Katılmayı kabul etti:0",
+                        "Katılmayı reddetti:0",
+                        "Belirsiz / yanıtsız:1"
                 );
     }
 
@@ -530,9 +530,9 @@ class OperationServiceImplTest {
         assertThat(response.consentBreakdown())
                 .extracting(item -> item.label() + ":" + item.count())
                 .containsExactly(
-                        "Katilmayi kabul etti:0",
-                        "Katilmayi reddetti:0",
-                        "Belirsiz / yanitsiz:1"
+                        "Katılmayı kabul etti:0",
+                        "Katılmayı reddetti:0",
+                        "Belirsiz / yanıtsız:1"
                 );
     }
 
@@ -590,8 +590,8 @@ class OperationServiceImplTest {
                 .containsExactly("Evet:1", "Hayir:1");
         assertThat(response.insightItems())
                 .extracting(item -> item.detail())
-                .filteredOn(detail -> ((String) detail).contains("en cok secilen cevap"))
-                .containsExactly("\"Mevcut belediyeye hiç oy verdiniz mi\" sorusunda en cok secilen cevap Evet oldu (%50.0).");
+                .filteredOn(detail -> ((String) detail).contains("en çok seçilen cevap"))
+                .containsExactly("\"Mevcut belediyeye hiç oy verdiniz mi\" sorusunda en çok seçilen cevap Evet oldu (%50.0).");
     }
 
     @Test

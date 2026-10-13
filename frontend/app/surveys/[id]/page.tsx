@@ -79,11 +79,11 @@ export default function SurveyDetailPage() {
       distinctTypes,
       readinessLabel:
         survey.status === "Live"
-          ? "Yayinda"
+          ? "Yayında"
           : readinessScore >= 5
-            ? "Hazir"
+            ? "Hazır"
             : readinessScore >= 3
-              ? "Calisiliyor"
+              ? "Çalışılıyor"
               : "Taslak",
     };
   }, [survey]);
@@ -135,13 +135,13 @@ export default function SurveyDetailPage() {
   const operationStatusBreakdown = useMemo(() => {
     const statusLabels: Record<Operation["status"], string> = {
       Draft: "Taslak",
-      Ready: "Hazir",
-      Running: "Canli",
-      Completed: "Tamamlandi",
+      Ready: "Hazır",
+      Running: "Canlı",
+      Completed: "Tamamlandı",
       Failed: "Sorunlu",
-      Scheduled: "Planli",
-      Paused: "Duraklatildi",
-      Cancelled: "Iptal",
+      Scheduled: "Planlı",
+      Paused: "Duraklatıldı",
+      Cancelled: "İptal",
     };
 
     const counts = new Map<string, number>();
@@ -173,10 +173,10 @@ export default function SurveyDetailPage() {
     );
 
     return [
-      { key: "completed", label: "Tamamlandi", count: totals.completed },
-      { key: "partial", label: "Kismi", count: totals.partial },
-      { key: "abandoned", label: "Yarida kaldi", count: totals.abandoned },
-      { key: "invalid", label: "Gecersiz", count: totals.invalid },
+      { key: "completed", label: "Tamamlandı", count: totals.completed },
+      { key: "partial", label: "Kısmi", count: totals.partial },
+      { key: "abandoned", label: "Yarıda kaldı", count: totals.abandoned },
+      { key: "invalid", label: "Geçersiz", count: totals.invalid },
     ].filter((item) => item.count > 0);
   }, [analytics, linkedOperations]);
 
@@ -320,36 +320,36 @@ export default function SurveyDetailPage() {
       {
         key: "status",
         title: "Durum",
-        value: survey.status === "Live" ? "Yayinda" : survey.status === "Archived" ? "Arsivde" : "Taslak",
-        detail: `${survey.questions.length} soru / ${surveyStats?.readinessLabel ?? "Taslak"} asamasi`,
+        value: survey.status === "Live" ? "Yayında" : survey.status === "Archived" ? "Arşivde" : "Taslak",
+        detail: `${survey.questions.length} soru / ${surveyStats?.readinessLabel ?? "Taslak"} aşaması`,
         icon: <SurveyIcon className="nav-icon" />,
         tone: "is-info",
       },
       {
         key: "operations",
-        title: "Bagli operasyon",
+        title: "Bağlı operasyon",
         value: String(linkedOperations.length),
         detail: linkedOperations.length > 0
           ? `${completedOperationsCount} tamamlanan, ${ongoingOperationsCount} devam eden operasyon.`
-          : "Henuz bir operasyona baglanmadi.",
+          : "Henüz bir operasyona bağlanmadı.",
         icon: <PlayIcon className="nav-icon" />,
         tone: "is-neutral",
       },
       {
         key: "people",
-        title: "Atanmis kisi",
+        title: "Atanmış kişi",
         value: String(assignedPeopleCount),
         detail: assignedPeopleCount > 0
-          ? `${completedPeopleCount} kisi tamamlandi, kalan hacim operasyon akisinda.`
-          : "Henuz kisi atamasi bulunmuyor.",
+          ? `${completedPeopleCount} kişi tamamlandı, kalan hacim operasyon akışında.`
+          : "Henüz kişi ataması bulunmuyor.",
         icon: <EyeIcon className="nav-icon" />,
         tone: "is-warning",
       },
       {
         key: "preview",
         title: "Anket Preview",
-        value: "Ac",
-        detail: "Readonly gorusme akisina gecip anketi katilimci perspektifinden inceleyin.",
+        value: "Aç",
+        detail: "Readonly görüşme akışına geçip anketi katılımcı perspektifinden inceleyin.",
         icon: <EyeIcon className="nav-icon" />,
         tone: "is-neutral",
         href: `/surveys/${survey.id}/preview`,
@@ -383,7 +383,7 @@ export default function SurveyDetailPage() {
         return;
       }
 
-      const message = error instanceof Error ? error.message : "Anket detayi yuklenemedi.";
+      const message = error instanceof Error ? error.message : "Anket detayı yüklenemedi.";
       if (message.includes("(404)")) {
         setIsMissing(true);
         return;
@@ -449,7 +449,7 @@ export default function SurveyDetailPage() {
       const result = await saveSurveyBuilderSurvey(copiedSurvey, "draft");
       router.push(`/surveys/${result.survey.id}`);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Taslak kopya olusturulamadi.");
+      setErrorMessage(error instanceof Error ? error.message : "Taslak kopya oluşturulamadı.");
     } finally {
       setIsCreatingDraftCopy(false);
     }
@@ -460,7 +460,7 @@ export default function SurveyDetailPage() {
       return;
     }
     if (!importFile) {
-      setImportError("Lutfen import edilecek dosyayi secin.");
+      setImportError("Lütfen import edilecek dosyayı seçin.");
       return;
     }
 
@@ -480,7 +480,7 @@ export default function SurveyDetailPage() {
       await loadSurveyDetail();
       router.push(`/operations/${result.operationId}`);
     } catch (error) {
-      setImportError(error instanceof Error ? error.message : "Veri importu basarisiz oldu.");
+      setImportError(error instanceof Error ? error.message : "Veri importu başarısız oldu.");
     } finally {
       setIsImportingData(false);
     }
@@ -493,7 +493,7 @@ export default function SurveyDetailPage() {
           {survey.status === "Draft" ? (
             <Link href={`/surveys/${survey.id}/edit`} className="button-secondary compact-button survey-header-button">
               <SurveyIcon className="nav-icon" />
-              Duzenle
+              Düzenle
             </Link>
           ) : null}
           <button
@@ -520,24 +520,24 @@ export default function SurveyDetailPage() {
               disabled={isCreatingDraftCopy}
             >
               <SurveyIcon className="nav-icon" />
-              {isCreatingDraftCopy ? "Kopya hazirlaniyor..." : "Taslak Kopya Olustur"}
+              {isCreatingDraftCopy ? "Kopya hazırlanıyor..." : "Taslak Kopya Oluştur"}
             </button>
           ) : null}
         </div>
         {survey.status === "Live" ? (
-          <div className="survey-header-notice" role="note" aria-label="Yayin uyarisi">
+          <div className="survey-header-notice" role="note" aria-label="Yayın uyarısı">
             <SurveyIcon className="nav-icon" />
             <div>
-              <strong>Yayinlandi</strong>
-              <span>Yayinlanmis anketlerde degisiklik yapilamaz. Veri ekleme islemi analize yeni operasyon verisi olarak yansir; soru setini degistirmek icin taslak kopya kullanin.</span>
+              <strong>Yayınlandı</strong>
+              <span>Yayınlanmış anketlerde değişiklik yapılamaz. Veri ekleme işlemi analize yeni operasyon verisi olarak yansır; soru setini değiştirmek için taslak kopya kullanın.</span>
             </div>
           </div>
         ) : (
-          <div className="survey-header-notice" role="note" aria-label="Veri import uyarisi">
+          <div className="survey-header-notice" role="note" aria-label="Veri import uyarısı">
             <SurveyIcon className="nav-icon" />
             <div>
               <strong>Saha verisi eklenebilir</strong>
-              <span>Bu anketin mevcut soru seti korunur. Yukleyeceginiz Excel veya CSV cevaplari ayni ankete bagli yeni bir import operasyonu olarak analizlere eklenir.</span>
+              <span>Bu anketin mevcut soru seti korunur. Yükleyeceğiniz Excel veya CSV cevapları aynı ankete bağlı yeni bir import operasyonu olarak analizlere eklenir.</span>
             </div>
           </div>
         )}
@@ -547,10 +547,10 @@ export default function SurveyDetailPage() {
   );
 
   usePageHeaderOverride({
-    title: survey?.name.trim() || "Anket Detayi",
+    title: survey?.name.trim() || "Anket Detayı",
     subtitle: survey?.summary.trim()
       ? survey.summary.trim()
-      : "Anket performansini, operasyon baglantilarini ve soru bazli dagilimi tek yuzeyde inceleyin.",
+      : "Anket performansını, operasyon bağlantılarını ve soru bazlı dağılımı tek yüzeyde inceleyin.",
     action: headerAction,
   });
 
@@ -563,7 +563,7 @@ export default function SurveyDetailPage() {
       {errorMessage ? (
         <section className="panel-card">
           <div className="operation-inline-message is-danger">
-            <strong>Anket duzenleme alani yuklenemedi</strong>
+            <strong>Anket düzenleme alanı yüklenemedi</strong>
             <span>{errorMessage}</span>
           </div>
         </section>
@@ -593,8 +593,8 @@ export default function SurveyDetailPage() {
               </button>
             </div>
             <p>
-              Ilk satiri soru kolonlari olacak sekilde hazirlanmis Excel veya CSV dosyasini yukleyin. Eslesen kolonlar bu ankete
-              bagli yeni bir import operasyonu olarak eklenir ve analizlere mevcut operasyonlarla birlikte yansir.
+              İlk satırı soru kolonları olacak şekilde hazırlanmış Excel veya CSV dosyasını yükleyin. Eşleşen kolonlar bu ankete
+              bağlı yeni bir import operasyonu olarak eklenir ve analizlere mevcut operasyonlarla birlikte yansır.
             </p>
 
             <div className="surveys-google-import-grid">
@@ -606,18 +606,18 @@ export default function SurveyDetailPage() {
                   onChange={(event) => setImportFile(event.target.files?.[0] ?? null)}
                   disabled={isImportingData}
                 />
-                <span>{importFile ? `Secilen dosya: ${importFile.name}` : "Desteklenen formatlar: .xlsx, .xls, .csv"}</span>
+                <span>{importFile ? `Seçilen dosya: ${importFile.name}` : "Desteklenen formatlar: .xlsx, .xls, .csv"}</span>
               </label>
 
               <label className="builder-field surveys-google-import-field surveys-google-import-field-full">
-                <strong>Operasyon adi</strong>
+                <strong>Operasyon adı</strong>
                 <input
                   value={importOperationName}
                   onChange={(event) => setImportOperationName(event.target.value)}
-                  placeholder="Opsiyonel saha import operasyon adi"
+                  placeholder="Opsiyonel saha import operasyon adı"
                   disabled={isImportingData}
                 />
-                <span>Bos birakilirsa anket adina gore anlamli bir operasyon adi uretilir.</span>
+                <span>Boş bırakılırsa anket adına göre anlamlı bir operasyon adı üretilir.</span>
               </label>
             </div>
 
@@ -634,7 +634,7 @@ export default function SurveyDetailPage() {
                 disabled={isImportingData}
               >
                 <PlusIcon className="nav-icon" />
-                {isImportingData ? "Data ekleniyor" : "Datayi Ankete Ekle"}
+                {isImportingData ? "Data ekleniyor" : "Datayı Ankete Ekle"}
               </button>
               <button
                 type="button"
@@ -642,7 +642,7 @@ export default function SurveyDetailPage() {
                 onClick={() => setIsImportModalOpen(false)}
                 disabled={isImportingData}
               >
-                Vazgec
+                Vazgeç
               </button>
             </div>
           </section>
@@ -653,8 +653,8 @@ export default function SurveyDetailPage() {
         <section className="panel-card">
           <div className="list-item">
             <div>
-              <strong>Anket yukleniyor</strong>
-              <span>Duzenleme ekrani hazirlaniyor.</span>
+              <strong>Anket yükleniyor</strong>
+              <span>Düzenleme ekranı hazırlanıyor.</span>
             </div>
           </div>
         </section>
@@ -688,8 +688,8 @@ export default function SurveyDetailPage() {
 
           <SectionCard
             eyebrow="Soru Analizi"
-            title="Soru-Cevap Oranlari"
-            description="Hangi sorularin daha rahat cevaplandigini ve gorusmelerin hangi adimlarda dusme egilimi gosterdigini izlemek icin kullanilir."
+            title="Soru-Cevap Oranları"
+            description="Hangi soruların daha rahat cevaplandığını ve görüşmelerin hangi adımlarda düşme eğilimi gösterdiğini izlemek için kullanılır."
           >
             <QuestionResponseChart
               items={questionResponseBreakdown}
@@ -701,8 +701,8 @@ export default function SurveyDetailPage() {
           <section className="survey-detail-analytics-grid">
             <SectionCard
               eyebrow="Operasyon"
-              title="Bagli Operasyon Dagilimi"
-              description="Bu sablonun sahadaki kullanim bicimini ve operasyon yogunlugunu ozetler."
+              title="Bağlı Operasyon Dağılımı"
+              description="Bu şablonun sahadaki kullanım biçimini ve operasyon yoğunluğunu özetler."
             >
               <OperationLoadChart
                 operationCount={linkedOperations.length}
@@ -712,25 +712,25 @@ export default function SurveyDetailPage() {
             </SectionCard>
 
             <SectionCard
-              eyebrow="Yanit"
-              title="Yanit Durumu"
-              description="Bu ankete bagli operasyonlardan gelen tamamlanma ve kismi geri donus dagilimini gosterir."
+              eyebrow="Yanıt"
+              title="Yanıt Durumu"
+              description="Bu ankete bağlı operasyonlardan gelen tamamlanma ve kısmi geri dönüş dağılımını gösterir."
             >
               <ResponseStatusChart overview={responseOverview} breakdown={responseStatusBreakdown} />
             </SectionCard>
 
             <SectionCard
               eyebrow="Trend"
-              title="Yanit Hacmi Akisi"
-              description="Gun bazinda toplanan cevap hacmini izleyerek hangi donemlerde verinin hizlandigini gormenizi saglar."
+              title="Yanıt Hacmi Akışı"
+              description="Gün bazında toplanan cevap hacmini izleyerek hangi dönemlerde verinin hızlandığını görmenizi sağlar."
             >
               <ResponseTrendChart trend={responseTrend} totalResponses={responseOverview.responses} />
             </SectionCard>
 
             <SectionCard
               eyebrow="Analiz"
-              title="Soru Yapisi Dagilimi"
-              description="Anketin hangi soru tiplerine daha fazla yaslandigini tek bakista gosterir."
+              title="Soru Yapısı Dağılımı"
+              description="Anketin hangi soru tiplerine daha fazla yaslandığını tek bakışta gösterir."
             >
               <QuestionMixChart total={survey.questions.length} breakdown={questionTypeBreakdown} />
             </SectionCard>
@@ -753,9 +753,9 @@ function QuestionResponseChart({
   const [sortBy, setSortBy] = useState<"flow" | "response" | "dropoff">("dropoff");
   const [filterBy, setFilterBy] = useState<"all" | "critical" | "choice" | "open" | "rating">("all");
   const toneLabels: Record<string, string> = {
-    strong: "Guclu akiyor",
+    strong: "Güçlü akıyor",
     steady: "Dengeli",
-    fragile: "Takiliyor",
+    fragile: "Takılıyor",
     empty: "Veri yok",
   };
 
@@ -801,29 +801,29 @@ function QuestionResponseChart({
         <div className="survey-detail-question-highlights">
           <div className="survey-detail-question-callout is-positive">
             <span>En rahat cevaplanan</span>
-            <strong>{strongest?.title ?? "Henuz veri yok"}</strong>
-            <p>{strongest ? `%${strongest.responseRate} cevaplanma orani ile akisin en puruzsuz noktasi.` : "Yanit geldikce bu alan dolacak."}</p>
+            <strong>{strongest?.title ?? "Henüz veri yok"}</strong>
+            <p>{strongest ? `%${strongest.responseRate} cevaplanma oranı ile akışın en pürüzsüz noktası.` : "Yanıt geldikçe bu alan dolacak."}</p>
           </div>
           <div className="survey-detail-question-callout is-warning">
-            <span>En cok surtunen</span>
-            <strong>{weakest?.title ?? "Henuz veri yok"}</strong>
-            <p>{weakest ? `%${weakest.responseRate} cevaplanma orani ile sadeleştirme ya da siralama incelemesi gerektirebilir.` : "Yanit geldikce bu alan dolacak."}</p>
+            <span>En çok sürtünen</span>
+            <strong>{weakest?.title ?? "Henüz veri yok"}</strong>
+            <p>{weakest ? `%${weakest.responseRate} cevaplanma oranı ile sadeleştirme ya da sıralama incelemesi gerektirebilir.` : "Yanıt geldikçe bu alan dolacak."}</p>
           </div>
           <div className="survey-detail-question-callout is-neutral">
             <span>Ortalama cevaplanma</span>
             <strong>%{averageRate}</strong>
-            <p>{criticalCount > 0 ? `${criticalCount} soru kritik izleme listesinde.` : "Kritik esikte soru gorunmuyor."}</p>
+            <p>{criticalCount > 0 ? `${criticalCount} soru kritik izleme listesinde.` : "Kritik eşikte soru görünmüyor."}</p>
           </div>
         </div>
 
         <div className="survey-detail-question-toolbar">
           <div className="filter-tabs">
             {[
-              ["all", "Tum sorular"],
+              ["all", "Tüm sorular"],
               ["critical", "Kritik"],
-              ["choice", "Secimli"],
-              ["open", "Acik uclu"],
-              ["rating", "Olcek"],
+              ["choice", "Seçimli"],
+              ["open", "Açık uçlu"],
+              ["rating", "Ölçek"],
             ].map(([value, label]) => (
               <button
                 key={value}
@@ -838,11 +838,11 @@ function QuestionResponseChart({
 
           <div className="survey-detail-question-actions">
             <label className="survey-detail-select">
-              <span>Siralama</span>
+              <span>Sıralama</span>
               <select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}>
-                <option value="dropoff">En cok kayip</option>
-                <option value="response">En yuksek cevap</option>
-                <option value="flow">Akis sirasi</option>
+                <option value="dropoff">En çok kayıp</option>
+                <option value="response">En yüksek cevap</option>
+                <option value="flow">Akış sırası</option>
               </select>
             </label>
           </div>
@@ -856,7 +856,7 @@ function QuestionResponseChart({
           ))}
         </div>
       ) : (
-        <div className="survey-detail-empty-chart">Secilen filtre icin soru bazli analiz bulunmuyor.</div>
+        <div className="survey-detail-empty-chart">Seçilen filtre için soru bazlı analiz bulunmuyor.</div>
       )}
     </div>
   );
@@ -881,7 +881,7 @@ function QuestionResponseRow({
         </div>
         <div className="survey-detail-question-meta">
           <span>Soru {item.order}</span>
-          <span>{item.answeredCount} yanit</span>
+          <span>{item.answeredCount} yanıt</span>
           <strong>%{item.responseRate}</strong>
         </div>
         <div className={`survey-detail-bar-track survey-detail-question-track is-${item.tone}`}>
@@ -890,11 +890,11 @@ function QuestionResponseRow({
         <div className="survey-detail-question-insight-row">
           {item.progressionRate !== null ? (
             <span className="survey-detail-question-progress">
-              Sonraki soruya gecis %{item.progressionRate}
-              {item.dropOffCount ? ` · ${item.dropOffCount} kisi kaybi` : ""}
+              Sonraki soruya geçiş %{item.progressionRate}
+              {item.dropOffCount ? ` · ${item.dropOffCount} kişi kaybı` : ""}
             </span>
           ) : (
-            <span className="survey-detail-question-progress">Akin son sorusu</span>
+            <span className="survey-detail-question-progress">Akışın son sorusu</span>
           )}
         </div>
         <p className="survey-detail-question-recommendation">{item.recommendation}</p>
@@ -911,7 +911,7 @@ function QuestionResponseRow({
           </div>
         ) : (
           <div className="survey-detail-question-options is-empty">
-            <span>Secenek dagilimi bulunmuyor</span>
+            <span>Seçenek dağılımı bulunmuyor</span>
           </div>
         )}
       </div>
@@ -928,30 +928,30 @@ function buildQuestionRecommendation(
   },
 ) {
   if (item.responseRate === 0) {
-    return "Bu soruda hic cevap yok. Soru metni, akis sirasi veya operasyon hedef kitlesi birlikte yeniden gozden gecirilmeli.";
+    return "Bu soruda hiç cevap yok. Soru metni, akış sırası veya operasyon hedef kitlesi birlikte yeniden gözden geçirilmeli.";
   }
 
   if (context.progressionRate !== null && context.progressionRate < 70) {
-    return "Bu sorudan sonra belirgin bir kopus var. Soruyu daha erken ya da daha sonra konumlandirmak akis kaybini azaltabilir.";
+    return "Bu sorudan sonra belirgin bir kopuş var. Soruyu daha erken ya da daha sonra konumlandırmak akış kaybını azaltabilir.";
   }
 
   if (item.responseRate < context.averageRate - 15) {
-    return "Bu soru anket ortalamasinin belirgin altinda. Soru dili sadeleştirilmeli ve beklenen yanit tipi daha net hale getirilmeli.";
+    return "Bu soru anket ortalamasının belirgin altında. Soru dili sadeleştirilmeli ve beklenen yanıt tipi daha net hale getirilmeli.";
   }
 
   if (["single_choice", "multi_choice", "dropdown", "yes_no"].includes(item.type) && item.optionBreakdown.length <= 1) {
-    return "Secenekli bir soru icin dagilim dar kaliyor. Secenekler yetersiz veya birbirine fazla yakin olabilir.";
+    return "Seçenekli bir soru için dağılım dar kalıyor. Seçenekler yetersiz veya birbirine fazla yakın olabilir.";
   }
 
   if (item.type === "long_text" || item.type === "short_text") {
-    return "Acik uclu sorularda cevap eforu yukselir. Gerekirse daha yonlendirici bir yardimci metin eklenebilir.";
+    return "Açık uçlu sorularda cevap eforu yükselir. Gerekirse daha yönlendirici bir yardımcı metin eklenebilir.";
   }
 
   if (item.type === "rating_1_5" || item.type === "rating_1_10") {
-    return "Olcek sorulari hizli akar. Bu soruyu kritik karar noktalarindan once kullanmak katilim ritmini koruyabilir.";
+    return "Ölçek soruları hızlı akar. Bu soruyu kritik karar noktalarından önce kullanmak katılım ritmini koruyabilir.";
   }
 
-  return "Bu soru dengeli gorunuyor. Mevcut akista korunabilir; yine de sonraki soruya gecis orani izlenmeli.";
+  return "Bu soru dengeli görünüyor. Mevcut akışta korunabilir; yine de sonraki soruya geçiş oranı izlenmeli.";
 }
 
 function ResponseStatusChart({
@@ -995,18 +995,18 @@ function ResponseStatusChart({
       <div className="survey-detail-donut-chart is-response" style={{ background: chartBackground } as CSSProperties}>
         <div className="survey-detail-donut-center">
           <strong>{overview.responses}</strong>
-          <span>Yanit</span>
+          <span>Yanıt</span>
         </div>
       </div>
 
       <div className="survey-detail-chart-stack">
         <div className="survey-detail-inline-stats">
           <div className="survey-detail-inline-stat">
-            <span>Cevap orani</span>
+            <span>Cevap oranı</span>
             <strong>%{overview.responseRate}</strong>
           </div>
           <div className="survey-detail-inline-stat">
-            <span>Temas kapsami</span>
+            <span>Temas kapsamı</span>
             <strong>%{overview.reachRate}</strong>
           </div>
         </div>
@@ -1024,7 +1024,7 @@ function ResponseStatusChart({
             ))}
           </div>
         ) : (
-          <div className="survey-detail-empty-chart">Bu ankete ait cevap verisi olustukca durum dagilimi burada gorunecek.</div>
+          <div className="survey-detail-empty-chart">Bu ankete ait cevap verisi oluştukça durum dağılımı burada görünecek.</div>
         )}
       </div>
     </div>
@@ -1044,11 +1044,11 @@ function ResponseTrendChart({
     <div className="survey-detail-bar-stack">
       <div className="survey-detail-inline-stats">
         <div className="survey-detail-inline-stat">
-          <span>Toplam yanit</span>
+          <span>Toplam yanıt</span>
           <strong>{totalResponses}</strong>
         </div>
         <div className="survey-detail-inline-stat">
-          <span>Aktif gun</span>
+          <span>Aktif gün</span>
           <strong>{trend.length}</strong>
         </div>
       </div>
@@ -1068,7 +1068,7 @@ function ResponseTrendChart({
           ))}
         </div>
       ) : (
-        <div className="survey-detail-empty-chart">YanÄ±t trendi icin henuz tarih bazli veri bulunmuyor.</div>
+        <div className="survey-detail-empty-chart">Yanıt trendi için henüz tarih bazlı veri bulunmuyor.</div>
       )}
     </div>
   );
@@ -1117,7 +1117,7 @@ function QuestionMixChart({
             </div>
           ))
         ) : (
-          <div className="survey-detail-empty-chart">Soru dagilimi olusturmak icin veri bulunmuyor.</div>
+          <div className="survey-detail-empty-chart">Soru dağılımı oluşturmak için veri bulunmuyor.</div>
         )}
       </div>
     </div>
@@ -1143,7 +1143,7 @@ function OperationLoadChart({
           <strong>{operationCount}</strong>
         </div>
         <div className="survey-detail-inline-stat">
-          <span>Atanmis kisi</span>
+          <span>Atanmış kişi</span>
           <strong>{assignedPeopleCount}</strong>
         </div>
       </div>
@@ -1163,7 +1163,7 @@ function OperationLoadChart({
           ))}
         </div>
       ) : (
-        <div className="survey-detail-empty-chart">Bu anket henuz bir operasyona baglanmadi.</div>
+        <div className="survey-detail-empty-chart">Bu anket henüz bir operasyona bağlanmadı.</div>
       )}
     </div>
   );
@@ -1175,9 +1175,9 @@ function buildDraftCopySurvey(survey: SurveyBuilderSurvey): SurveyBuilderSurvey 
     id: `draft-copy-${globalThis.crypto.randomUUID()}`,
     name: `${survey.name.trim() || "Anket"} - Taslak Kopya`,
     status: "Draft",
-    createdAt: "Henuz olusmadi",
+    createdAt: "Henüz oluşmadı",
     publishedAt: null,
-    updatedAt: "Bugun",
+    updatedAt: "Bugün",
     questions: survey.questions.map((question, questionIndex) => ({
       ...question,
       id: `draft-question-${globalThis.crypto.randomUUID()}`,

@@ -27,10 +27,10 @@ export default function AnalyticsDetailPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   usePageHeaderOverride({
-    title: operation ? `${operation.name} Sonuc Analizi` : "Arastirma Sonuc Analizi",
+    title: operation ? `${operation.name} Sonuç Analizi` : "Araştırma Sonuç Analizi",
     subtitle: operation
-      ? `${operation.survey} anketinin amac odakli yorumlari ve segment bulgulari.`
-      : "Secilen operasyon icin amac odakli analiz hazirlaniyor.",
+      ? `${operation.survey} anketinin amaç odaklı yorumları ve segment bulguları.`
+      : "Seçilen operasyon için amaç odaklı analiz hazırlanıyor.",
   });
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export default function AnalyticsDetailPage() {
 
     async function load() {
       if (!operationId) {
-        setErrorMessage("Operasyon kimligi bulunamadi.");
+        setErrorMessage("Operasyon kimliği bulunamadı.");
         setIsLoading(false);
         return;
       }
@@ -56,7 +56,7 @@ export default function AnalyticsDetailPage() {
         if (controller.signal.aborted) {
           return;
         }
-        setErrorMessage(error instanceof Error ? error.message : "Analiz detayi yuklenemedi.");
+        setErrorMessage(error instanceof Error ? error.message : "Analiz detayı yüklenemedi.");
       } finally {
         if (!controller.signal.aborted) {
           setIsLoading(false);
@@ -78,27 +78,27 @@ export default function AnalyticsDetailPage() {
   return (
     <PageContainer hideBackRow>
       <div className="analytics-detail-top-row">
-        <Link href="/analytics" className="button-secondary compact-button">Analitik listeye don</Link>
-        {operation ? <Link href={`/operations/${operation.id}`} className="button-secondary compact-button">Operasyon detayi</Link> : null}
+        <Link href="/analytics" className="button-secondary compact-button">Analitik listeye dön</Link>
+        {operation ? <Link href={`/operations/${operation.id}`} className="button-secondary compact-button">Operasyon detayı</Link> : null}
       </div>
 
-      {errorMessage ? <EmptyState title="Analiz yuklenemedi" description={errorMessage} tone="danger" /> : null}
-      {isLoading ? <EmptyState title="Sonuc analizi hazirlaniyor" description="Soru ve segment bulgulari isleniyor." /> : null}
+      {errorMessage ? <EmptyState title="Analiz yüklenemedi" description={errorMessage} tone="danger" /> : null}
+      {isLoading ? <EmptyState title="Sonuç analizi hazırlanıyor" description="Soru ve segment bulguları işleniyor." /> : null}
 
       {!isLoading && !errorMessage && !result ? (
-        <EmptyState title="Yeterli veri yok" description="Bu operasyon icin yorumlanabilir sonuc analizi olusturmak adina yanit sayisi yetersiz." />
+        <EmptyState title="Yeterli veri yok" description="Bu operasyon için yorumlanabilir sonuç analizi oluşturmak adına yanıt sayısı yetersiz." />
       ) : null}
 
       {!isLoading && !errorMessage && result ? (
         <>
-          <SectionCard title="Arastirma Amaci ve Yonetici Ozeti" description="Anketin hedefi ile elde edilen temel sonucu tek bakista goruntuleyin.">
+          <SectionCard title="Araştırma Amacı ve Yönetici Özeti" description="Anketin hedefi ile elde edilen temel sonucu tek bakışta görüntüleyin.">
             <div className="analytics-ai-layout">
               <div className="analytics-ai-block">
-                <span className="eyebrow">Arastirma Amaci</span>
+                <span className="eyebrow">Araştırma Amacı</span>
                 <p>{result.goal}</p>
               </div>
               <div className="analytics-ai-summary-card">
-                <strong>Yonetici Ozeti</strong>
+                <strong>Yönetici Özeti</strong>
                 <p>{result.executiveSummary}</p>
               </div>
             </div>
@@ -115,7 +115,7 @@ export default function AnalyticsDetailPage() {
             </article>
 
             <article className="analytics-ai-card">
-              <h3>Segment Yorumlari</h3>
+              <h3>Segment Yorumları</h3>
               <ul className="analytics-ai-list">
                 {result.segmentFindings.map((item) => (
                   <li key={item}>{item}</li>
@@ -124,7 +124,7 @@ export default function AnalyticsDetailPage() {
             </article>
 
             <article className="analytics-ai-card">
-              <h3>Odak Aksiyonlari</h3>
+              <h3>Odak Aksiyonları</h3>
               <ul className="analytics-ai-list">
                 {result.recommendations.map((item) => (
                   <li key={item}>{item}</li>
@@ -143,7 +143,7 @@ function buildResearchAnalysis(operation: Operation, analytics: OperationAnalyti
     return null;
   }
 
-  const goal = operation.surveyGoal?.trim() || `${operation.survey} anketi icin secmen beklenti ve tercihlerini anlamak.`;
+  const goal = operation.surveyGoal?.trim() || `${operation.survey} anketi için seçmen beklenti ve tercihlerini anlamak.`;
   const strongestQuestions = analytics.questionSummaries
     .filter((item) => item.answeredCount > 0 && item.breakdown.length > 0)
     .sort((a, b) => b.responseRate - a.responseRate)
@@ -162,17 +162,17 @@ function buildResearchAnalysis(operation: Operation, analytics: OperationAnalyti
       continue;
     }
     keyFindings.push(
-      `${item.questionTitle} sorusunda en guclu sinyal "${top.label}" (%${top.percentage.toFixed(1)} / ${top.count} kisi).`,
+      `${item.questionTitle} sorusunda en güçlü sinyal "${top.label}" (%${top.percentage.toFixed(1)} / ${top.count} kişi).`,
     );
   }
   if (openEnded[0]?.breakdown[0]) {
     const topTheme = openEnded[0].breakdown[0];
     keyFindings.push(
-      `Acik uclu yorumlarda en cok tekrar eden tema "${topTheme.label}" (%${topTheme.percentage.toFixed(1)}).`,
+      `Açık uçlu yorumlarda en çok tekrar eden tema "${topTheme.label}" (%${topTheme.percentage.toFixed(1)}).`,
     );
   }
   if (keyFindings.length === 0) {
-    keyFindings.push("Bu operasyon icin yorumlanabilir dagilim sinyali sinirli; daha fazla tamamlanmis yanit gerekli.");
+    keyFindings.push("Bu operasyon için yorumlanabilir dağılım sinyali sınırlı; daha fazla tamamlanmış yanıt gerekli.");
   }
 
   const segmentFindings: string[] = [];
@@ -182,35 +182,35 @@ function buildResearchAnalysis(operation: Operation, analytics: OperationAnalyti
       continue;
     }
     segmentFindings.push(
-      `${segment.questionTitle} kiriliminda "${top.label}" grubu one cikiyor (%${top.percentage.toFixed(1)}).`,
+      `${segment.questionTitle} kırılımında "${top.label}" grubu öne çıkıyor (%${top.percentage.toFixed(1)}).`,
     );
   }
   if (segmentFindings.length === 0) {
-    segmentFindings.push("Demografik kirilim verisi sinirli oldugu icin segment bazli cikarsama su an dusuk guvende.");
+    segmentFindings.push("Demografik kırılım verisi sınırlı olduğu için segment bazlı çıkarsama şu an düşük güvende.");
   }
 
   const recommendations: string[] = [];
   if (openEnded[0]?.breakdown[0]) {
     recommendations.push(
-      `Mesajlamada "${openEnded[0].breakdown[0].label}" temasini birincil vaat basligina alin.`,
+      `Mesajlamada "${openEnded[0].breakdown[0].label}" temasını birincil vaat başlığına alın.`,
     );
   }
   if (topAudienceBreakdowns[0]?.breakdown[0]) {
     recommendations.push(
-      `Saha iletisim planinda once "${topAudienceBreakdowns[0].breakdown[0].label}" segmentine odakli icerik cikarin.`,
+      `Saha iletişim planında önce "${topAudienceBreakdowns[0].breakdown[0].label}" segmentine odaklı içerik çıkarın.`,
     );
   }
   if (analytics.responseRate < 35) {
-    recommendations.push("Yanitsiz segmentlerde ek arama penceresi acarak orneklem temsil gucunu artirin.");
+    recommendations.push("Yanıtsız segmentlerde ek arama penceresi açarak örneklem temsil gücünü artırın.");
   } else {
-    recommendations.push("Mevcut orneklemle aday/tema testlerini mikro segmentlerde A/B mesaj denemesine tasiyin.");
+    recommendations.push("Mevcut örneklemle aday/tema testlerini mikro segmentlerde A/B mesaj denemesine taşıyın.");
   }
 
   const topQuestion = strongestQuestions[0];
   const topSignal = topQuestion?.breakdown[0];
   const executiveSummary = topQuestion && topSignal
-    ? `Arastirma amacina en guclu katkida bulunan bulgu "${topQuestion.questionTitle}" sorusundaki "${topSignal.label}" egilimi oldu. Bu sinyalin hedef segment kirilimlariyla beraber mesaj prioritesine alinmasi onerilir.`
-    : "Arastirma amacina yonelik sinyal olusuyor; daha net kararlar icin soru bazli tamamlanmis yanit hacmini biraz daha artirmak faydali olur.";
+    ? `Araştırma amacına en güçlü katkıda bulunan bulgu "${topQuestion.questionTitle}" sorusundaki "${topSignal.label}" eğilimi oldu. Bu sinyalin hedef segment kırılımlarıyla beraber mesaj prioritesine alınması önerilir.`
+    : "Araştırma amacına yönelik sinyal oluşuyor; daha net kararlar için soru bazlı tamamlanmış yanıt hacmini biraz daha artırmak faydalı olur.";
 
   return {
     goal,

@@ -63,8 +63,8 @@ export default function NewOperationPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   usePageHeaderOverride({
-    title: "Yeni Operasyon Tasarimi",
-    subtitle: "Operasyon kimligini, bagli anketi ve kisi planini ayni karar ekraninda netlestirin.",
+    title: "Yeni Operasyon Tasarımı",
+    subtitle: "Operasyon kimliğini, bağlı anketi ve kişi planını aynı karar ekranında netleştirin.",
   });
 
   const publishedSurveys = useMemo(() => surveys.filter((survey) => survey.status === "Live"), [surveys]);
@@ -91,7 +91,7 @@ export default function NewOperationPage() {
           return;
         }
 
-        setLoadError(error instanceof Error ? error.message : "Anketler yuklenemedi.");
+        setLoadError(error instanceof Error ? error.message : "Anketler yüklenemedi.");
       } finally {
         if (!controller.signal.aborted) {
           setIsLoadingSurveys(false);
@@ -123,7 +123,7 @@ export default function NewOperationPage() {
         }
 
         setSelectedSurveyDetail(null);
-        setSubmitError(error instanceof Error ? error.message : "Secilen anket ozeti yuklenemedi.");
+        setSubmitError(error instanceof Error ? error.message : "Seçilen anket özeti yüklenemedi.");
       } finally {
         if (!controller.signal.aborted) {
           setIsLoadingSurveyDetail(false);
@@ -155,10 +155,10 @@ export default function NewOperationPage() {
       setImportSummary(summary);
 
       if (summary.totalRows === 0 && summary.ignoredRows === 0) {
-        setImportError("Dosyada veri satiri bulunamadi.");
+        setImportError("Dosyada veri satırı bulunamadı.");
       }
     } catch (error) {
-      setImportError(error instanceof Error ? error.message : "Dosya okunamadi.");
+      setImportError(error instanceof Error ? error.message : "Dosya okunamadı.");
     } finally {
       event.target.value = "";
     }
@@ -169,11 +169,11 @@ export default function NewOperationPage() {
     const trimmedName = operationName.trim();
 
     if (!trimmedName) {
-      nextErrors.name = "Operasyon adi gerekli.";
+      nextErrors.name = "Operasyon adı gerekli.";
     }
 
     if (!selectedSurveyId) {
-      nextErrors.surveyId = "Yayinlanmis bir anket secin.";
+      nextErrors.surveyId = "Yayınlanmış bir anket seçin.";
     }
 
     setErrors(nextErrors);
@@ -216,7 +216,7 @@ export default function NewOperationPage() {
               searchParams.set("imported", String(importedContacts.length));
             }
           } catch (error) {
-            const message = error instanceof Error ? error.message : "Gecerli kisiler operasyona aktarilamadi.";
+            const message = error instanceof Error ? error.message : "Geçerli kişiler operasyona aktarılamadı.";
             searchParams.set("importError", message);
           }
         }
@@ -234,7 +234,7 @@ export default function NewOperationPage() {
 
       router.push(`/operations/${createdOperation.id}?${searchParams.toString()}`);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Operasyon olusturulamadi.");
+      setSubmitError(error instanceof Error ? error.message : "Operasyon oluşturulamadı.");
       setIsSubmitting(false);
       setSubmitIntent(null);
       setSubmitPhase("idle");
@@ -245,8 +245,8 @@ export default function NewOperationPage() {
   const surveyQuestionCount = selectedSurveyDetail
     ? `${selectedSurveyDetail.questions.length} soru`
     : isLoadingSurveyDetail && selectedSurveyId
-      ? "Soru bilgisi yukleniyor"
-      : "Soru ozeti hazir degil";
+      ? "Soru bilgisi yükleniyor"
+      : "Soru özeti hazır değil";
   const surveyLanguage = selectedSurveyDetail?.languageCode?.toUpperCase() ?? selectedSurvey?.audience ?? "-";
   const surveyStatus = selectedSurveyDetail?.status ?? selectedSurvey?.status ?? "Live";
   const isSubmitDisabled = isSubmitting || isLoadingSurveys || publishedSurveys.length === 0;
@@ -256,33 +256,33 @@ export default function NewOperationPage() {
     () => [
       {
         key: "name",
-        title: "Operasyon kimligi",
+        title: "Operasyon kimliği",
         detail: trimmedOperationName
-          ? "Operasyon adi ekipler tarafindan ayirt edilebilir durumda."
-          : "Operasyonun ekip icinde taniyacagi net bir ada ihtiyaci var.",
+          ? "Operasyon adı ekipler tarafından ayırt edilebilir durumda."
+          : "Operasyonun ekip içinde tanıyacağı net bir ada ihtiyacı var.",
         status: trimmedOperationName ? "Ready" : "Warning",
-        label: trimmedOperationName ? "Hazir" : "Eksik",
+        label: trimmedOperationName ? "Hazır" : "Eksik",
       },
       {
         key: "survey",
-        title: "Yayinlanmis anket baglantisi",
+        title: "Yayınlanmış anket bağlantısı",
         detail: selectedSurvey
-          ? `${selectedSurvey.name} operasyon icin secildi.`
-          : "Operasyonu baslatmak icin yayinlanmis bir anket secilmeli.",
+          ? `${selectedSurvey.name} operasyon için seçildi.`
+          : "Operasyonu başlatmak için yayınlanmış bir anket seçilmeli.",
         status: selectedSurvey ? "Ready" : "Warning",
-        label: selectedSurvey ? "Baglandi" : "Secim bekliyor",
+        label: selectedSurvey ? "Bağlandı" : "Seçim bekliyor",
       },
       {
         key: "contacts",
-        title: "Kisi stratejisi",
+        title: "Kişi stratejisi",
         detail:
           contactMode === "later"
-            ? "Kisi listesi daha sonra baglanacak; bu secim operasyon olusturmaya engel degil."
+            ? "Kişi listesi daha sonra bağlanacak; bu seçim operasyon oluşturmaya engel değil."
             : validImportRows.length > 0
-              ? `${validImportRows.length} kisi ilk import icin gecerli gorunuyor.`
+              ? `${validImportRows.length} kişi ilk import için geçerli görünüyor.`
               : selectedFileName
-                ? "Dosya secildi ancak gecerli satir sayisi netlesmedi."
-                : "Toplu import dosyasi bekleniyor.",
+                ? "Dosya seçildi ancak geçerli satır sayısı netleşmedi."
+                : "Toplu import dosyası bekleniyor.",
         status:
           contactMode === "later" || validImportRows.length > 0
             ? "Ready"
@@ -291,19 +291,19 @@ export default function NewOperationPage() {
               : "Pending",
         label:
           contactMode === "later"
-            ? "Planlandi"
+            ? "Planlandı"
             : validImportRows.length > 0
-              ? "Hazir"
+              ? "Hazır"
               : "Bekliyor",
       },
       {
         key: "note",
-        title: "Hazirlik notu",
+        title: "Hazırlık notu",
         detail: operationNote.trim()
-          ? "Baglam notu ekip ici iletisim icin hazir."
-          : "Baglam notu istege bagli; operasyon kapsaminda netlik saglayabilir.",
+          ? "Bağlam notu ekip içi iletişim için hazır."
+          : "Bağlam notu isteğe bağlı; operasyon kapsamında netlik sağlayabilir.",
         status: operationNote.trim() ? "Ready" : "Pending",
-        label: operationNote.trim() ? "Girildi" : "Istege bagli",
+        label: operationNote.trim() ? "Girildi" : "İsteğe bağlı",
       },
     ],
     [contactMode, operationNote, selectedFileName, selectedSurvey, trimmedOperationName, validImportRows.length],
@@ -314,24 +314,24 @@ export default function NewOperationPage() {
 
     if (completed >= 3) {
       return {
-        label: "Hazir",
+        label: "Hazır",
         status: "Ready" as const,
-        detail: "Operasyon tanimi, anket baglantisi ve ilk uygulama karari netlesti.",
+        detail: "Operasyon tanımı, anket bağlantısı ve ilk uygulama kararı netleşti.",
       };
     }
 
     if (completed >= 2) {
       return {
-        label: "Kismen hazir",
+        label: "Kısmen hazır",
         status: "Warning" as const,
-        detail: "Operasyon olusturulabilir; yine de hazirlik maddelerinin bir bolumu takibe ihtiyac duyuyor.",
+        detail: "Operasyon oluşturulabilir; yine de hazırlık maddelerinin bir bölümü takibe ihtiyaç duyuyor.",
       };
     }
 
     return {
-      label: "Hazirlikta",
+      label: "Hazırlıkta",
       status: "Pending" as const,
-      detail: "Temel tanim ve anket secimi tamamlanmadan operasyon kalici olarak acilmamali.",
+      detail: "Temel tanım ve anket seçimi tamamlanmadan operasyon kalıcı olarak açılmamalı.",
     };
   }, [preparationItems]);
 
@@ -340,17 +340,17 @@ export default function NewOperationPage() {
       <div className="ops-create-shell">
         <div className="ops-create-top-row">
           <Link href="/operations" className="button-secondary compact-button">
-            Operasyonlara don
+            Operasyonlara dön
           </Link>
           <StatusBadge status={readiness.status} label={readiness.label} />
         </div>
 
         <div className="ops-create-centered">
           <div className="ops-create-main">
-            <SectionCard eyebrow="Brif" title="Operasyon Kimligi" description="Operasyonu net, izlenebilir ve ekip diline uygun bir cercevede tanimlayin.">
+            <SectionCard eyebrow="Brif" title="Operasyon Kimliği" description="Operasyonu net, izlenebilir ve ekip diline uygun bir çerçevede tanımlayın.">
               <div className="survey-form-fields">
                 <label className="builder-field">
-                  <strong>Operasyon adi</strong>
+                  <strong>Operasyon adı</strong>
                   <input
                     value={operationName}
                     onChange={(event) => {
@@ -359,30 +359,30 @@ export default function NewOperationPage() {
                         setErrors((current) => ({ ...current, name: undefined }));
                       }
                     }}
-                    placeholder="Orn. Mart 2026 memnuniyet arama akisi"
+                    placeholder="Örn. Mart 2026 memnuniyet arama akışı"
                     aria-invalid={Boolean(errors.name)}
                   />
-                  <span>Kisa, operasyonel ve ekiplerin aninda taniyacagi bir isim kullanin.</span>
+                  <span>Kısa, operasyonel ve ekiplerin anında tanıyacağı bir isim kullanın.</span>
                   {errors.name ? <span className="field-error-message">{errors.name}</span> : null}
                 </label>
 
                 <label className="builder-field">
-                  <strong>Aciklama / Not</strong>
+                  <strong>Açıklama / Not</strong>
                   <textarea
                     rows={4}
                     value={operationNote}
                     onChange={(event) => setOperationNote(event.target.value)}
-                    placeholder="Kapsam, segment veya ekip icin karar notunu ekleyin."
+                    placeholder="Kapsam, segment veya ekip için karar notunu ekleyin."
                   />
-                  <span>Bu alan su an backend create istegine gitmez; ekip ici hazirlik baglami olarak kullanilir.</span>
+                  <span>Bu alan şu an backend create isteğine gitmez; ekip içi hazırlık bağlamı olarak kullanılır.</span>
                 </label>
               </div>
             </SectionCard>
 
             <SectionCard
-              eyebrow="Baglanti"
-              title="Anket Baglantisi"
-              description="Operasyon yalnizca yayinlanmis anketlerle calisabilir. Taslaklar burada secilemez."
+              eyebrow="Bağlantı"
+              title="Anket Bağlantısı"
+              description="Operasyon yalnızca yayınlanmış anketlerle çalışabilir. Taslaklar burada seçilemez."
               action={
                 <Link href="/surveys/new" className="button-secondary compact-button">
                   Yeni Anket
@@ -392,22 +392,22 @@ export default function NewOperationPage() {
               <div className="survey-form-fields">
                 {loadError ? (
                   <div className="operation-inline-message is-danger">
-                    <strong>Anketler yuklenemedi</strong>
+                    <strong>Anketler yüklenemedi</strong>
                     <span>{loadError}</span>
                   </div>
                 ) : isLoadingSurveys ? (
                   <div className="operation-inline-message">
-                    <strong>Yayinlanmis anketler yukleniyor</strong>
-                    <span>Operasyona baglanabilir sablonlar sirket havuzundan getiriliyor.</span>
+                    <strong>Yayınlanmış anketler yükleniyor</strong>
+                    <span>Operasyona bağlanabilir şablonlar şirket havuzundan getiriliyor.</span>
                   </div>
                 ) : publishedSurveys.length === 0 ? (
                   <div className="operation-inline-message">
-                    <strong>Kullanilabilir yayinlanmis anket yok</strong>
-                    <span>Yeni bir operasyon acmadan once en az bir anketi yayinlamaniz gerekiyor.</span>
+                    <strong>Kullanılabilir yayınlanmış anket yok</strong>
+                    <span>Yeni bir operasyon açmadan önce en az bir anketi yayınlamanız gerekiyor.</span>
                   </div>
                 ) : (
                   <label className="builder-field">
-                    <strong>Yayinlanmis anket</strong>
+                    <strong>Yayınlanmış anket</strong>
                     <select
                       value={selectedSurveyId}
                       onChange={(event) => {
@@ -419,14 +419,14 @@ export default function NewOperationPage() {
                       }}
                       aria-invalid={Boolean(errors.surveyId)}
                     >
-                      <option value="">Anket secin</option>
+                      <option value="">Anket seçin</option>
                       {publishedSurveys.map((survey) => (
                         <option key={survey.id} value={survey.id}>
                           {survey.name}
                         </option>
                       ))}
                     </select>
-                    <span>Liste sadece backend tarafinda `PUBLISHED` durumda olan anketleri gosterir.</span>
+                    <span>Liste sadece backend tarafında `PUBLISHED` durumda olan anketleri gösterir.</span>
                     {errors.surveyId ? <span className="field-error-message">{errors.surveyId}</span> : null}
                   </label>
                 )}
@@ -436,14 +436,14 @@ export default function NewOperationPage() {
                     <div className="operation-survey-summary-head">
                       <div>
                         <strong>{selectedSurvey.name}</strong>
-                        <span>Operasyona baglanacak yayinlanmis anket</span>
+                        <span>Operasyona bağlanacak yayınlanmış anket</span>
                       </div>
                       <StatusBadge status={surveyStatus} />
                     </div>
 
                     <div className="operation-summary-metrics">
                       <div className="mini-metric">
-                        <span>Soru sayisi</span>
+                        <span>Soru sayısı</span>
                         <strong>{surveyQuestionCount}</strong>
                       </div>
                       <div className="mini-metric">
@@ -457,24 +457,24 @@ export default function NewOperationPage() {
                     </div>
 
                     <p className="ops-create-inline-note">
-                      {selectedSurvey.goal || "Bu anketin kisa operasyon baglami henuz eklenmedi."}
+                      {selectedSurvey.goal || "Bu anketin kısa operasyon bağlamı henüz eklenmedi."}
                     </p>
                   </div>
                 ) : null}
               </div>
             </SectionCard>
 
-            <SectionCard eyebrow="Kisiler" title="Kisi Yukleme Stratejisi" description="Kisi listesini simdi baglayabilir veya operasyonu acip sonrasinda tamamlayabilirsiniz.">
+            <SectionCard eyebrow="Kişiler" title="Kişi Yükleme Stratejisi" description="Kişi listesini şimdi bağlayabilir veya operasyonu açıp sonrasında tamamlayabilirsiniz.">
               <div className="survey-form-fields">
-                <div className="operation-choice-grid" role="radiogroup" aria-label="Kisi hazirligi secimi">
+                <div className="operation-choice-grid" role="radiogroup" aria-label="Kişi hazırlığı seçimi">
                   <button
                     type="button"
                     className={contactMode === "later" ? "operation-choice-card is-active" : "operation-choice-card"}
                     onClick={() => setContactMode("later")}
                     aria-pressed={contactMode === "later"}
                   >
-                    <strong>Kisileri daha sonra ekle</strong>
-                    <span>Operasyonu once olusturun, kisi listesini sonraki adimda baglayin.</span>
+                    <strong>Kişileri daha sonra ekle</strong>
+                    <span>Operasyonu önce oluşturun, kişi listesini sonraki adımda bağlayın.</span>
                   </button>
 
                   <button
@@ -488,8 +488,8 @@ export default function NewOperationPage() {
                     }}
                     aria-pressed={contactMode === "now"}
                   >
-                    <strong>Kisileri simdi yukle</strong>
-                    <span>CSV veya XLSX dosyasini simdi yukleyin; gecerli kisiler operasyon olustuktan hemen sonra baglanir.</span>
+                    <strong>Kişileri şimdi yükle</strong>
+                    <span>CSV veya XLSX dosyasını şimdi yükleyin; geçerli kişiler operasyon oluştuktan hemen sonra bağlanır.</span>
                   </button>
                 </div>
 
@@ -512,17 +512,17 @@ export default function NewOperationPage() {
                           </svg>
                           <span className="import-file-name">{selectedFileName}</span>
                           <button type="button" className="import-file-change" onClick={() => fileInputRef.current?.click()}>
-                            Degistir
+                            Değiştir
                           </button>
                         </>
                       ) : (
                         <>
                           <button type="button" className="import-file-select" onClick={() => fileInputRef.current?.click()}>
-                            Dosya sec
+                            Dosya seç
                           </button>
                           <span className="import-file-hint">.csv veya .xlsx</span>
                           <button type="button" className="import-template-link" onClick={downloadOperationContactsTemplate}>
-                            Sablon indir
+                            Şablon indir
                           </button>
                         </>
                       )}
@@ -530,19 +530,19 @@ export default function NewOperationPage() {
 
                     {(importSummary.totalRows > 0 || importSummary.ignoredRows > 0) && !importError ? (
                       <div className="operation-import-stats-inline">
-                        <span><strong>{importSummary.totalRows}</strong> satir</span>
+                        <span><strong>{importSummary.totalRows}</strong> satır</span>
                         <span className="stat-dot" />
-                        <span className="is-valid-text"><strong>{importSummary.validRows}</strong> gecerli</span>
+                        <span className="is-valid-text"><strong>{importSummary.validRows}</strong> geçerli</span>
                         {importSummary.invalidRows > 0 && (
                           <>
                             <span className="stat-dot" />
-                            <span className="is-invalid-text"><strong>{importSummary.invalidRows}</strong> gecersiz</span>
+                            <span className="is-invalid-text"><strong>{importSummary.invalidRows}</strong> geçersiz</span>
                           </>
                         )}
                         {importSummary.ignoredRows > 0 && (
                           <>
                             <span className="stat-dot" />
-                            <span><strong>{importSummary.ignoredRows}</strong> bos</span>
+                            <span><strong>{importSummary.ignoredRows}</strong> boş</span>
                           </>
                         )}
                       </div>
@@ -551,14 +551,14 @@ export default function NewOperationPage() {
                     {importRows.length > 0 ? (
                       <div className="operation-import-preview">
                         <div className="operation-import-preview-head">
-                          <strong>Onizleme</strong>
-                          <span>Ilk {Math.min(importRows.length, OPERATION_CONTACT_IMPORT_PREVIEW_LIMIT)} satir gosteriliyor.</span>
+                          <strong>Önizleme</strong>
+                          <span>İlk {Math.min(importRows.length, OPERATION_CONTACT_IMPORT_PREVIEW_LIMIT)} satır gösteriliyor.</span>
                         </div>
                         <div className="operation-import-table-wrap">
                           <table className="operation-import-table">
                             <thead>
                               <tr>
-                                <th>Satir</th>
+                                <th>Satır</th>
                                 <th>Ad soyad</th>
                                 <th>Telefon</th>
                                 <th>Durum</th>
@@ -570,7 +570,7 @@ export default function NewOperationPage() {
                                   <td>{row.rowNumber}</td>
                                   <td>{row.name || "-"}</td>
                                   <td>{row.phoneNumber || "-"}</td>
-                                  <td>{row.isValid ? "Hazir" : row.reason}</td>
+                                  <td>{row.isValid ? "Hazır" : row.reason}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -581,22 +581,22 @@ export default function NewOperationPage() {
 
                     {importSummary.invalidRows > 0 && !importError ? (
                       <div className="operation-inline-message is-danger compact">
-                        <strong>Gecersiz satirlar import edilmeyecek</strong>
-                        <span>Sadece gecerli satirlar yeni operasyona baglanir.</span>
+                        <strong>Geçersiz satırlar import edilmeyecek</strong>
+                        <span>Sadece geçerli satırlar yeni operasyona bağlanır.</span>
                       </div>
                     ) : null}
 
                     {importError ? (
                       <div className="operation-inline-message is-danger compact">
-                        <strong>Yukleme hatasi</strong>
+                        <strong>Yükleme hatası</strong>
                         <span>{importError}</span>
                       </div>
                     ) : null}
                   </div>
                 ) : (
                   <div className="operation-inline-message">
-                    <strong>Kisi listesi daha sonra eklenebilir</strong>
-                    <span>Bu tercih operasyonu hemen acar. Kisi importu, operasyon detayindaki mevcut akistan daha sonra devam edebilir.</span>
+                    <strong>Kişi listesi daha sonra eklenebilir</strong>
+                    <span>Bu tercih operasyonu hemen açar. Kişi importu, operasyon detayındaki mevcut akıştan daha sonra devam edebilir.</span>
                   </div>
                 )}
               </div>
@@ -606,7 +606,7 @@ export default function NewOperationPage() {
 
         <div className="operation-action-bar panel-card ops-create-action-bar">
           <Link href="/operations" className="button-secondary compact-button">
-            Iptal
+            İptal
           </Link>
           {submitError ? (
             <span className="ops-create-action-error">{submitError}</span>
@@ -620,9 +620,9 @@ export default function NewOperationPage() {
             >
               {isSubmitting && submitIntent === "draft"
                 ? submitPhase === "importing"
-                  ? "Taslak olustu, kisiler baglaniyor..."
-                  : "Taslak olusturuluyor..."
-                : "Taslak olarak olustur"}
+                  ? "Taslak oluştu, kişiler bağlanıyor..."
+                  : "Taslak oluşturuluyor..."
+                : "Taslak olarak oluştur"}
             </button>
             <button
               type="button"
@@ -632,9 +632,9 @@ export default function NewOperationPage() {
             >
               {isSubmitting && submitIntent === "create"
                 ? submitPhase === "importing"
-                  ? "Operasyon olustu, kisiler baglaniyor..."
-                  : "Operasyon olusturuluyor..."
-                : "Operasyonu olustur"}
+                  ? "Operasyon oluştu, kişiler bağlanıyor..."
+                  : "Operasyon oluşturuluyor..."
+                : "Operasyonu oluştur"}
             </button>
           </div>
         </div>

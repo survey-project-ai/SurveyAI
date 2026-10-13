@@ -12,9 +12,9 @@ import { ArrowLeftIcon, ArrowRightIcon, PlusIcon } from "@/components/ui/Icons";
 import { fetchCompanyOperations, fetchOperationAnalytics } from "@/lib/operations";
 import type { Operation, OperationAnalytics, TableColumn } from "@/lib/types";
 
-type OperationTab = "Aktif" | "Taslak" | "Tamamlandi" | "Tumu";
+type OperationTab = "Aktif" | "Taslak" | "Tamamlandı" | "Tümü";
 type PortfolioView = "portfolio" | "analytics";
-const operationTabs: OperationTab[] = ["Aktif", "Taslak", "Tamamlandi", "Tumu"];
+const operationTabs: OperationTab[] = ["Aktif", "Taslak", "Tamamlandı", "Tümü"];
 
 type OperationAnalyticsRow = {
   id: string;
@@ -55,7 +55,7 @@ export default function OperationsPage() {
 
   usePageHeaderOverride({
     title: "Operasyon Kontrol Paneli",
-    subtitle: "Hazirlik, canli akis ve son operasyon hareketleri tek panelde toplanir.",
+    subtitle: "Hazırlık, canlı akış ve son operasyon hareketleri tek panelde toplanır.",
     action: headerAction,
   });
 
@@ -73,7 +73,7 @@ export default function OperationsPage() {
           return;
         }
 
-        setErrorMessage(error instanceof Error ? error.message : "Operasyon listesi yuklenemedi.");
+        setErrorMessage(error instanceof Error ? error.message : "Operasyon listesi yüklenemedi.");
       } finally {
         if (!controller.signal.aborted) {
           setIsLoading(false);
@@ -96,11 +96,11 @@ export default function OperationsPage() {
         return operations.filter(
           (operation) => operation.status === "Draft" || operation.status === "Scheduled" || operation.status === "Paused",
         );
-      case "Tamamlandi":
+      case "Tamamlandı":
         return operations.filter(
           (operation) => operation.status === "Completed" || operation.status === "Cancelled" || operation.status === "Failed",
         );
-      case "Tumu":
+      case "Tümü":
       default:
         return operations;
     }
@@ -199,7 +199,7 @@ export default function OperationsPage() {
       },
       {
         key: "survey",
-        label: "Bagli Anket",
+        label: "Bağlı Anket",
         render: (operation) =>
           operation.surveyId ? (
             <Link href={`/surveys/${operation.surveyId}`} className="table-link-block ops-table-stack ops-table-stack-questions">
@@ -215,7 +215,7 @@ export default function OperationsPage() {
       },
       {
         key: "jobs",
-        label: "Cagri YukÃ¼",
+        label: "Çağrı Yükü",
         render: (operation) => (
           <div className="ops-inline-badges">
             <span className="ops-inline-badge is-total">Toplam: {operation.executionSummary.totalCallJobs}</span>
@@ -272,22 +272,22 @@ export default function OperationsPage() {
           totalJobs === 0 ? "empty" : analytics ? "live" : "pending";
         const metricNote =
           metricState === "empty"
-            ? "Cagri isi henuz olusmadi"
+            ? "Çağrı işi henüz oluşmadı"
             : metricState === "pending"
-              ? "Analitik veri hazirlaniyor"
-              : `${completedJobs} / ${totalJobs} cagri tamamlandi`;
+              ? "Analitik veri hazırlanıyor"
+              : `${completedJobs} / ${totalJobs} çağrı tamamlandı`;
         const engagementDetail =
           metricState === "empty"
-            ? "Yanit veya katilim verisi yok"
+            ? "Yanıt veya katılım verisi yok"
             : metricState === "pending"
-              ? "Oranlar hazirlaniyor"
-              : `%${responseRate} yanit / %${participationRate} katilim`;
+              ? "Oranlar hazırlanıyor"
+              : `%${responseRate} yanıt / %${participationRate} katılım`;
         const rejectionDetail =
           metricState === "empty"
-            ? "Red hesabi icin islenmis cagri yok"
+            ? "Red hesabı için işlenmiş çağrı yok"
             : metricState === "pending"
-              ? "Red verisi yukleniyor"
-              : `${analytics?.failedCallJobs ?? 0} basarisiz + ${analytics?.skippedCallJobs ?? 0} atlanan cagri`;
+              ? "Red verisi yükleniyor"
+              : `${analytics?.failedCallJobs ?? 0} başarısız + ${analytics?.skippedCallJobs ?? 0} atlanan çağrı`;
 
         return {
           id: operation.id,
@@ -317,18 +317,18 @@ export default function OperationsPage() {
         render: (row) => (
           <div className="survey-analytics-name">
             <strong>{row.name}</strong>
-            <span>{row.metricState === "live" ? `${row.survey} anketi aktif akis uzerinde` : row.metricNote}</span>
+            <span>{row.metricState === "live" ? `${row.survey} anketi aktif akış üzerinde` : row.metricNote}</span>
           </div>
         ),
       },
       {
         key: "engagement",
-        label: "Yanit / Katilim",
+        label: "Yanıt / Katılım",
         render: (row) => (
           <DualMetricBar
-            primaryLabel="Yanit"
+            primaryLabel="Yanıt"
             primaryValue={row.responseRate}
-            secondaryLabel="Katilim"
+            secondaryLabel="Katılım"
             secondaryValue={row.participationRate}
             detail={row.engagementDetail}
             state={row.metricState}
@@ -337,7 +337,7 @@ export default function OperationsPage() {
       },
       {
         key: "rejection",
-        label: "Cagri Red Orani",
+        label: "Çağrı Red Oranı",
         render: (row) => (
           <MetricBar
             value={row.rejectionRate}
@@ -366,7 +366,7 @@ export default function OperationsPage() {
   return (
     <PageContainer hideBackRow>
       <div className="ops-control-page-tight">
-        {errorMessage ? <EmptyState title="Operasyon verileri yuklenemedi" description={errorMessage} tone="danger" /> : null}
+        {errorMessage ? <EmptyState title="Operasyon verileri yüklenemedi" description={errorMessage} tone="danger" /> : null}
 
         <section className="ops-summary-strip ops-control-summary-grid">
           <article className={["survey-summary-kpi", summary.activeToday > 0 ? "is-success" : "is-neutral"].join(" ")}>
@@ -376,7 +376,7 @@ export default function OperationsPage() {
             <div className="survey-summary-kpi-copy">
               <span>Aktif Operasyon</span>
               <strong>{summary.activeToday}</strong>
-              <small>Hazir veya yuruyen operasyon adedi</small>
+              <small>Hazır veya yürüyen operasyon adedi</small>
             </div>
           </article>
 
@@ -385,9 +385,9 @@ export default function OperationsPage() {
               <div className="ops-control-stat-icon is-success" />
             </div>
             <div className="survey-summary-kpi-copy">
-              <span>Hazir Baslatilabilir</span>
+              <span>Hazır Başlatılabilir</span>
               <strong>{summary.readyCount}</strong>
-              <small>Readiness kontrollerini gecmis operasyon sayisi</small>
+              <small>Readiness kontrollerini geçmiş operasyon sayısı</small>
             </div>
           </article>
 
@@ -396,9 +396,9 @@ export default function OperationsPage() {
               <div className="ops-control-stat-icon is-warning" />
             </div>
             <div className="survey-summary-kpi-copy">
-              <span>Blokajli Operasyon</span>
+              <span>Blokajlı Operasyon</span>
               <strong>{summary.blockedCount}</strong>
-              <small>Mudahale gerektiren operasyon sayisi</small>
+              <small>Müdahale gerektiren operasyon sayısı</small>
             </div>
           </article>
 
@@ -407,9 +407,9 @@ export default function OperationsPage() {
               <div className="ops-control-stat-icon is-info" />
             </div>
             <div className="survey-summary-kpi-copy">
-              <span>Tamamlanma Orani</span>
+              <span>Tamamlanma Oranı</span>
               <strong>%{summary.completionRate}</strong>
-              <small>{summary.completedCalls.toLocaleString("tr-TR")} / {summary.totalJobs.toLocaleString("tr-TR")} cagri tamamlandi</small>
+              <small>{summary.completedCalls.toLocaleString("tr-TR")} / {summary.totalJobs.toLocaleString("tr-TR")} çağrı tamamlandı</small>
             </div>
           </article>
 
@@ -418,27 +418,27 @@ export default function OperationsPage() {
               <div className="ops-control-stat-icon is-info" />
             </div>
             <div className="survey-summary-kpi-copy">
-              <span>Tamamlanan Operasyon Orani</span>
+              <span>Tamamlanan Operasyon Oranı</span>
               <strong>%{summary.completedOperationRate}</strong>
-              <small>{summary.completedOperationCount} / {summary.totalOperationCount} operasyon tamamlandi</small>
+              <small>{summary.completedOperationCount} / {summary.totalOperationCount} operasyon tamamlandı</small>
             </div>
           </article>
         </section>
 
         {isLoading ? (
-          <EmptyState title="Operasyon paneli hazirlaniyor" description="Hazirlik, aksiyon ve canli durum verileri getiriliyor." />
+          <EmptyState title="Operasyon paneli hazırlanıyor" description="Hazırlık, aksiyon ve canlı durum verileri getiriliyor." />
         ) : (
           <>
             <SectionCard
               title={
-                <div className="survey-view-switch" role="tablist" aria-label="Operasyon portfoyu gorunumleri">
+                <div className="survey-view-switch" role="tablist" aria-label="Operasyon portföyü görünümleri">
                   <button
                     type="button"
                     className={["survey-view-switch-button", portfolioView === "portfolio" ? "is-active" : ""].filter(Boolean).join(" ")}
                     onClick={() => setPortfolioView("portfolio")}
                     aria-pressed={portfolioView === "portfolio"}
                   >
-                    Portfoy
+                    Portföy
                   </button>
                   <button
                     type="button"
@@ -469,7 +469,7 @@ export default function OperationsPage() {
                     className="button-secondary compact-button ops-control-pagination-button"
                     disabled={priorityPage === 0}
                     onClick={() => setPriorityPage((current) => Math.max(current - 1, 0))}
-                    aria-label="Onceki operasyonlar"
+                    aria-label="Önceki operasyonlar"
                   >
                     <ArrowLeftIcon className="nav-icon" />
                   </button>
@@ -489,7 +489,7 @@ export default function OperationsPage() {
               }
             >
               {paginatedPriorityOperations.length === 0 ? (
-                <EmptyState title="Listelenecek operasyon yok" description="Filtreyi degistirin veya yeni operasyon ekleyin." />
+                <EmptyState title="Listelenecek operasyon yok" description="Filtreyi değiştirin veya yeni operasyon ekleyin." />
               ) : (
                 <div className="survey-table-slider-shell">
                   <div
@@ -500,7 +500,7 @@ export default function OperationsPage() {
                         columns={portfolioColumns}
                         rows={paginatedPriorityOperations}
                         rowKey={(operation) => operation.id}
-                        toolbar={<span className="table-meta">{paginatedPriorityOperations.length} / {filteredOperations.length} operasyon gosteriliyor</span>}
+                        toolbar={<span className="table-meta">{paginatedPriorityOperations.length} / {filteredOperations.length} operasyon gösteriliyor</span>}
                       />
                     </div>
                     <div className="survey-table-panel is-operations-analytics">
@@ -508,7 +508,7 @@ export default function OperationsPage() {
                         columns={analyticsColumns}
                         rows={analyticsRows}
                         rowKey={(row) => row.id}
-                        toolbar={<span className="table-meta">Yanit, katilim, red ve tamamlanma metrikleri secili operasyonlar icin gosteriliyor</span>}
+                        toolbar={<span className="table-meta">Yanıt, katılım, red ve tamamlanma metrikleri seçili operasyonlar için gösteriliyor</span>}
                       />
                     </div>
                   </div>
@@ -519,8 +519,8 @@ export default function OperationsPage() {
             <div className="ops-control-layout">
               <div className="ops-active-flow-layout">
                 <SectionCard
-                  title="Aktif Operasyon Kisi Akisi"
-                  description="Toplam hedef kisiden yanit veren kisilere kadar mevcut arama akisini ozetler"
+                  title="Aktif Operasyon Kişi Akışı"
+                  description="Toplam hedef kişiden yanıt veren kişilere kadar mevcut arama akışını özetler"
                 >
                   {activeContactFlow.hasActiveOperations ? (
                     <>
@@ -531,11 +531,11 @@ export default function OperationsPage() {
                             <strong>{activeContactFlow.operationCount}</strong>
                           </div>
                           <div className="ops-active-flow-pill">
-                            <span>Degerlendirmeye Alinan</span>
+                            <span>Değerlendirmeye Alınan</span>
                             <strong>{activeContactFlow.totalTargets.toLocaleString("tr-TR")}</strong>
                           </div>
                           <div className="ops-active-flow-pill is-warning">
-                            <span>Temas edilmis ama katilmamis</span>
+                            <span>Temas edilmiş ama katılmamış</span>
                             <strong>{activeContactFlow.reachedButDidNotParticipateCount.toLocaleString("tr-TR")}</strong>
                           </div>
                           <div className="ops-active-flow-pill is-danger">
@@ -562,14 +562,14 @@ export default function OperationsPage() {
 
                       <p className="ops-active-flow-note">
                         {activeContactFlow.pendingOperationCount > 0
-                          ? `${activeContactFlow.pendingOperationCount} aktif operasyonun analitigi henuz hazir degil; bu kart mevcut veriye gore hesaplanir.`
-                          : "Tum aktif operasyonlarin analitik verisi bu akis ozetine dahil edildi."}
+                          ? `${activeContactFlow.pendingOperationCount} aktif operasyonun analitiği henüz hazır değil; bu kart mevcut veriye göre hesaplanır.`
+                          : "Tüm aktif operasyonların analitik verisi bu akış özetine dahil edildi."}
                       </p>
                     </>
                   ) : (
                     <EmptyState
-                      title="Aktif operasyon akis verisi yok"
-                      description="Running veya Ready durumunda operasyon geldiginde kisi akis analizi burada gosterilecek."
+                      title="Aktif operasyon akış verisi yok"
+                      description="Running veya Ready durumunda operasyon geldiğinde kişi akış analizi burada gösterilecek."
                     />
                   )}
                 </SectionCard>
@@ -644,7 +644,7 @@ function buildActiveContactFlow(operations: Operation[], analyticsByOperationId:
       valueLabel,
       tone,
       overallRate,
-      stageRateLabel: previousValue === null ? "Baz adim" : `Onceki asamadan gecis %${stageRate}`,
+      stageRateLabel: previousValue === null ? "Baz adım" : `Önceki aşamadan geçiş %${stageRate}`,
     };
   };
 
@@ -658,28 +658,28 @@ function buildActiveContactFlow(operations: Operation[], analyticsByOperationId:
     unreachedCount,
     reachedButDidNotParticipateCount,
     steps: [
-      { key: "targets", ...buildStep("Toplam hedef kisi", totalTargets, "Operasyon listelerine yuklenmis toplam kisi", "Hedef havuz", null, "is-cyan") },
+      { key: "targets", ...buildStep("Toplam hedef kişi", totalTargets, "Operasyon listelerine yüklenmiş toplam kişi", "Hedef havuz", null, "is-cyan") },
       buildStep(
         "Aranan",
         totalCalled,
-        totalTargets > 0 ? `%${Math.round((totalCalled / totalTargets) * 100)} hedefe temas denemesi` : "Arama denemesi henuz baslamadi",
+        totalTargets > 0 ? `%${Math.round((totalCalled / totalTargets) * 100)} hedefe temas denemesi` : "Arama denemesi henüz başlamadı",
         "Temas denemesi",
         totalTargets,
         "is-amber",
       ),
       buildStep(
-        "Ulasilan",
+        "Ulaşılan",
         totalReached,
-        totalTargets > 0 ? `%${Math.round((totalReached / totalTargets) * 100)} erisim kapsami` : "Erismeye dair veri yok",
+        totalTargets > 0 ? `%${Math.round((totalReached / totalTargets) * 100)} erişim kapsamı` : "Erişmeye dair veri yok",
         "Cevaplanan arama",
         totalCalled,
         "is-green",
       ),
       buildStep(
-        "Yanit veren",
+        "Yanıt veren",
         totalResponders,
-        totalReached > 0 ? `%${Math.round((totalResponders / totalReached) * 100)} erisilen kisiden yanit alindi` : "Yanit verisi henuz olusmadi",
-        "Ankete katilan",
+        totalReached > 0 ? `%${Math.round((totalResponders / totalReached) * 100)} erişilen kişiden yanıt alındı` : "Yanıt verisi henüz oluşmadı",
+        "Ankete katılan",
         totalReached,
         "is-cyan",
       ),
@@ -788,7 +788,7 @@ function resolveLifecycleLabel(operation: Operation) {
   }
 
   if (operation.status === "Completed" || operation.status === "Cancelled" || operation.status === "Failed") {
-    return "Tamamlandi";
+    return "Tamamlandı";
   }
 
   return "Taslak";

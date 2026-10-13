@@ -32,15 +32,15 @@ export function SurveyBuilderToolbar({
   const isBusy = activeAction !== null;
   const isPublished = survey.status === "Live";
   const disableMutations = isBusy || readOnly;
-  const statusLabel = isPublished ? "Yayinda" : survey.status === "Draft" ? "Taslak" : survey.status;
-  const contextLabel = readOnly ? "Onizleme" : mode === "create" ? "Calisma Alani" : "Duzenleme";
+  const statusLabel = isPublished ? "Yayında" : survey.status === "Draft" ? "Taslak" : survey.status;
+  const contextLabel = readOnly ? "Önizleme" : mode === "create" ? "Çalışma Alanı" : "Düzenleme";
   const title = readOnly
-    ? "Anketin salt-okunur onizlemesi"
+    ? "Anketin salt-okunur önizlemesi"
     : isPublished
-      ? "Yayinlanmis anket goruntuleniyor"
+      ? "Yayınlanmış anket görüntüleniyor"
       : mode === "create"
-        ? "Yeni anket tasarimi uzerinde calisiyorsunuz"
-        : "Anket akisi guncelleniyor";
+        ? "Yeni anket tasarımı üzerinde çalışıyorsunuz"
+        : "Anket akışı güncelleniyor";
 
   return (
     <section className="builder-toolbar panel-card ops-builder-toolbar">
@@ -86,7 +86,7 @@ export function SurveyBuilderToolbar({
             onClick={() => onPersist("save")}
             disabled={disableMutations}
           >
-            {activeAction === "save" ? "Kaydediliyor..." : "Degisiklikleri kaydet"}
+            {activeAction === "save" ? "Kaydediliyor..." : "Değişiklikleri kaydet"}
           </button>
           <button
             type="button"
@@ -94,15 +94,15 @@ export function SurveyBuilderToolbar({
             onClick={() => onPersist("publish")}
             disabled={isBusy || isPublished}
           >
-            {isPublished ? "Yayinda" : activeAction === "publish" ? "Yayinlaniyor..." : "Yayinla"}
+            {isPublished ? "Yayında" : activeAction === "publish" ? "Yayınlanıyor..." : "Yayınla"}
           </button>
           <button
             type="button"
             className="button-secondary compact-button"
             disabled
-            title="Kopyalayarak yeni taslak olusturma akisi yakinda eklenecek."
+            title="Kopyalayarak yeni taslak oluşturma akışı yakında eklenecek."
           >
-            Kopya yakinda
+            Kopya yakında
           </button>
         </div>
       )}

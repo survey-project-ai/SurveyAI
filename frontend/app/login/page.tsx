@@ -30,7 +30,7 @@ export default function LoginPage() {
       });
       router.replace("/");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Su anda oturum acilamiyor.");
+      setErrorMessage(error instanceof Error ? error.message : "Şu anda oturum açılamıyor.");
       setIsSubmitting(false);
     }
   }
@@ -40,16 +40,16 @@ export default function LoginPage() {
       <section className="auth-layout auth-layout-minimal">
         <section className="auth-card panel-card auth-card-minimal">
           <div className="auth-system-meta">
-            <span className="eyebrow">Erisim</span>
+            <span className="eyebrow">Erişim</span>
             <div className="auth-system-badges">
               <span className="chip">Yerel oturum</span>
-              <span className="chip">Sirket baglamli</span>
+              <span className="chip">Şirket bağlamlı</span>
             </div>
           </div>
 
           <div className="section-copy">
-            <h2>Oturum ac</h2>
-            <p>Calisma alanini acmak icin test hesabi ile kimlik dogrulayin.</p>
+            <h2>Oturum aç</h2>
+            <p>Çalışma alanını açmak için test hesabı ile kimlik doğrulayın.</p>
           </div>
 
           <form className="auth-form" onSubmit={handleSubmit}>
@@ -66,7 +66,7 @@ export default function LoginPage() {
             </label>
 
             <label className="builder-field">
-              <span>Sifre</span>
+              <span>Şifre</span>
               <input
                 type="password"
                 autoComplete="current-password"
@@ -79,18 +79,18 @@ export default function LoginPage() {
 
             {errorMessage ? (
               <div className="operation-inline-message is-danger compact">
-                <strong>Oturum acilamadi</strong>
+                <strong>Oturum açılamadı</strong>
                 <span>{errorMessage}</span>
               </div>
             ) : null}
 
             <button type="submit" className="button-primary auth-submit" disabled={isSubmitting || status === "loading"}>
-              {isSubmitting ? "Oturum aciliyor..." : "Calisma alanini ac"}
+              {isSubmitting ? "Oturum açılıyor..." : "Çalışma alanını aç"}
             </button>
           </form>
 
           <div className="auth-helper auth-helper-minimal">
-            <strong>Yerel onizleme hesabi</strong>
+            <strong>Yerel önizleme hesabı</strong>
             <p>owner@acme-research.test / change-me-123</p>
           </div>
         </section>
