@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import { defaultLanguage, languageStorageKey, languages, translations, type Language } from "@/lib/i18n";
+import { defaultLanguage, enabledLanguages, languageStorageKey, languages, translations, type Language } from "@/lib/i18n";
 
 const languageChangeEvent = "surveyai:language-change";
 
@@ -15,8 +15,9 @@ function subscribeToLanguage(onChange: () => void): () => void {
 }
 
 function readStoredLanguage(): Language {
+  // A language chosen while it was enabled (e.g. "en") falls back to the default once it is switched off.
   const savedLanguage = window.localStorage.getItem(languageStorageKey);
-  return savedLanguage && isLanguage(savedLanguage) ? savedLanguage : defaultLanguage;
+  return savedLanguage && isLanguage(savedLanguage) && enabledLanguages.includes(savedLanguage) ? savedLanguage : defaultLanguage;
 }
 
 type LanguageContextValue = {

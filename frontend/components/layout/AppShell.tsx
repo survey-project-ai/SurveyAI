@@ -10,7 +10,7 @@ import { ArrowLeftIcon, ArrowRightIcon, BellIcon, CollapseIcon, MenuIcon } from 
 import { useAuth } from "@/lib/auth";
 import { useNotifications } from "@/lib/notifications";
 import { useLanguage, useTranslations } from "@/lib/i18n/LanguageContext";
-import type { Language } from "@/lib/i18n";
+import { enabledLanguages, type Language } from "@/lib/i18n";
 
 const pageMetaKeys: Record<string, string> = {
   "/": "shell.pageMeta.dashboard",
@@ -363,20 +363,23 @@ function AppShellFrame({ children }: { children: ReactNode }) {
               </div>
             </div>
 
-            <div
-              className={[
-                "language-switcher",
-                "sidebar-language-switcher",
-                isSidebarCollapsed ? "is-collapsed" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              role="group"
-              aria-label={t("shell.topbar.languageLabel")}
-            >
-              <LanguageButton current={language} code="tr" label={t("shell.topbar.tr")} onSelect={setLanguage} />
-              <LanguageButton current={language} code="en" label={t("shell.topbar.en")} onSelect={setLanguage} />
-            </div>
+            {enabledLanguages.length > 1 ? (
+              <div
+                className={[
+                  "language-switcher",
+                  "sidebar-language-switcher",
+                  isSidebarCollapsed ? "is-collapsed" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                role="group"
+                aria-label={t("shell.topbar.languageLabel")}
+              >
+                {enabledLanguages.map((code) => (
+                  <LanguageButton key={code} current={language} code={code} label={t(`shell.topbar.${code}`)} onSelect={setLanguage} />
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       </aside>
