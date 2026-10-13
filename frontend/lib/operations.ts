@@ -884,6 +884,57 @@ export async function createOperation(
   }, "operation");
 }
 
+const CONTACT_UPLOAD_BATCH_SIZE = 200;
+
+type ContactUploadRow = {
+  name: string;
+  normalizedPhoneNumber: string;
+};
+
+export type ContactUploadResult<T> = {
+  importedRows: T[];
+  failedRows: Array<{ row: T; reason: string }>;
+};
+
+// Uploads contacts in batches of 200 instead of one request per row. The API saves a batch all or nothing,
+// so a batch it rejects (400/409) is halved until the rejected rows stand alone and the rest is saved.
+// Any other error (session, network, server) fails that batch once and the upload moves on.
+export async function uploadOperationContactsInBatches<T extends ContactUploadRow>(
+  operationId: string,
+  rows: T[],
+  onProgress?: (processedRows: number, totalRows: number) => void,
+): Promise<ContactUploadResult<T>> {
+  const result: ContactUploadResult<T> = { importedRows: [], failedRows: [] };
+  let processedRows = 0;
+
+  async function upload(batch: T[]): Promise<void> {
+    try {
+      await createOperationContacts(operationId, {
+        contacts: batch.map((row) => ({ name: row.name, phoneNumber: row.normalizedPhoneNumber })),
+      });
+      result.importedRows.push(...batch);
+    } catch (error) {
+      const rejectedByApi = error instanceof ApiError && (error.status === 400 || error.status === 409);
+      if (rejectedByApi && batch.length > 1) {
+        const middle = Math.ceil(batch.length / 2);
+        await upload(batch.slice(0, middle));
+        await upload(batch.slice(middle));
+        return;
+      }
+      const reason = error instanceof Error ? error.message : "Kişi eklenemedi.";
+      result.failedRows.push(...batch.map((row) => ({ row, reason })));
+    }
+    processedRows += batch.length;
+    onProgress?.(processedRows, rows.length);
+  }
+
+  for (let start = 0; start < rows.length; start += CONTACT_UPLOAD_BATCH_SIZE) {
+    await upload(rows.slice(start, start + CONTACT_UPLOAD_BATCH_SIZE));
+  }
+
+  return result;
+}
+
 export async function createOperationContacts(
   operationId: string,
   request: CreateOperationContactsRequest,
@@ -902,6 +953,17 @@ export async function createOperationContacts(
   return response.map(mapOperationContactDtoToContact);
 }
 
+// An API error that keeps the HTTP status, so callers can tell a rejected request from a failed one.
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function fetchJson<T>(
   input: string,
   init: RequestInit | undefined,
@@ -917,7 +979,7 @@ async function fetchJson<T>(
   });
 
   if (!response.ok) {
-    throw new Error(await readApiError(response, resourceName));
+    throw new ApiError(await readApiError(response, resourceName), response.status);
   }
 
   if (response.status === 204) {

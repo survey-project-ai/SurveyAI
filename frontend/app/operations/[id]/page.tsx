@@ -26,7 +26,7 @@ import {
 } from "@/lib/operation-contact-import";
 import { getAnalyticsKpisCompact, getOperationStatusConfig, getPrimaryAction } from "@/lib/operation-detail";
 import {
-  createOperationContacts,
+  uploadOperationContactsInBatches,
   deleteOperation,
   fetchOperationAnalytics,
   fetchOperationById,
@@ -180,6 +180,7 @@ export default function OperationDetailPage() {
   const [importSummary, setImportSummary] = useState<ImportSummary>(createEmptyImportSummary());
   const [importErrorMessage, setImportErrorMessage] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [jobsPage, setJobsPage] = useState<CallJobPage | null>(null);
   const [jobsPageIndex, setJobsPageIndex] = useState(0);
   const [jobsQueryInput, setJobsQueryInput] = useState("");
@@ -754,22 +755,12 @@ export default function OperationDetailPage() {
 
     try {
       setIsImporting(true);
-      const importedRows: ImportPreviewRow[] = [];
-      const failedRows: Array<{ rowNumber: number; reason: string }> = [];
-
-      for (const row of validRows) {
-        try {
-          await createOperationContacts(operationId, {
-            contacts: [{ name: row.name, phoneNumber: row.normalizedPhoneNumber }],
-          });
-          importedRows.push(row);
-        } catch (error) {
-          failedRows.push({
-            rowNumber: row.rowNumber,
-            reason: error instanceof Error ? error.message : "Kişi eklenemedi.",
-          });
-        }
-      }
+      setImportProgress({ done: 0, total: validRows.length });
+      const upload = await uploadOperationContactsInBatches(operationId, validRows, (done, total) =>
+        setImportProgress({ done, total }),
+      );
+      const importedRows = upload.importedRows;
+      const failedRows = upload.failedRows.map((item) => ({ rowNumber: item.row.rowNumber, reason: item.reason }));
 
       await refreshAfterMutation();
 
@@ -806,6 +797,7 @@ export default function OperationDetailPage() {
       }
     } finally {
       setIsImporting(false);
+      setImportProgress(null);
     }
   }
 
@@ -868,12 +860,14 @@ export default function OperationDetailPage() {
             <div className={`operation-inline-message ${importError ? "is-danger" : "is-accent"}`}>
               <strong>
                 {importError
-                  ? "Operasyon oluşturuldu, kişi importu tamamlanamadı"
+                  ? importedCount > 0
+                    ? "Operasyon oluşturuldu, bazı kişiler aktarılamadı"
+                    : "Operasyon oluşturuldu, kişi importu tamamlanamadı"
                   : "Operasyon oluşturuldu, geçerli kişi bulunamadı"}
               </strong>
               <span>
                 {importError
-                  ? `${importError}${invalidCount > 0 ? ` Geçersiz satır: ${invalidCount}.` : ""}`
+                  ? `${importedCount > 0 ? `${importedCount} kişi eklendi. ` : ""}${importError}${invalidCount > 0 ? ` Geçersiz satır: ${invalidCount}.` : ""}`
                   : `Dosya parse edildi ancak import edilecek geçerli kişi bulunamadı.${invalidCount > 0 ? ` Geçersiz satır: ${invalidCount}.` : ""}${ignoredCount > 0 ? ` Boş geçilen satır: ${ignoredCount}.` : ""}`}
               </span>
             </div>
@@ -1255,7 +1249,9 @@ export default function OperationDetailPage() {
                     disabled={isLoading || isImporting || !operation || !canAppendContacts || importSummary.validRows === 0}
                     onClick={() => void handleImportContacts()}
                   >
-                    {isImporting ? "Kişiler içe aktarılıyor..." : "Ekle"}
+                    {isImporting
+                      ? `Kişiler içe aktarılıyor... ${importProgress ? `${importProgress.done}/${importProgress.total}` : ""}`
+                      : "Ekle"}
                   </button>
                   {operation?.status === "Ready" ? (
                     <button

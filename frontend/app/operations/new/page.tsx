@@ -7,7 +7,7 @@ import { usePageHeaderOverride } from "@/components/layout/PageHeaderContext";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { createOperation, createOperationContacts } from "@/lib/operations";
+import { createOperation, uploadOperationContactsInBatches } from "@/lib/operations";
 import {
   ACCEPTED_OPERATION_CONTACT_FILE_TYPES,
   OPERATION_CONTACT_IMPORT_PREVIEW_LIMIT,
@@ -53,6 +53,7 @@ export default function NewOperationPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitIntent, setSubmitIntent] = useState<SubmitIntent | null>(null);
   const [submitPhase, setSubmitPhase] = useState<SubmitPhase>("idle");
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -204,20 +205,20 @@ export default function NewOperationPage() {
         if (validImportRows.length > 0) {
           setSubmitPhase("importing");
 
-          try {
-            const importedContacts = await createOperationContacts(createdOperation.id, {
-              contacts: validImportRows.map((row) => ({
-                name: row.name,
-                phoneNumber: row.normalizedPhoneNumber,
-              })),
-            });
+          // Batches keep one rejected row from dropping the whole file; the rejected rows are reported.
+          const upload = await uploadOperationContactsInBatches(createdOperation.id, validImportRows, (done, total) =>
+            setImportProgress({ done, total }),
+          );
 
-            if (importedContacts.length > 0) {
-              searchParams.set("imported", String(importedContacts.length));
-            }
-          } catch (error) {
-            const message = error instanceof Error ? error.message : "Geçerli kişiler operasyona aktarılamadı.";
-            searchParams.set("importError", message);
+          if (upload.importedRows.length > 0) {
+            searchParams.set("imported", String(upload.importedRows.length));
+          }
+          if (upload.failedRows.length > 0) {
+            const examples = upload.failedRows
+              .slice(0, 3)
+              .map((item) => `Satır ${item.row.rowNumber}: ${item.reason}`)
+              .join(" ");
+            searchParams.set("importError", `${upload.failedRows.length} kişi aktarılamadı. ${examples}`);
           }
         }
 
@@ -242,6 +243,7 @@ export default function NewOperationPage() {
   }
 
   const trimmedOperationName = operationName.trim();
+  const importProgressLabel = importProgress ? `${importProgress.done}/${importProgress.total}` : "";
   const surveyQuestionCount = selectedSurveyDetail
     ? `${selectedSurveyDetail.questions.length} soru`
     : isLoadingSurveyDetail && selectedSurveyId
@@ -620,7 +622,7 @@ export default function NewOperationPage() {
             >
               {isSubmitting && submitIntent === "draft"
                 ? submitPhase === "importing"
-                  ? "Taslak oluştu, kişiler bağlanıyor..."
+                  ? `Taslak oluştu, kişiler bağlanıyor... ${importProgressLabel}`
                   : "Taslak oluşturuluyor..."
                 : "Taslak olarak oluştur"}
             </button>
@@ -632,7 +634,7 @@ export default function NewOperationPage() {
             >
               {isSubmitting && submitIntent === "create"
                 ? submitPhase === "importing"
-                  ? "Operasyon oluştu, kişiler bağlanıyor..."
+                  ? `Operasyon oluştu, kişiler bağlanıyor... ${importProgressLabel}`
                   : "Operasyon oluşturuluyor..."
                 : "Operasyonu oluştur"}
             </button>
