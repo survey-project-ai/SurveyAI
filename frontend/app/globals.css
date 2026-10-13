@@ -9636,6 +9636,22 @@ body::after {
 
 .topbar.is-dashboard-topbar {
   justify-content: space-between;
+  /* The welcome header has no actions to keep at hand, so it scrolls away instead of covering the page. */
+  position: relative;
+  top: auto;
+}
+
+/* The sticky header sits 12px below the viewport edge; once the page scrolls, cover that strip so the content
+   passing behind the header does not show above it. */
+.topbar.is-scrolled::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  bottom: calc(100% + 1px);
+  height: 14px;
+  background: var(--ops-app-bg);
+  pointer-events: none;
 }
 
 .topbar-copy.is-dashboard-copy h1 {

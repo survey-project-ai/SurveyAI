@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getNavigationItems } from "@/components/layout/navigation";
 import { PageHeaderProvider, useResolvedPageHeader } from "@/components/layout/PageHeaderContext";
@@ -19,6 +19,11 @@ const pageMetaKeys: Record<string, string> = {
   "/analytics": "shell.pageMeta.analytics",
   "/calling-ops": "shell.pageMeta.callingOps",
 };
+
+function subscribeToScroll(onChange: () => void): () => void {
+  window.addEventListener("scroll", onChange, { passive: true });
+  return () => window.removeEventListener("scroll", onChange);
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -39,6 +44,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const { status, currentUser, logout } = useAuth();
   const { t } = useTranslations();
   const pageHeaderOverride = useResolvedPageHeader();
+  const isPageScrolled = useSyncExternalStore(subscribeToScroll, () => window.scrollY > 0, () => false);
 
   const navigationItems = useMemo(() => getNavigationItems(t), [t]);
   const isAuthRoute = pathname === "/login";
@@ -396,6 +402,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           <header
             className={[
               "topbar",
+              isPageScrolled ? "is-scrolled" : "",
               isDashboardHome ? "is-dashboard-topbar" : "",
               isSurveysRoute ? "is-surveys-topbar" : "",
                   isOperationsRoute ? "is-operations-topbar" : "",
