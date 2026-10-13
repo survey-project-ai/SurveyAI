@@ -296,6 +296,7 @@ type OperationAnalyticsApiResponse = {
   totalCallJobs: number;
   totalPreparedJobs: number;
   totalCallsAttempted: number;
+  totalCallAttempts: number;
   totalCompletedCalls: number;
   queuedJobs: number;
   inProgressJobs: number;
@@ -529,6 +530,7 @@ export async function fetchOperationAnalytics(
     totalCallJobs: response.totalCallJobs,
     totalPreparedJobs: response.totalPreparedJobs,
     totalCallsAttempted: response.totalCallsAttempted,
+    totalCallAttempts: response.totalCallAttempts ?? 0,
     totalCompletedCalls: response.totalCompletedCalls,
     queuedJobs: response.queuedJobs,
     inProgressJobs: response.inProgressJobs,

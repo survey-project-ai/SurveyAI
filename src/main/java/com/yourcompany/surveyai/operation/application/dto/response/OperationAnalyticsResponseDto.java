@@ -9,6 +9,7 @@ public record OperationAnalyticsResponseDto(
         long totalCallJobs,
         long totalPreparedJobs,
         long totalCallsAttempted,
+        long totalCallAttempts,
         long totalCompletedCalls,
         long queuedJobs,
         long inProgressJobs,

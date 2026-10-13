@@ -360,10 +360,8 @@ export default function OperationDetailPage() {
   }, [contactSummary?.statusCounts]);
   const successfulContactCount = contactStatusCounts.Completed ?? 0;
   const failedContactCount = (contactStatusCounts.Failed ?? 0) + (contactStatusCounts.Invalid ?? 0);
-  const attemptedContactCount = Math.min(
-    contactCount,
-    contactCount - (contactStatusCounts.Pending ?? 0),
-  );
+  // Contacts with at least one call attempt; contact status alone also counts queued and invalid contacts.
+  const attemptedContactCount = analytics?.totalCallsAttempted ?? null;
   const operationIsTerminal =
     operation?.status === "Completed" || operation?.status === "Failed" || operation?.status === "Cancelled";
 
@@ -380,8 +378,8 @@ export default function OperationDetailPage() {
         tone: "neutral" as const,
       },
       {
-        label: "Çağrı denemesi",
-        value: String(analytics?.totalCallsAttempted ?? operation?.executionSummary.totalCallJobs ?? 0),
+        label: "Aranan kişi",
+        value: String(analytics?.totalCallsAttempted ?? 0),
         detail: "Yürütme verisi geldikçe güncellenir",
         tone: "neutral" as const,
       },
@@ -666,7 +664,7 @@ export default function OperationDetailPage() {
         </div>
         <div className="operation-header-summary-item is-progress">
           <span>Aranan</span>
-          <strong>{attemptedContactCount}</strong>
+          <strong>{attemptedContactCount ?? "–"}</strong>
         </div>
         <div className="operation-header-summary-item is-success">
           <span>Başarılı</span>

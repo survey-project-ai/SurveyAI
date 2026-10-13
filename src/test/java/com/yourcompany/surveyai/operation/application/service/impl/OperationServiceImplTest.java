@@ -416,6 +416,8 @@ class OperationServiceImplTest {
                         new Object[]{CallJobStatus.FAILED, 1L},
                         new Object[]{CallJobStatus.QUEUED, 1L}
                 ));
+        when(callJobRepository.summarizeCallAttemptsForOperation(operationId))
+                .thenReturn(List.<Object[]>of(new Object[]{2L, 4L}));
         when(surveyResponseRepository.findAnalyticsRowsByOperationId(operationId))
                 .thenReturn(analyticsRows(partialResponse, completedResponse));
         when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(operation.getSurvey().getId()))
@@ -430,6 +432,8 @@ class OperationServiceImplTest {
         assertThat(response.totalContacts()).isEqualTo(3);
         assertThat(response.totalCallJobs()).isEqualTo(3);
         assertThat(response.totalCompletedCalls()).isEqualTo(1);
+        assertThat(response.totalCallsAttempted()).isEqualTo(2);
+        assertThat(response.totalCallAttempts()).isEqualTo(4);
         assertThat(response.failedCallJobs()).isEqualTo(1);
         assertThat(response.totalResponses()).isEqualTo(2);
         assertThat(response.respondedContacts()).isEqualTo(2);

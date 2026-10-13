@@ -52,4 +52,12 @@ public interface CallJobRepository extends JpaRepository<CallJob, UUID>, JpaSpec
 
     @Query("SELECT j.status, COUNT(j) FROM CallJob j WHERE j.operation.id = :operationId AND j.deletedAt IS NULL GROUP BY j.status")
     List<Object[]> countGroupedByStatusForOperation(@Param("operationId") UUID operationId);
+
+    // One row: contacts with at least one call attempt, and all call attempts of the operation.
+    @Query("""
+            SELECT COUNT(DISTINCT j.operationContact.id), COALESCE(SUM(j.attemptCount), 0)
+            FROM CallJob j
+            WHERE j.operation.id = :operationId AND j.deletedAt IS NULL AND j.attemptCount > 0
+            """)
+    List<Object[]> summarizeCallAttemptsForOperation(@Param("operationId") UUID operationId);
 }

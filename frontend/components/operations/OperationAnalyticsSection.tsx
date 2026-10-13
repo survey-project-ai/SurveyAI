@@ -793,7 +793,7 @@ export function OperationAnalyticsSection({
         </div>
         <div className="operation-response-health-item">
           <span>Çağrı denemesi</span>
-          <strong>{analytics?.totalCallsAttempted ?? 0}</strong>
+          <strong>{analytics?.totalCallAttempts ?? 0}</strong>
         </div>
         <div className="operation-response-health-item">
           <span>Kuyrukta</span>

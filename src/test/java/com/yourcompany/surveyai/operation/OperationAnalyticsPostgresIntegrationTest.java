@@ -122,6 +122,9 @@ class OperationAnalyticsPostgresIntegrationTest {
         long statementCount = statistics.getPrepareStatementCount();
         assertThat(analytics.totalResponses()).isEqualTo(RESPONDENT_COUNT + 1);
         assertThat(analytics.respondedContacts()).isEqualTo(RESPONDENT_COUNT);
+        // Every contact was called; the first one twice.
+        assertThat(analytics.totalCallsAttempted()).isEqualTo(RESPONDENT_COUNT);
+        assertThat(analytics.totalCallAttempts()).isEqualTo(RESPONDENT_COUNT + 1);
         assertThat(analytics.completedResponses()).isEqualTo(RESPONDENT_COUNT);
         assertThat(analytics.partialResponses()).isZero();
         assertThat(analytics.consentBreakdown())
@@ -141,8 +144,8 @@ class OperationAnalyticsPostgresIntegrationTest {
                     assertThat(sample.callJobId()).isNotNull();
                     assertThat(sample.respondentName()).startsWith("Katilimci ");
                 });
-        // Operation, contact count, job counts, response rows, questions, options and answers. The old code
-        // also loaded every attempt, job and contact behind the open-ended samples, one by one.
+        // Operation, contact count, job counts, attempt summary, response rows, questions, options and answers.
+        // The old code also loaded every attempt, job and contact behind the open-ended samples, one by one.
         assertThat(statementCount).isLessThanOrEqualTo(10);
     }
 

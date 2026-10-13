@@ -189,7 +189,8 @@ export default function SurveyDetailPage() {
         }
 
         accumulator.contacts += operationAnalytics.totalContacts;
-        accumulator.responses += operationAnalytics.totalResponses;
+        // Contacts with a usable answer: totalResponses also counts every retry and empty call record.
+        accumulator.responses += operationAnalytics.respondedContacts;
         accumulator.calls += operationAnalytics.totalCallsAttempted;
         accumulator.completed += operationAnalytics.completedResponses;
         accumulator.partial += operationAnalytics.partialResponses;

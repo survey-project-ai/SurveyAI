@@ -236,7 +236,6 @@ export function getAnalyticsKpis(operation: Operation | null, analytics: Operati
     return [];
   }
 
-  const isRunning = operation.status === "Running";
   const isFailed = operation.status === "Failed";
   const hasResponses = analytics.totalResponses > 0;
 
@@ -254,9 +253,9 @@ export function getAnalyticsKpis(operation: Operation | null, analytics: Operati
       tone: "neutral" as const,
     },
     {
-      label: "Çağrı denemesi",
+      label: "Aranan kişi",
       value: String(analytics.totalCallsAttempted),
-      detail: isRunning ? "Canlı olarak artar" : "Kuyruktan çıkan işler",
+      detail: `${analytics.totalCallAttempts} çağrı denemesi`,
       tone: "neutral" as const,
     },
     {
@@ -297,7 +296,6 @@ export function getAnalyticsKpisCompact(operation: Operation | null, analytics: 
     return [];
   }
 
-  const isRunning = operation.status === "Running";
   const isFailed = operation.status === "Failed";
   const hasResponses = analytics.totalResponses > 0;
   const riskLoad = analytics.failedCallJobs + analytics.skippedCallJobs;
@@ -310,9 +308,9 @@ export function getAnalyticsKpisCompact(operation: Operation | null, analytics: 
       tone: "neutral" as const,
     },
     {
-      label: "Çağrı denemesi",
+      label: "Aranan kişi",
       value: String(analytics.totalCallsAttempted),
-      detail: isRunning ? "Canlı olarak artar" : `${analytics.queuedJobs} kuyrukta, ${analytics.inProgressJobs} aktif`,
+      detail: `${analytics.totalCallAttempts} çağrı denemesi, ${analytics.queuedJobs} kuyrukta, ${analytics.inProgressJobs} aktif`,
       tone: "neutral" as const,
     },
     {

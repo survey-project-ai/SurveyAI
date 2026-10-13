@@ -470,7 +470,12 @@ public class OperationServiceImpl implements OperationService {
         long failedCallJobs = jobCountsByStatus.getOrDefault(CallJobStatus.FAILED, 0L)
                 + jobCountsByStatus.getOrDefault(CallJobStatus.DEAD_LETTER, 0L);
         long skippedCallJobs = jobCountsByStatus.getOrDefault(CallJobStatus.CANCELLED, 0L);
-        long totalCallsAttempted = totalJobs - queuedJobs;
+        // Counted from attempts, not job status: a job waiting for a retry or being dialed was already called.
+        Object[] attemptSummary = callJobRepository.summarizeCallAttemptsForOperation(operationId).stream()
+                .findFirst()
+                .orElse(new Object[]{0L, 0L});
+        long totalCallsAttempted = ((Number) attemptSummary[0]).longValue();
+        long totalCallAttempts = ((Number) attemptSummary[1]).longValue();
 
         List<SurveyResponseAnalyticsRow> allResponses = surveyResponseRepository.findAnalyticsRowsByOperationId(operationId);
         List<SurveyResponseAnalyticsRow> responses = selectOneResponsePerContact(allResponses);
@@ -614,6 +619,7 @@ public class OperationServiceImpl implements OperationService {
                 totalJobs,
                 totalJobs,
                 totalCallsAttempted,
+                totalCallAttempts,
                 completedCallJobs,
                 queuedJobs,
                 inProgressJobs,

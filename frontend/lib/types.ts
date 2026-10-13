@@ -406,6 +406,7 @@ export type OperationAnalytics = {
   totalCallJobs: number;
   totalPreparedJobs: number;
   totalCallsAttempted: number;
+  totalCallAttempts: number;
   totalCompletedCalls: number;
   queuedJobs: number;
   inProgressJobs: number;

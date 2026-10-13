@@ -84,23 +84,22 @@ export default function AnalyticsPage() {
       totalOperations: filteredRows.length,
       platformOperations: filteredRows.filter((row) => row.operation.sourceType === "STANDARD").length,
       importedOperations: filteredRows.filter((row) => row.operation.sourceType === "IMPORTED_SURVEY_RESULTS").length,
-      totalResponses: 0,
-      avgResponseRate: 0,
-      validAnalyticsCount: 0,
+      respondedContacts: 0,
+      totalContacts: 0,
     };
 
     for (const row of filteredRows) {
       if (!row.analytics) {
         continue;
       }
-      base.totalResponses += row.analytics.totalResponses;
-      base.avgResponseRate += row.analytics.responseRate;
-      base.validAnalyticsCount += 1;
+      base.respondedContacts += row.analytics.respondedContacts;
+      base.totalContacts += row.analytics.totalContacts;
     }
 
+    // Weighted by contacts, so a one-contact test operation does not count as much as a full field study.
     return {
       ...base,
-      avgResponseRate: base.validAnalyticsCount > 0 ? base.avgResponseRate / base.validAnalyticsCount : 0,
+      responseRate: base.totalContacts > 0 ? (base.respondedContacts / base.totalContacts) * 100 : 0,
     };
   }, [filteredRows]);
 
@@ -145,9 +144,9 @@ export default function AnalyticsPage() {
         </article>
         <article className="survey-summary-kpi neutral">
           <div className="survey-summary-kpi-copy">
-            <span>Toplam Yanıt</span>
-            <strong>{summary.totalResponses}</strong>
-            <small>Ortalama yanıt oranı %{summary.avgResponseRate.toFixed(1)}</small>
+            <span>Yanıt Veren Kişi</span>
+            <strong>{summary.respondedContacts}</strong>
+            <small>Genel yanıt oranı %{summary.responseRate.toFixed(1)}</small>
           </div>
         </article>
       </section>
@@ -199,7 +198,7 @@ export default function AnalyticsPage() {
             <div className="ops-control-table-head analytics-mixed-table-head">
               <span>Operasyon</span>
               <span>Kaynak</span>
-              <span>Yanıt</span>
+              <span>Yanıt Veren</span>
               <span>Yanıt Oranı</span>
               <span>Durum</span>
               <span>Aksiyon</span>
@@ -214,7 +213,7 @@ export default function AnalyticsPage() {
                   status={row.operation.sourceType === "IMPORTED_SURVEY_RESULTS" ? "Pending" : "Ready"}
                   label={row.operation.sourceType === "IMPORTED_SURVEY_RESULTS" ? "Google Forms Import" : "Uygulama"}
                 />
-                <strong>{row.analytics?.totalResponses ?? "-"}</strong>
+                <strong>{row.analytics?.respondedContacts ?? "-"}</strong>
                 <span>{row.analytics ? `%${row.analytics.responseRate.toFixed(1)}` : "-"}</span>
                 <StatusBadge status={row.operation.status} />
                 <Link href={`/analytics/${row.operation.id}`} className="ops-control-inline-action analytics-select-button">
