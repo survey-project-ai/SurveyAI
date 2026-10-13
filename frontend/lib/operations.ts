@@ -613,6 +613,7 @@ export async function fetchOperationAnalytics(
     })),
     responseTrend: (response.responseTrend ?? []).map((item): OperationAnalyticsTrendPoint => ({
       label: formatAnalyticsDate(item.label),
+      date: item.label,
       count: item.count,
     })),
   };
@@ -972,6 +973,7 @@ function mapCallJobDtoToCallJob(dto: CallJobApiResponse): CallJob {
     lastResultSummary: dto.lastResultSummary,
     createdAt: formatDateTime(dto.createdAt),
     updatedAt: formatDateTime(dto.updatedAt),
+    updatedAtIso: dto.updatedAt,
   };
 }
 

@@ -392,12 +392,14 @@ export default function SurveysPage() {
           const draftOperations = survey.linkedOperations.filter(
             (operation) =>
               operation.status === "Draft" ||
-              operation.status === "Scheduled" ||
-              operation.status === "Paused",
+              operation.status === "Scheduled",
+          ).length;
+          const pausedOperations = survey.linkedOperations.filter(
+            (operation) => operation.status === "Paused",
           ).length;
           const totalOperations = survey.linkedOperations.length;
           const otherOperations = Math.max(
-            totalOperations - activeOperations - draftOperations,
+            totalOperations - activeOperations - draftOperations - pausedOperations,
             0,
           );
           const activeDegrees =
@@ -408,6 +410,10 @@ export default function SurveysPage() {
             totalOperations > 0
               ? Math.round((draftOperations / totalOperations) * 360)
               : 0;
+          const pausedDegrees =
+            totalOperations > 0
+              ? Math.round((pausedOperations / totalOperations) * 360)
+              : 0;
 
           return (
             <div className="ops-operations-chart-cell">
@@ -417,6 +423,7 @@ export default function SurveysPage() {
                   {
                     "--active-deg": `${activeDegrees}deg`,
                     "--draft-deg": `${draftDegrees}deg`,
+                    "--paused-deg": `${pausedDegrees}deg`,
                   } as CSSProperties
                 }
               >
@@ -427,6 +434,9 @@ export default function SurveysPage() {
               <div className="ops-operations-chart-legend">
                 <span className="ops-inline-badge is-active">Aktif: {activeOperations}</span>
                 <span className="ops-inline-badge is-draft">Taslak: {draftOperations}</span>
+                {pausedOperations > 0 ? (
+                  <span className="ops-inline-badge is-paused">Duraklatıldı: {pausedOperations}</span>
+                ) : null}
                 {otherOperations > 0 ? (
                   <span className="ops-inline-badge is-total">Diğer: {otherOperations}</span>
                 ) : (

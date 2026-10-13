@@ -174,6 +174,8 @@ export type CallJob = {
   lastResultSummary: string | null;
   createdAt: string;
   updatedAt: string;
+  // ISO timestamp of updatedAt, for sorting; updatedAt is already formatted for display.
+  updatedAtIso: string;
 };
 
 export type CallJobSurveyResponse = {
@@ -390,6 +392,8 @@ export type OperationAnalyticsQuestionGroupSummary = {
 
 export type OperationAnalyticsTrendPoint = {
   label: string;
+  // ISO date (yyyy-MM-dd) of the day; label is formatted for display.
+  date: string;
   count: number;
 };
 

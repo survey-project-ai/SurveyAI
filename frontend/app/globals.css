@@ -9837,25 +9837,29 @@ body::after {
   background: #b9d7d1;
 }
 
-.ops-dashboard-result-top,
-.ops-dashboard-volume-top {
+.ops-dot.is-paused {
+  background: #d98b5f;
+}
+
+.ops-dot.is-failed {
+  background: #d9776a;
+}
+
+.ops-dashboard-result-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.ops-dashboard-result-top strong,
-.ops-dashboard-volume-top strong {
+.ops-dashboard-result-top strong {
   display: block;
   color: #1d2623;
   font-size: 2rem;
   line-height: 1;
 }
 
-.ops-dashboard-result-top span,
-.ops-dashboard-volume-top span,
-.ops-dashboard-volume-top small {
+.ops-dashboard-result-top span {
   color: var(--ops-text-secondary);
 }
 
@@ -9947,72 +9951,6 @@ body::after {
   font-size: 1.1rem;
 }
 
-.ops-dashboard-line-chart svg {
-  width: 100%;
-  height: 140px;
-  overflow: visible;
-}
-
-.ops-dashboard-line-grid {
-  fill: none;
-  stroke: rgba(109, 126, 119, 0.18);
-  stroke-width: 0.8;
-}
-
-.ops-dashboard-line-path {
-  fill: none;
-  stroke: #5ba596;
-  stroke-width: 2.4;
-  vector-effect: non-scaling-stroke;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.ops-dashboard-line-labels {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
-  color: var(--ops-text-secondary);
-  font-size: 0.78rem;
-}
-
-.ops-dashboard-volume-chart {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 10px;
-  align-items: end;
-  height: 100%;
-  min-height: 160px;
-}
-
-.ops-dashboard-volume-column {
-  display: grid;
-  gap: 8px;
-  justify-items: center;
-}
-
-.ops-dashboard-volume-track {
-  width: 100%;
-  min-height: 120px;
-  display: flex;
-  align-items: flex-end;
-  padding: 6px;
-  border-radius: 10px;
-  background: #f5f7f6;
-  border: 1px solid #edf1ef;
-}
-
-.ops-dashboard-volume-track span {
-  width: 100%;
-  border-radius: 6px 6px 2px 2px;
-  background: linear-gradient(180deg, #4d8fd1 0%, #264f85 100%);
-}
-
-.ops-dashboard-volume-column small {
-  color: var(--ops-text-secondary);
-  font-size: 0.76rem;
-}
-
 .ops-dashboard-reference-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.62fr) minmax(320px, 0.9fr);
@@ -10062,29 +10000,13 @@ body::after {
 }
 
 .ops-dashboard-task-main strong,
-.ops-dashboard-activity-copy strong,
-.ops-dashboard-system-row-copy strong {
+.ops-dashboard-activity-copy strong {
   color: #1d2623;
 }
 
-.ops-dashboard-muted,
-.ops-dashboard-system-row-copy span {
+.ops-dashboard-muted {
   color: var(--ops-text-secondary);
   font-size: 0.84rem;
-}
-
-.ops-dashboard-sparkline {
-  width: 160px;
-  height: 16px;
-}
-
-.ops-dashboard-sparkline path {
-  fill: none;
-  stroke: #91c7bd;
-  stroke-width: 4;
-  vector-effect: non-scaling-stroke;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .ops-dashboard-shortcuts {
@@ -10130,18 +10052,13 @@ body::after {
   font-weight: 500;
 }
 
-.ops-dashboard-system-list {
-  display: grid;
-  gap: 10px;
-}
-
 .ops-dashboard-activity-list {
   display: grid;
 }
 
 .ops-dashboard-activity-row {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: start;
   padding: 12px 8px;
@@ -10160,9 +10077,16 @@ body::after {
 }
 
 .ops-dashboard-activity-time {
+  display: grid;
+  gap: 2px;
   color: var(--ops-text-secondary);
   font-size: 0.84rem;
   font-variant-numeric: tabular-nums;
+}
+
+.ops-dashboard-activity-time small {
+  color: var(--ops-text-muted);
+  font-size: 0.72rem;
 }
 
 .ops-dashboard-activity-copy {
@@ -10183,78 +10107,9 @@ body::after {
   line-height: 1.5;
 }
 
-.ops-dashboard-activity-copy small {
-  color: var(--ops-text-muted);
-  font-size: 0.76rem;
-}
-
 .ops-dashboard-activity-arrow {
   align-self: center;
   color: var(--ops-text-muted);
-}
-
-.ops-dashboard-system-progress {
-  display: grid;
-  gap: 10px;
-}
-
-.ops-dashboard-system-bar {
-  width: 100%;
-  height: 10px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #edf3f0;
-}
-
-.ops-dashboard-system-bar span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #5ea79b 0%, #a7d6cf 100%);
-}
-
-.ops-dashboard-system-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-}
-
-.ops-dashboard-system-meta strong,
-.ops-dashboard-system-footer {
-  color: #1d2623;
-}
-
-.ops-dashboard-system-meta span {
-  color: var(--ops-text-secondary);
-  font-size: 0.84rem;
-}
-
-.ops-dashboard-system-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid #edf1ef;
-}
-
-.ops-dashboard-system-row:last-child {
-  border-bottom: 0;
-}
-
-.ops-dashboard-system-row-copy {
-  display: grid;
-  gap: 4px;
-}
-
-.ops-dashboard-system-footer {
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--ops-text-secondary);
-  font-size: 0.84rem;
 }
 
 @media (max-width: 1320px) {
@@ -10293,8 +10148,7 @@ body::after {
     grid-template-columns: 1fr;
   }
 
-  .ops-dashboard-result-bars,
-  .ops-dashboard-volume-chart {
+  .ops-dashboard-result-bars {
     min-height: 0;
   }
 }
@@ -11621,6 +11475,7 @@ body::after {
 .ops-operations-donut {
   --active-deg: 0deg;
   --draft-deg: 0deg;
+  --paused-deg: 0deg;
   width: 52px;
   height: 52px;
   border-radius: 999px;
@@ -11630,7 +11485,8 @@ body::after {
     conic-gradient(
       #6ea9d8 0deg var(--active-deg),
       #e3c17e var(--active-deg) calc(var(--active-deg) + var(--draft-deg)),
-      #dfe8e4 calc(var(--active-deg) + var(--draft-deg)) 360deg
+      #d98b5f calc(var(--active-deg) + var(--draft-deg)) calc(var(--active-deg) + var(--draft-deg) + var(--paused-deg)),
+      #dfe8e4 calc(var(--active-deg) + var(--draft-deg) + var(--paused-deg)) 360deg
     );
 }
 
@@ -11675,6 +11531,11 @@ body::after {
 .ops-inline-badge.is-draft {
   color: #8a6425;
   background: rgba(233, 201, 143, 0.26);
+}
+
+.ops-inline-badge.is-paused {
+  color: #9a4f22;
+  background: rgba(217, 139, 95, 0.2);
 }
 
 .ops-inline-badge.is-total {
@@ -14191,17 +14052,6 @@ body::after {
 @keyframes live-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: 0.5; transform: scale(0.75); }
-}
-
-/* ─── Recharts volume override ───────────────────────────────────── */
-
-.recharts-volume {
-  padding: 0;
-}
-
-.recharts-volume .ops-dashboard-volume-chart {
-  display: block;
-  height: 80px;
 }
 
 /* ─── Compact contact import ─────────────────────────────────────── */

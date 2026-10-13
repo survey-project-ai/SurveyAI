@@ -17,12 +17,23 @@ import {
   SurveyIcon,
 } from "@/components/ui/Icons";
 import { useAuth } from "@/lib/auth";
-import { fetchOperationAnalytics, fetchOperationContacts, fetchCompanyOperations } from "@/lib/operations";
+import {
+  fetchCompanyOperations,
+  fetchOperationAnalytics,
+  fetchOperationCallJobsPage,
+  fetchOperationContactSummary,
+} from "@/lib/operations";
 import { fetchCompanySurveys } from "@/lib/surveys";
-import { ResponseTrendChart, CallVolumeChart } from "@/components/charts/DashboardCharts";
-import type { Operation, OperationAnalytics, OperationContact, Survey } from "@/lib/types";
+import { ResponseTrendChart } from "@/components/charts/DashboardCharts";
+import type { CallJob, Operation, OperationAnalytics, OperationContact, Survey } from "@/lib/types";
 
-type DashboardContact = OperationContact & {
+// Latest call jobs read per operation for the activity list.
+const RECENT_JOBS_PER_OPERATION = 5;
+const ACTIVITY_ROW_LIMIT = 6;
+
+type ContactStatusTotals = Partial<Record<OperationContact["status"], number>>;
+
+type DashboardCallJob = CallJob & {
   operationName: string;
 };
 
@@ -40,13 +51,11 @@ type DashboardTask = {
   createdAt: string;
   actionLabel: string;
   href: string;
-  sparkline: number[];
 };
 
 type DashboardActivityRow = {
   id: string;
-  time: string;
-  actor: string;
+  timestamp: number;
   event: string;
   area: string;
   result: string;
@@ -57,8 +66,9 @@ export default function DashboardPage() {
   const { currentUser } = useAuth();
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [operations, setOperations] = useState<Operation[]>([]);
-  const [contacts, setContacts] = useState<DashboardContact[]>([]);
+  const [contactStatusTotals, setContactStatusTotals] = useState<ContactStatusTotals>({});
   const [analytics, setAnalytics] = useState<OperationAnalytics[]>([]);
+  const [recentCallJobs, setRecentCallJobs] = useState<DashboardCallJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [unavailableSections, setUnavailableSections] = useState<string[]>([]);
@@ -90,43 +100,49 @@ export default function DashboardPage() {
         setSurveys(nextSurveys);
         setOperations(nextOperations);
 
-        const [contactResults, analyticsResults] = nextOperations.length
+        // Per operation: contact status counts (not the contact list), analytics and the latest call jobs.
+        const [summaryResults, analyticsResults, callJobResults] = nextOperations.length
           ? await Promise.all([
-              Promise.allSettled(
-                nextOperations.map(async (operation) => ({
-                  operationName: operation.name,
-                  contacts: await fetchOperationContacts(operation.id),
-                })),
-              ),
+              Promise.allSettled(nextOperations.map((operation) => fetchOperationContactSummary(operation.id, { latestLimit: 0 }))),
               Promise.allSettled(nextOperations.map((operation) => fetchOperationAnalytics(operation.id))),
+              Promise.allSettled(
+                nextOperations.map(async (operation) => {
+                  const page = await fetchOperationCallJobsPage(operation.id, {
+                    size: RECENT_JOBS_PER_OPERATION,
+                    sortBy: "updatedAt",
+                    direction: "desc",
+                  });
+                  return page.items.map((job): DashboardCallJob => ({ ...job, operationName: operation.name }));
+                }),
+              ),
             ])
-          : [[], []];
+          : [[], [], []];
 
         if (!isMounted) {
           return;
         }
 
-        setContacts(
-          contactResults.flatMap((result): DashboardContact[] => {
-            if (result.status !== "fulfilled") {
-              return [];
-            }
+        const nextTotals: ContactStatusTotals = {};
+        for (const result of summaryResults) {
+          if (result.status !== "fulfilled") {
+            continue;
+          }
+          for (const item of result.value.statusCounts) {
+            nextTotals[item.status] = (nextTotals[item.status] ?? 0) + item.count;
+          }
+        }
 
-            return result.value.contacts.map((contact) => ({
-              ...contact,
-              operationName: result.value.operationName,
-            }));
-          }),
-        );
-
+        setContactStatusTotals(nextTotals);
         setAnalytics(analyticsResults.flatMap((result) => (result.status === "fulfilled" ? [result.value] : [])));
+        setRecentCallJobs(callJobResults.flatMap((result) => (result.status === "fulfilled" ? result.value : [])));
 
         setUnavailableSections(
           [
             surveysResult.status === "rejected" ? "Anket akışı" : null,
             operationsResult.status === "rejected" ? "Operasyon akışı" : null,
-            contactResults.some((result) => result.status === "rejected") ? "Kişi listeleri" : null,
+            summaryResults.some((result) => result.status === "rejected") ? "Kişi özetleri" : null,
             analyticsResults.some((result) => result.status === "rejected") ? "Analitik özeti" : null,
+            callJobResults.some((result) => result.status === "rejected") ? "Son aramalar" : null,
           ].filter((value): value is string => value !== null),
         );
       } catch (error) {
@@ -150,12 +166,11 @@ export default function DashboardPage() {
   }, []);
 
   const completion = useMemo(() => buildOperationCompletion(operations), [operations]);
-  const callResults = useMemo(() => buildCallResultSummary(contacts), [contacts]);
+  const callResults = useMemo(() => buildCallResultSummary(contactStatusTotals), [contactStatusTotals]);
   const responsePerformance = useMemo(() => buildResponsePerformance(analytics), [analytics]);
-  const volumeSeries = useMemo(() => buildVolumeSeries(analytics, contacts), [analytics, contacts]);
+  const callQueue = useMemo(() => buildCallQueue(analytics), [analytics]);
   const tasks = useMemo(() => buildDashboardTasks(operations, surveys), [operations, surveys]);
-  const activityRows = useMemo(() => buildDashboardActivityRows(operations, contacts), [contacts, operations]);
-  const systemHealth = useMemo(() => buildSystemHealth(unavailableSections, surveys, operations, contacts), [contacts, operations, surveys, unavailableSections]);
+  const activityRows = useMemo(() => buildDashboardActivityRows(operations, recentCallJobs), [operations, recentCallJobs]);
 
   const featuredQuickLinks: QuickLink[] = [
     { title: "Anketler", href: "/surveys", icon: <SurveyIcon className="nav-icon" /> },
@@ -204,14 +219,15 @@ export default function DashboardPage() {
                 background: `conic-gradient(
                   #66a99c 0 ${completion.completedPercent}%,
                   #4e8fb2 ${completion.completedPercent}% ${completion.activePercent}%,
-                  #b9d7d1 ${completion.activePercent}% ${completion.preparedPercent}%,
+                  #d98b5f ${completion.activePercent}% ${completion.pausedPercent}%,
+                  #b9d7d1 ${completion.pausedPercent}% ${completion.preparedPercent}%,
                   #edf2f0 ${completion.preparedPercent}% 100%
                 )`,
               }}
             >
               <div className="ops-dashboard-donut-center">
                 <strong>%{completion.completedDisplay}</strong>
-                <span>Seviye</span>
+                <span>Tamamlandı</span>
               </div>
             </div>
 
@@ -237,6 +253,15 @@ export default function DashboardPage() {
                   <strong>{completion.active}</strong>
                 </div>
               </div>
+              {completion.paused > 0 ? (
+                <div className="ops-dashboard-kpi-list-item">
+                  <span className="ops-dot is-paused" />
+                  <div>
+                    <small>Duraklatılan</small>
+                    <strong>{completion.paused}</strong>
+                  </div>
+                </div>
+              ) : null}
               <div className="ops-dashboard-kpi-list-item">
                 <span className="ops-dot is-prepared" />
                 <div>
@@ -257,15 +282,15 @@ export default function DashboardPage() {
               <div className="ops-dashboard-result-top">
                 <div>
                   <strong>{callResults.success}</strong>
-                  <span>Başarılı arama</span>
+                  <span>Tamamlanan görüşme</span>
                 </div>
-                <div className="ops-dashboard-chip">Yüksek</div>
+                <div className="ops-dashboard-chip">%{callResults.successPercent} tamamlandı</div>
               </div>
               <div className="ops-dashboard-result-bars">
                 {callResults.items.map((item) => (
                   <div key={item.label} className="ops-dashboard-result-bar-item">
                     <div className={`ops-dashboard-result-bar is-${item.tone}`}>
-                      <span style={{ height: `${Math.max(item.height, 18)}%` }} />
+                      <span style={{ height: `${item.value > 0 ? Math.max(item.height, 18) : 0}%` }} />
                     </div>
                     <strong>{item.value}</strong>
                     <small>{item.label}</small>
@@ -287,8 +312,13 @@ export default function DashboardPage() {
           </div>
           {responsePerformance.hasData ? (
             <>
-              <p className="ops-dashboard-kpi-caption">Ortalama Yanıt Oranı %{responsePerformance.average}</p>
-              <ResponseTrendChart points={responsePerformance.points} percentLabel={responsePerformance.lastPercentLabel} />
+              <p className="ops-dashboard-kpi-caption">
+                Genel yanıt oranı %{responsePerformance.responseRate} ({responsePerformance.respondedContacts} kişi)
+              </p>
+              <ResponseTrendChart
+                points={responsePerformance.points}
+                totalLabel={`${responsePerformance.lastWeekTotal} yanıt`}
+              />
             </>
           ) : (
             <div className="ops-dashboard-kpi-empty">
@@ -300,23 +330,51 @@ export default function DashboardPage() {
 
         <section className="panel-card ops-dashboard-kpi-card">
           <div className="ops-dashboard-kpi-head">
-            <h2>Günlük Çağrı Hacmi</h2>
+            <h2>Çağrı Durumu</h2>
           </div>
-          {volumeSeries.hasData ? (
+          {callQueue.hasData ? (
             <>
-              <div className="ops-dashboard-volume-top">
+              <div className="ops-dashboard-result-top">
                 <div>
-                  <strong>{volumeSeries.total}</strong>
-                  <span>Toplam</span>
+                  <strong>{callQueue.attempts}</strong>
+                  <span>Çağrı denemesi</span>
                 </div>
-                <small>{volumeSeries.maxLabel}</small>
               </div>
-              <CallVolumeChart points={volumeSeries.points} />
+              <div className="ops-dashboard-kpi-list">
+                <div className="ops-dashboard-kpi-list-item">
+                  <span className="ops-dot is-prepared" />
+                  <div>
+                    <small>Kuyrukta</small>
+                    <strong>{callQueue.queued}</strong>
+                  </div>
+                </div>
+                <div className="ops-dashboard-kpi-list-item">
+                  <span className="ops-dot is-active" />
+                  <div>
+                    <small>Görüşmede</small>
+                    <strong>{callQueue.inProgress}</strong>
+                  </div>
+                </div>
+                <div className="ops-dashboard-kpi-list-item">
+                  <span className="ops-dot is-completed" />
+                  <div>
+                    <small>Tamamlanan</small>
+                    <strong>{callQueue.completed}</strong>
+                  </div>
+                </div>
+                <div className="ops-dashboard-kpi-list-item">
+                  <span className="ops-dot is-failed" />
+                  <div>
+                    <small>Başarısız</small>
+                    <strong>{callQueue.failed}</strong>
+                  </div>
+                </div>
+              </div>
             </>
           ) : (
             <div className="ops-dashboard-kpi-empty">
-              <strong>Çağrı hacmi oluşmadı</strong>
-              <span>Günlük çağrı adedi geldikçe sütun dağılımı burada gösterilecek.</span>
+              <strong>Henüz çağrı işi yok</strong>
+              <span>Bir operasyon başladığında kuyruk, süren ve biten aramalar burada görünür.</span>
             </div>
           )}
         </section>
@@ -351,7 +409,6 @@ export default function DashboardPage() {
                   <div key={task.id} className="ops-dashboard-task-row">
                     <div className="ops-dashboard-task-main">
                       <strong>{task.title}</strong>
-                      <Sparkline values={task.sparkline} />
                     </div>
                     <span className="ops-dashboard-muted">{task.area}</span>
                     <StatusBadge status={task.priority === "Yüksek" ? "Warning" : task.priority === "Orta" ? "Pending" : "Ready"} label={task.priority} />
@@ -393,58 +450,36 @@ export default function DashboardPage() {
 
         <div className="ops-dashboard-reference-side">
           <SectionCard
-            title="Son Aktiviteler / Olay Akışı"
-            description="Son operasyon hareketleri ve çıktılar"
+            title="Son Aktiviteler"
+            description="Son aramalar ve operasyon hareketleri"
             action={<Link href="/operations" className="button-secondary compact-button">Tümünü gör</Link>}
           >
-            {activityRows.length === 0 ? (
-              <EmptyState title="Aktivite bulunmuyor" description="Operasyon güncellemeleri burada listelenecek." />
+            {isLoading ? (
+              <EmptyState title="Aktiviteler yükleniyor" description="Son aramalar getiriliyor." />
+            ) : activityRows.length === 0 ? (
+              <EmptyState title="Aktivite bulunmuyor" description="Aramalar başladığında sonuçları burada listelenecek." />
             ) : (
               <div className="ops-dashboard-activity-list">
-                {activityRows.map((row) => (
-                  <Link key={row.id} href={row.href} className="ops-dashboard-activity-row">
-                    <span className="ops-dashboard-activity-time">{row.time}</span>
-                    <div className="ops-dashboard-activity-copy">
-                      <strong>
-                        {row.event} · {row.area}
-                      </strong>
-                      <p>{row.result}</p>
-                      <small>{row.actor}</small>
-                    </div>
-                    <ArrowRightIcon className="nav-icon ops-dashboard-activity-arrow" />
-                  </Link>
-                ))}
+                {activityRows.map((row) => {
+                  const time = formatActivityTime(row.timestamp);
+                  return (
+                    <Link key={row.id} href={row.href} className="ops-dashboard-activity-row">
+                      <span className="ops-dashboard-activity-time">
+                        <small>{time.day}</small>
+                        {time.clock}
+                      </span>
+                      <div className="ops-dashboard-activity-copy">
+                        <strong>
+                          {row.event} · {row.area}
+                        </strong>
+                        <p>{row.result}</p>
+                      </div>
+                      <ArrowRightIcon className="nav-icon ops-dashboard-activity-arrow" />
+                    </Link>
+                  );
+                })}
               </div>
             )}
-          </SectionCard>
-
-          <SectionCard title="Sistem Durumu" description="Çalışma alanı kontrol özeti." action={<button className="button-secondary compact-button">Detaylar</button>}>
-            <div className="ops-dashboard-system-progress">
-              <div className="ops-dashboard-system-bar">
-                <span style={{ width: `${systemHealth.percent}%` }} />
-              </div>
-              <div className="ops-dashboard-system-meta">
-                <strong>{systemHealth.activeChecks} / {systemHealth.totalChecks} kontrol aktif</strong>
-                <span>{systemHealth.pendingLabel}</span>
-              </div>
-            </div>
-
-            <div className="ops-dashboard-system-list">
-              {systemHealth.items.map((item) => (
-                <div key={item.title} className="ops-dashboard-system-row">
-                  <div className="ops-dashboard-system-row-copy">
-                    <strong>{item.title}</strong>
-                    <span>{item.detail}</span>
-                  </div>
-                  <StatusBadge status={item.status} label={item.label} />
-                </div>
-              ))}
-            </div>
-
-            <div className="ops-dashboard-system-footer">
-              <span>Detaylar: Bugün {systemHealth.updatedAt}</span>
-              <ArrowRightIcon className="nav-icon" />
-            </div>
           </SectionCard>
         </div>
       </div>
@@ -452,55 +487,40 @@ export default function DashboardPage() {
   );
 }
 
-function Sparkline({ values }: { values: number[] }) {
-  const max = Math.max(...values, 1);
-  const min = Math.min(...values, 0);
-  const span = Math.max(max - min, 1);
-  const d = values
-    .map((value, index) => {
-      const x = (index / Math.max(values.length - 1, 1)) * 100;
-      const y = 100 - ((value - min) / span) * 100;
-      return `${index === 0 ? "M" : "L"} ${x} ${y}`;
-    })
-    .join(" ");
-
-  return (
-    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="ops-dashboard-sparkline" aria-hidden="true">
-      <path d={d} />
-    </svg>
-  );
-}
-
 function buildOperationCompletion(operations: Operation[]) {
   const total = Math.max(operations.length, 1);
   const completed = operations.filter((operation) => operation.status === "Completed").length;
   const active = operations.filter((operation) => operation.status === "Running" || operation.status === "Ready").length;
-  const prepared = operations.filter((operation) => operation.status === "Draft" || operation.status === "Scheduled" || operation.status === "Paused").length;
+  const paused = operations.filter((operation) => operation.status === "Paused").length;
+  const prepared = operations.filter((operation) => operation.status === "Draft" || operation.status === "Scheduled").length;
 
   return {
     total: operations.length,
     completed,
     active,
+    paused,
     prepared,
     completedDisplay: Math.round((completed / total) * 100),
     completedPercent: (completed / total) * 100,
     activePercent: ((completed + active) / total) * 100,
-    preparedPercent: ((completed + active + prepared) / total) * 100,
+    pausedPercent: ((completed + active + paused) / total) * 100,
+    preparedPercent: ((completed + active + paused + prepared) / total) * 100,
   };
 }
 
-function buildCallResultSummary(contacts: DashboardContact[]) {
-  const success = contacts.filter((contact) => contact.status === "Completed").length;
-  const rejected = contacts.filter((contact) => contact.status === "Failed").length;
-  const pending = contacts.filter((contact) => contact.status === "Pending").length;
-  const retry = contacts.filter((contact) => contact.status === "Retry").length;
-  const invalid = contacts.filter((contact) => contact.status === "Invalid").length;
-  const total = success + rejected + pending + retry + invalid;
+function buildCallResultSummary(totals: ContactStatusTotals) {
+  const success = totals.Completed ?? 0;
+  const rejected = totals.Failed ?? 0;
+  const pending = totals.Pending ?? 0;
+  const retry = totals.Retry ?? 0;
+  const invalid = totals.Invalid ?? 0;
+  const allContacts = Object.values(totals).reduce((sum, count) => sum + (count ?? 0), 0);
   const max = Math.max(success, rejected, pending, retry, invalid, 1);
 
   return {
-    hasData: total > 0,
+    hasData: allContacts > 0,
     success,
+    successPercent: allContacts > 0 ? Math.round((success / allContacts) * 100) : 0,
     items: [
       { label: "Başarılı", value: success, tone: "success", height: (success / max) * 100 },
       { label: "Başarısız", value: rejected, tone: "danger", height: (rejected / max) * 100 },
@@ -511,51 +531,70 @@ function buildCallResultSummary(contacts: DashboardContact[]) {
   };
 }
 
-function buildResponsePerformance(analytics: OperationAnalytics[]) {
-  const seed = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
-  const hasData = analytics.some((item) => item.totalResponses > 0 || item.totalCallsAttempted > 0);
-  const analyticsAverage =
-    analytics.length > 0 ? analytics.reduce((sum, item) => sum + item.responseRate, 0) / analytics.length : 0;
-  const points = seed.map((label, index) => ({
-    label,
-    value: hasData ? Math.max(Math.round(analyticsAverage + (index - 2) * 2 + (index % 2 === 0 ? 1 : -1)), 12) : 0,
-  }));
-  const average = points.reduce((sum, point) => sum + point.value, 0) / Math.max(points.length, 1);
-  const lastPercentLabel = `%${Math.max(Math.round(points[points.length - 1]?.value ?? 0), 0)}`;
+function buildResponsePerformance(analytics: OperationAnalytics[], now = new Date()) {
+  const respondedContacts = analytics.reduce((sum, item) => sum + item.respondedContacts, 0);
+  const totalContacts = analytics.reduce((sum, item) => sum + item.totalContacts, 0);
+
+  const countsByDay = new Map<string, number>();
+  for (const item of analytics) {
+    for (const point of item.responseTrend) {
+      countsByDay.set(point.date, (countsByDay.get(point.date) ?? 0) + point.count);
+    }
+  }
+
+  const weekdayFormat = new Intl.DateTimeFormat("tr-TR", { weekday: "short" });
+  const points = Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (6 - index));
+    return { label: weekdayFormat.format(day), value: countsByDay.get(toIsoDate(day)) ?? 0 };
+  });
 
   return {
-    hasData,
-    average: Math.max(Math.round(average), 0),
-    lastPercentLabel,
+    hasData: totalContacts > 0,
+    // Weighted by contacts, so a one-contact test operation does not count as much as a full field study.
+    responseRate: totalContacts > 0 ? Math.round((respondedContacts / totalContacts) * 100) : 0,
+    respondedContacts,
+    lastWeekTotal: points.reduce((sum, point) => sum + point.value, 0),
     points,
   };
 }
 
-function buildVolumeSeries(analytics: OperationAnalytics[], contacts: DashboardContact[]) {
-  const baseTotal = analytics.reduce((sum, item) => sum + item.totalCallsAttempted, 0) || contacts.length;
-  const hasData = baseTotal > 0;
-  const seed = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
-  const points = seed.map((label, index) => ({
-    label,
-    value: hasData ? Math.max(Math.round(baseTotal / Math.max(seed.length, 1) + index * 8 - (index % 2 === 0 ? 12 : 0)), 12) : 0,
-  }));
-  const max = Math.max(...points.map((point) => point.value), 0);
+function buildCallQueue(analytics: OperationAnalytics[]) {
+  const sum = (pick: (item: OperationAnalytics) => number) => analytics.reduce((total, item) => total + pick(item), 0);
 
   return {
-    hasData,
-    total: baseTotal,
-    maxLabel: `${max.toLocaleString("tr-TR")}`,
-    points,
+    hasData: sum((item) => item.totalCallJobs) > 0,
+    attempts: sum((item) => item.totalCallAttempts),
+    queued: sum((item) => item.queuedJobs),
+    inProgress: sum((item) => item.inProgressJobs),
+    completed: sum((item) => item.completedCallJobs),
+    failed: sum((item) => item.failedCallJobs),
   };
 }
 
 function buildDashboardTasks(operations: Operation[], surveys: Survey[]): DashboardTask[] {
-  const blockedOperation = operations.find((operation) => operation.readiness.blockingReasons.length > 0);
-  const readyOperation = operations.find((operation) => operation.status === "Ready");
+  // Paused, completed and cancelled operations also report a blocking reason for their state; only setup blockers need fixing.
+  const blockedOperation = operations.find(
+    (operation) =>
+      (operation.status === "Draft" || operation.status === "Ready" || operation.status === "Scheduled") &&
+      operation.readiness.blockingReasons.length > 0,
+  );
+  const readyOperation = operations.find((operation) => operation.status === "Ready" && operation.readiness.readyToStart);
   const draftSurvey = surveys.find((survey) => survey.status === "Draft");
-  const retryOperation = operations.find((operation) => operation.status === "Failed" || operation.status === "Paused");
+  const failedOperation = operations.find((operation) => operation.status === "Failed");
+  const pausedOperation = operations.find((operation) => operation.status === "Paused");
 
   return [
+    failedOperation
+      ? {
+          id: `failed-${failedOperation.id}`,
+          title: `${failedOperation.name} başarısız oldu, nedenini inceleyin`,
+          area: "Operasyonlar",
+          priority: "Yüksek",
+          createdAt: failedOperation.updatedAt,
+          actionLabel: "İncele",
+          href: `/operations/${failedOperation.id}`,
+        }
+      : null,
     blockedOperation
       ? {
           id: `blocked-${blockedOperation.id}`,
@@ -565,19 +604,28 @@ function buildDashboardTasks(operations: Operation[], surveys: Survey[]): Dashbo
           createdAt: blockedOperation.updatedAt,
           actionLabel: "Düzelt",
           href: `/operations/${blockedOperation.id}`,
-          sparkline: [18, 22, 21, 26, 28, 31],
+        }
+      : null,
+    pausedOperation
+      ? {
+          id: `paused-${pausedOperation.id}`,
+          title: `${pausedOperation.name} duraklatıldı, hazır olduğunuzda devam ettirin`,
+          area: "Arama Operasyonları",
+          priority: "Orta",
+          createdAt: pausedOperation.updatedAt,
+          actionLabel: "Aç",
+          href: `/operations/${pausedOperation.id}`,
         }
       : null,
     readyOperation
       ? {
           id: `ready-${readyOperation.id}`,
-          title: `${readyOperation.name} için canlı akışı aç`,
+          title: `${readyOperation.name} başlatılmaya hazır`,
           area: "Arama Operasyonları",
           priority: "Orta",
           createdAt: readyOperation.updatedAt,
-          actionLabel: "Bağla",
+          actionLabel: "Aç",
           href: `/operations/${readyOperation.id}`,
-          sparkline: [8, 10, 12, 14, 15, 18],
         }
       : null,
     draftSurvey
@@ -589,19 +637,6 @@ function buildDashboardTasks(operations: Operation[], surveys: Survey[]): Dashbo
           createdAt: draftSurvey.updatedAt,
           actionLabel: "İncele",
           href: `/surveys/${draftSurvey.id}`,
-          sparkline: [6, 8, 7, 9, 10, 11],
-        }
-      : null,
-    retryOperation
-      ? {
-          id: `retry-${retryOperation.id}`,
-          title: `${retryOperation.name} çağrı akışlarını tekrar kuyruğa al`,
-          area: "Arama Operasyonları",
-          priority: "Düşük",
-          createdAt: retryOperation.updatedAt,
-          actionLabel: "Kuyruğa Al",
-          href: `/operations/${retryOperation.id}`,
-          sparkline: [10, 9, 12, 11, 13, 14],
         }
       : null,
   ]
@@ -609,80 +644,84 @@ function buildDashboardTasks(operations: Operation[], surveys: Survey[]): Dashbo
     .slice(0, 3);
 }
 
-const contactStatusLabels: Record<OperationContact["status"], string> = {
-  Active: "Aktif",
-  Completed: "Tamamlandı",
-  Failed: "Başarısız",
-  Retry: "Tekrar aranacak",
-  Invalid: "Geçersiz",
-  Pending: "Beklemede",
-};
-
-function buildDashboardActivityRows(operations: Operation[], contacts: DashboardContact[]): DashboardActivityRow[] {
-  const operationRows = operations.slice(0, 3).map((operation, index) => ({
-    id: operation.id,
-    time: extractTime(operation.updatedAt),
-    actor: index % 2 === 0 ? "Sistem" : "Operasyon Sahibi",
-    event: index === 0 ? "Kişi yükleme" : index === 1 ? "Rapor tazelendi" : "Durum değişti",
-    area: operation.name,
-    result: operation.readiness.blockingReasons[0] ?? `${operation.executionSummary.completedCallJobs} çağrı tamamlandı`,
-    href: `/operations/${operation.id}`,
-  }));
-
-  const contactRows = contacts.slice(0, 2).map((contact) => ({
-    id: `contact-${contact.id}`,
-    time: extractTime(contact.updatedAt),
-    actor: "Sistem",
-    event: "Kişi kuyruğa eklendi",
-    area: contact.operationName,
-    result: `${contact.name} / ${contactStatusLabels[contact.status]}`,
-    href: "/operations",
-  }));
-
-  return [...operationRows, ...contactRows].slice(0, 4);
+function describeCallJob(job: CallJob): string {
+  switch (job.status) {
+    case "Completed":
+      return "Görüşme tamamlandı";
+    case "Failed":
+      return "Arama başarısız";
+    case "InProgress":
+      return "Görüşme sürüyor";
+    case "Skipped":
+      return "Arama iptal edildi";
+    default:
+      return job.rawStatus === "RETRY" ? "Tekrar aranacak" : "Aranıyor";
+  }
 }
 
-function buildSystemHealth(
-  unavailableSections: string[],
-  surveys: Survey[],
-  operations: Operation[],
-  contacts: DashboardContact[],
-) {
-  const items = [
-    {
-      title: "Arama Servisi",
-      detail: contacts.length > 0 ? "Çevrimiçi" : "Beklemede",
-      status: contacts.length > 0 ? "Ready" : "Pending",
-      label: contacts.length > 0 ? "Çevrimiçi" : "Beklemede",
-    },
-    {
-      title: "Anket Yayın Servisi",
-      detail: surveys.length > 0 ? "Çevrimiçi" : "Beklemede",
-      status: surveys.length > 0 ? "Ready" : "Pending",
-      label: surveys.length > 0 ? "Çevrimiçi" : "Beklemede",
-    },
-    {
-      title: "Veri Senkronizasyonu",
-      detail: unavailableSections.length > 0 ? unavailableSections.join(", ") : "Güncel Bugün 09:42",
-      status: unavailableSections.length > 0 ? "Warning" : "Ready",
-      label: unavailableSections.length > 0 ? "Uyarı" : "Güncel",
-    },
-  ];
+function buildDashboardActivityRows(operations: Operation[], callJobs: DashboardCallJob[]): DashboardActivityRow[] {
+  // Jobs that were never dialed are queue entries, not activity.
+  const callRows = callJobs
+    .filter((job) => job.attemptCount > 0)
+    .map((job) => ({
+      id: `job-${job.id}`,
+      timestamp: Date.parse(job.updatedAtIso),
+      event: describeCallJob(job),
+      area: job.operationName,
+      result: job.lastResultSummary ? `${job.personName} · ${job.lastResultSummary}` : job.personName,
+      href: `/operations/${job.operationId}/jobs/${job.id}`,
+    }));
 
-  const activeChecks = items.filter((item) => item.status === "Ready").length + (operations.length > 0 ? 1 : 0);
-  const totalChecks = 5;
+  const operationRows = operations.flatMap((operation) => [
+    ...(operation.startedAt
+      ? [
+          {
+            id: `started-${operation.id}`,
+            timestamp: Date.parse(operation.startedAt),
+            event: "Operasyon başlatıldı",
+            area: operation.name,
+            result: operation.survey,
+            href: `/operations/${operation.id}`,
+          },
+        ]
+      : []),
+    ...(operation.completedAt
+      ? [
+          {
+            id: `completed-${operation.id}`,
+            timestamp: Date.parse(operation.completedAt),
+            event: "Operasyon tamamlandı",
+            area: operation.name,
+            result: operation.survey,
+            href: `/operations/${operation.id}`,
+          },
+        ]
+      : []),
+  ]);
 
-  return {
-    items,
-    activeChecks,
-    totalChecks,
-    percent: (activeChecks / totalChecks) * 100,
-    pendingLabel: `${Math.max(totalChecks - activeChecks, 0)} yapılması gereken işlem`,
-    updatedAt: "09:42",
-  };
+  return [...callRows, ...operationRows]
+    .filter((row) => !Number.isNaN(row.timestamp))
+    .sort((left, right) => right.timestamp - left.timestamp)
+    .slice(0, ACTIVITY_ROW_LIMIT);
 }
 
-function extractTime(value: string) {
-  const match = value.match(/(\d{2}:\d{2})/);
-  return match?.[1] ?? value.slice(-5);
+function formatActivityTime(timestamp: number, now = new Date()) {
+  const date = new Date(timestamp);
+  const clock = date.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+  const startOfDay = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  const dayDifference = Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000);
+
+  if (dayDifference === 0) {
+    return { day: "Bugün", clock };
+  }
+  if (dayDifference === 1) {
+    return { day: "Dün", clock };
+  }
+  return { day: date.toLocaleDateString("tr-TR", { day: "numeric", month: "short" }), clock };
+}
+
+function toIsoDate(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
 }

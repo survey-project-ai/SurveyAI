@@ -1,8 +1,6 @@
 "use client";
 
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -27,25 +25,25 @@ const AXIS_TICK = { fill: "#718196", fontSize: 11 };
 
 export function ResponseTrendChart({
   points,
-  percentLabel,
+  totalLabel,
 }: {
   points: DataPoint[];
-  percentLabel: string;
+  totalLabel: string;
 }) {
   return (
     <div className="ops-dashboard-line-chart">
       <div className="ops-dashboard-line-meta">
-        <span>100</span>
-        <strong>{percentLabel}</strong>
+        <span>Son 7 gün</span>
+        <strong>{totalLabel}</strong>
       </div>
-      <ResponsiveContainer width="100%" height={84}>
-        <LineChart data={points} margin={{ top: 4, right: 4, bottom: 0, left: -28 }}>
+      <ResponsiveContainer width="100%" height={96}>
+        <LineChart data={points} margin={{ top: 4, right: 12, bottom: 0, left: -28 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,164,196,0.10)" vertical={false} />
-          <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} />
-          <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} domain={[0, 100]} />
+          <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} interval={0} />
+          <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} allowDecimals={false} domain={[0, "auto"]} />
           <Tooltip
             contentStyle={TOOLTIP_STYLE}
-            formatter={(v) => [`%${v ?? 0}`, "Yanıt"]}
+            formatter={(v) => [v ?? 0, "Yanıt"]}
             cursor={{ stroke: "rgba(138,180,230,0.2)", strokeWidth: 1 }}
           />
           <Line
@@ -57,31 +55,6 @@ export function ResponseTrendChart({
             activeDot={{ r: 5, fill: "#b9d7fb", strokeWidth: 0 }}
           />
         </LineChart>
-      </ResponsiveContainer>
-      <div className="ops-dashboard-line-labels">
-        {points.map((p) => (
-          <span key={p.label}>{p.label}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export function CallVolumeChart({ points }: { points: DataPoint[] }) {
-  return (
-    <div className="ops-dashboard-volume-chart recharts-volume">
-      <ResponsiveContainer width="100%" height={80}>
-        <BarChart data={points} margin={{ top: 2, right: 2, bottom: 0, left: -28 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(138,164,196,0.08)" vertical={false} />
-          <XAxis dataKey="label" tick={AXIS_TICK} axisLine={false} tickLine={false} />
-          <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} />
-          <Tooltip
-            contentStyle={TOOLTIP_STYLE}
-            formatter={(v) => [v ?? 0, "Arama"]}
-            cursor={{ fill: "rgba(138,180,230,0.07)" }}
-          />
-          <Bar dataKey="value" fill="#5aa7ff" radius={[4, 4, 0, 0]} maxBarSize={32} />
-        </BarChart>
       </ResponsiveContainer>
     </div>
   );
