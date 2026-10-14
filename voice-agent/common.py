@@ -37,7 +37,10 @@ TTS_MODEL = os.environ.get("PROTOTYPE_TTS_MODEL", "eleven_v4_turbo")
 # The level picked in a listening test sits about 18 dB under the voice; 4.2 keeps that under the voice
 # as levelled by leveler.py.
 AMBIENT_VOLUME = float(os.environ.get("PROTOTYPE_AMBIENT_VOLUME", "4.2"))
-STT_MODEL = "scribe_v2_realtime"
+# Speech recognition. Speechmatics Linden-1 (through LiveKit Inference) got all 15 key answers right in
+# the recorded test calls of 5 callers; ElevenLabs Scribe v2 realtime, used before, got 13 ("51" -> "55",
+# "Hiçbiri" -> "Teşekkürler"). "scribe_v2_realtime" switches back.
+STT_MODEL = os.environ.get("PROTOTYPE_STT_MODEL", "speechmatics/linden-1")
 BACKEND_URL = "https://surveyai-backend-production.up.railway.app"
 
 

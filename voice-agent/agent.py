@@ -31,6 +31,7 @@ from livekit.agents import (
     cli,
     metrics,
 )
+from livekit.agents import inference
 from livekit.plugins import elevenlabs, silero
 
 from common import AGENT_NAME, AMBIENT_VOLUME, BACKEND_URL, LOG_DIR, STT_MODEL, TTS_MODEL, VOICE_ID, load_keys, read_state
@@ -511,6 +512,15 @@ def write_wav(path, chunks: list[bytes], sample_rate: int) -> None:
         handle.writeframes(b"".join(chunks))
 
 
+def speech_recognizer():
+    if STT_MODEL.startswith("scribe"):
+        return elevenlabs.STT(model=STT_MODEL, language_code="tr",
+                              server_vad=elevenlabs.stt.VADOptions(vad_silence_threshold_secs=0.5),
+                              keyterms=KEYTERMS)
+    # LiveKit Inference; Speechmatics Linden-1 decides the end of each turn on its side.
+    return inference.STT(model=STT_MODEL, language="tr")
+
+
 def prewarm(proc: JobProcess) -> None:
     proc.userdata["vad"] = silero.VAD.load()
     proc.userdata["gender_model"] = load_model()
@@ -535,9 +545,7 @@ async def entrypoint(ctx: JobContext) -> None:
         vad=ctx.proc.userdata["vad"],
         # Scribe realtime only finalizes a transcript on a commit; with server VAD it commits after
         # 0.5 s of silence, and that commit ends the user's turn.
-        stt=elevenlabs.STT(model=STT_MODEL, language_code="tr",
-                           server_vad=elevenlabs.stt.VADOptions(vad_silence_threshold_secs=0.5),
-                           keyterms=KEYTERMS),
+        stt=speech_recognizer(),
         tts=elevenlabs.TTS(
             voice_id=VOICE_ID,
             model=TTS_MODEL,
