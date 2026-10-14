@@ -6,6 +6,7 @@ Run the worker:   .venv/Scripts/python agent.py dev
 Place a call:     .venv/Scripts/python call.py +905xxxxxxxxx
 """
 import asyncio
+import faulthandler
 import json
 import logging
 import re
@@ -37,6 +38,9 @@ from leveler import VoiceLeveler
 
 load_keys()
 logger = logging.getLogger("survey-prototype")
+# A native crash (the worker once aborted with no log while a call ended) then at least prints every
+# thread's Python stack to the log.
+faulthandler.enable()
 
 OPENING = "Merhaba, ben Ayna Araştırma adına kısa bir anket için arıyorum. Size birkaç soru sorabilir miyim?"
 IDENTITY = "Ben Ayna Araştırma adına kısa bir anket için arıyorum."
@@ -354,7 +358,13 @@ async def entrypoint(ctx: JobContext) -> None:
     async def hang_up(speech) -> None:
         await speech.wait_for_playout()
         await asyncio.sleep(0.5)
-        await ctx.api.room.delete_room(api.DeleteRoomRequest(room=ctx.room.name))
+        # Hang up the phone, then leave the room ourselves. Deleting the room instead cut the agent's
+        # connection from the server side, and the worker once crashed at exactly that moment.
+        try:
+            await ctx.api.room.remove_participant(api.RoomParticipantIdentity(room=ctx.room.name, identity="callee"))
+        except api.TwirpError as error:  # the callee may have hung up already
+            logger.info("callee already gone: %s", error.message)
+        ctx.shutdown(reason="survey finished")
 
     @session.on("user_state_changed")
     def _user_state(event) -> None:
