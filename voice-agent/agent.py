@@ -98,7 +98,14 @@ NAME_PADDING = {"olsun", "isterim", "derim", "diyorum", "valla", "vallahi", "ben
                 "yani", "sey", "herhalde", "olabilir", "bey", "hanim", "hayir", "evet"}
 # Ending the survey. A bare "istemiyorum" only counts before the questions: during them it is usually
 # about the question ("söylemek istemiyorum") or a candidate ("Erdoğan'ı istemiyorum").
-STOP_SURVEY = ("rahatsiz etmeyin", "aramayin", "ilgilenmiyorum", "anket istemiyorum", "devam etmek istemiyorum")
+STOP_SURVEY = ("rahatsiz etmeyin", "aramayin", "ilgilenmiyorum", "anket istemiyorum", "devam etmek istemiyorum",
+               # a callee who is leaving gets a goodbye, not the question again (one hung up after that)
+               "kapatiyorum", "kapatacagim", "kapatmam lazim", "mesgulum", "musait degilim", "simdi olmaz")
+# "Biraz önce de aramıştınız": the callee was already called; the agent apologises before going on.
+ALREADY_CALLED = ("aramistiniz", "aradiniz zaten", "zaten aradiniz", "daha once aradiniz", "cevap vermistim",
+                  "zaten cevap verdim")
+CALLED_AGAIN = "Kusura bakmayın, kısa bir kontrol için tekrar arıyoruz."
+AGE_RANGE = (15, 110)
 # The replies of a call that goes as planned (after the QUESTIONS they build on), synthesized while the phone
 # rings if they are not cached yet.
 def main_replies() -> list[str]:
@@ -139,6 +146,8 @@ def spoken_number(text: str) -> int | None:
     if digits:
         return int(digits.group())
     total, found = 0, False
+    # Speech recognition wrote "elli bir" as "belli bir" in a test call.
+    text = re.sub(r"\bbelli (?=(bir|iki|uc|dort|bes|alti|yedi|sekiz|dokuz)\b)", "elli ", text)
     for token in text.split():
         if token in NUMBER_WORDS:
             total, found = total + NUMBER_WORDS[token], True
@@ -167,6 +176,12 @@ class SurveyFlow:
 
     def handle(self, raw: str, previous_reply_missed: bool = False) -> tuple[str, bool]:
         """previous_reply_missed: the agent's last reply was cut off before the callee heard it."""
+        reply, end_call = self._handle(raw, previous_reply_missed)
+        if not end_call and has_any(normalize(raw), *ALREADY_CALLED):
+            reply = CALLED_AGAIN + " " + reply
+        return reply, end_call
+
+    def _handle(self, raw: str, previous_reply_missed: bool) -> tuple[str, bool]:
         text = normalize(raw)
         presence_check = has_any(text, *PRESENCE_CHECKS)
         if self.step == "greeting":
@@ -235,7 +250,8 @@ class SurveyFlow:
         """(value to record, whether to read it back for confirmation), or None when it is not an answer."""
         if code == "age":
             number = spoken_number(text)
-            return None if number is None else (str(number), False)
+            # "Belli bir" once came out as 1; an impossible age gets the question again.
+            return (str(number), False) if number is not None and AGE_RANGE[0] <= number <= AGE_RANGE[1] else None
         if code == "rating":
             if has_any(text, *WITHHELD):
                 return "Cevap vermek istemiyor", False
