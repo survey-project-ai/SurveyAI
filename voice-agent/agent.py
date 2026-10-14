@@ -67,8 +67,8 @@ QUESTIONS = [
     ("candidate", "Cumhurbaşkanı adayı olarak kimi görmek istersiniz? Recep Tayyip Erdoğan, Ekrem İmamoğlu ya da "
      "Mansur Yavaş?", "Recep Tayyip Erdoğan, Ekrem İmamoğlu ve Mansur Yavaş arasından kimi aday olarak görmek istersiniz?"),
 ]
-# Any part of a name counts ("Tayyip", "İmamoğlu'nu"). "Yavaş" alone is also an everyday word ("yavaş
-# konuşun"), so it only counts in a short reply. Listed in the order the question reads them out.
+# Any part of a name counts ("Tayyip", "İmamoğlu'nu"); for "Yavaş", an everyday word too, see
+# named_candidates. Listed in the order the question reads them out.
 CANDIDATES = {
     "Recep Tayyip Erdoğan": ("recep", "tayyip", "erdogan", "rte"),
     "Ekrem İmamoğlu": ("ekrem", "imamoglu", "imam oglu"),
@@ -78,6 +78,11 @@ CANDIDATES = {
 # "Hiçbiri" as "Bir, iki, üç."
 KEYTERMS = ["Recep Tayyip Erdoğan", "Erdoğan", "Ekrem İmamoğlu", "İmamoğlu", "Mansur Yavaş", "Hiçbiri",
             "Hiçbirini", "Kararsızım"]
+# Question particle after each name, for "Mansur Yavaş mı, Ekrem İmamoğlu mu?"
+QUESTION_PARTICLE = {"Recep Tayyip Erdoğan": "mı", "Ekrem İmamoğlu": "mu", "Mansur Yavaş": "mı"}
+# "İkisi de": no choice between the names offered.
+NO_CHOICE = ("ikisi de", "ikisini de", "ikisi", "fark etmez", "farketmez", "karar veremedim", "secemiyorum",
+             "secemem", "bilmiyorum", "emin degilim")
 # "İkincisi", "sonuncusu": a choice by the order the names were read out.
 ORDINALS = {"birinci": 0, "birincisi": 0, "ilki": 0, "ikinci": 1, "ikincisi": 1, "ucuncu": 2, "ucuncusu": 2,
             "sonuncu": 2, "sonuncusu": 2}
@@ -168,6 +173,11 @@ class SurveyFlow:
         self.answers: dict[str, str] = {}
         # (question code, value) of an answer read back to the callee and waiting for "doğru mu?"
         self.confirming: tuple[str, str] | None = None
+        # The callee's last reply to the current question when it gave no answer; read again together with
+        # what follows if the callee talked over the agent's reply.
+        self.unanswered: str | None = None
+        # Candidates the callee named together and was asked to choose between.
+        self.choosing: list[str] | None = None
 
     def current_question(self, full: bool = False) -> str:
         """The question in full the first time (or when asked to repeat it), the short form after that."""
@@ -206,6 +216,11 @@ class SurveyFlow:
                 return OPENING, False
             return "Kısaca onayınızı rica edeceğim. " + CONSENT_QUESTION, False
         code = self.questions[self.question_index][0]
+        if previous_reply_missed and self.unanswered:
+            # Speech recognition split "Mansur Yavaş veya Ekrem İmamoğlu. Ama tabii Ekrem hapisten çıkarsa." in
+            # two; the agent answered the first half and only the second was recorded. Read both together.
+            raw = self.unanswered + " " + raw
+            text = normalize(raw)
         if self.confirming is not None:
             confirm_code, value = self.confirming
             self.confirming = None
@@ -226,8 +241,21 @@ class SurveyFlow:
         if code == "candidate" and has_any(text, *NEGATIONS) and not has_any(text, *UNDECIDED) and any(
                 has_any(text, *keys) for keys in CANDIDATES.values()):
             return "Anladım. Peki " + self.current_question(), False
+        if code == "candidate":
+            named = [name for name in CANDIDATES if name in named_candidates(text)]
+            if len(named) > 1 and not has_any(text, *UNDECIDED):
+                # Two names: ask once which one, as an interviewer would; named together again, undecided.
+                if self.choosing is None:
+                    self.choosing = named
+                    self.unanswered = None
+                    choices = ", ".join(f"{name} {QUESTION_PARTICLE[name]}" for name in named)
+                    return f"Anladım. Peki hangisini daha çok tercih edersiniz, {choices}?", False
+                return self._take(code, "Kararsız (" + " / ".join(named) + ")", False)
+            if self.choosing and not named and has_any(text, *NO_CHOICE):
+                return self._take(code, "Kararsız (" + " / ".join(self.choosing) + ")", False)
         answer = self.interpret(code, raw, text)
         if answer is None:
+            self.unanswered = raw
             if presence_check:
                 return HEARD + " " + self.current_question(), False
             if previous_reply_missed:
@@ -242,6 +270,7 @@ class SurveyFlow:
             self.confirming = (code, value)
             return f"{value.removeprefix('Diğer: ')} olarak not alıyorum, doğru mu?", False
         self.answers[code] = value
+        self.unanswered, self.choosing = None, None
         self.question_index += 1
         if self.question_index >= len(self.questions):
             self.step = "done"
@@ -267,11 +296,17 @@ class SurveyFlow:
         return None
 
 
+def named_candidates(text: str) -> set[str]:
+    named = {name for name, keys in CANDIDATES.items() if has_any(text, *keys)}
+    # "Yavaş" alone is a name unless it is about speaking slowly ("yavaş konuşun", "yavaş söyler misiniz").
+    if re.search(r"\byavas\b(?! (konus|soyle|sor|oku|anlat))", text):
+        named.add("Mansur Yavaş")
+    return named
+
+
 def candidate_answer(raw: str, text: str) -> tuple[str, bool] | None:
     words = text.split()
-    named = {name for name, keys in CANDIDATES.items() if has_any(text, *keys)}
-    if "yavas" in words and len(words) <= 3:
-        named.add("Mansur Yavaş")
+    named = named_candidates(text)
     if has_any(text, *UNDECIDED):
         # "Kararsızım ama muhtemelen İmamoğlu ya da Yavaş": undecided, leaning towards the names given.
         # "Kararsızım ama Erdoğan değil" excludes a name rather than leaning towards it.
