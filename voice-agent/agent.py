@@ -36,6 +36,7 @@ from livekit.plugins import elevenlabs, silero
 from common import AGENT_NAME, AMBIENT_VOLUME, BACKEND_URL, LOG_DIR, STT_MODEL, TTS_MODEL, VOICE_ID, load_keys, read_state
 from gender import VoiceGenderDetector, load_model
 from leveler import VoiceLeveler
+from tts_cache import TtsCache
 
 load_keys()
 logger = logging.getLogger("survey-prototype")
@@ -92,6 +93,12 @@ NAME_PADDING = {"olsun", "isterim", "derim", "diyorum", "valla", "vallahi", "ben
 # Ending the survey. A bare "istemiyorum" only counts before the questions: during them it is usually
 # about the question ("söylemek istemiyorum") or a candidate ("Erdoğan'ı istemiyorum").
 STOP_SURVEY = ("rahatsiz etmeyin", "aramayin", "ilgilenmiyorum", "anket istemiyorum", "devam etmek istemiyorum")
+# The replies of a call that goes as planned (after the QUESTIONS they build on), synthesized while the phone
+# rings if they are not cached yet.
+def main_replies() -> list[str]:
+    return [OPENING, "Teşekkür ederim. " + QUESTIONS[0][1], *(question for _, question, _ in QUESTIONS[1:]), CLOSING]
+
+
 # Short sounds that arrive before the agent's reply has been played cannot answer the next question; the
 # recognizer also produced a phantom "Evet." from near-silence in the first test call.
 FILLERS = {"", "evet", "tamam", "hi", "hm", "hmm", "ee", "eee", "aha", "alo", "efendim", "he", "hi hi"}
@@ -192,7 +199,7 @@ class SurveyFlow:
         if has_any(text, "tekrar", "anlamadim", "ne dediniz", "efendim", "pardon", "yavas konusur", "yavas konusun",
                            "yavas konusabilir", "yavas soyler", "yavas soyleyin"):
             return self.current_question(full=True), False
-        if code == "candidate" and has_any(text, *NEGATIONS) and any(
+        if code == "candidate" and has_any(text, *NEGATIONS) and not has_any(text, *UNDECIDED) and any(
                 has_any(text, *keys) for keys in CANDIDATES.values()):
             return "Anladım. Peki " + self.current_question(), False
         answer = self.interpret(code, raw, text)
@@ -233,6 +240,11 @@ def candidate_answer(raw: str, text: str) -> tuple[str, bool] | None:
     named = {name for name, keys in CANDIDATES.items() if has_any(text, *keys)}
     if "yavas" in words and len(words) <= 3:
         named.add("Mansur Yavaş")
+    if has_any(text, *UNDECIDED):
+        # "Kararsızım ama muhtemelen İmamoğlu ya da Yavaş": undecided, leaning towards the names given.
+        # "Kararsızım ama Erdoğan değil" excludes a name rather than leaning towards it.
+        leaning = [] if has_any(text, *NEGATIONS) else [name for name in CANDIDATES if name in named]
+        return ("Kararsız (" + " / ".join(leaning) + ")" if leaning else "Kararsız"), False
     if len(named) == 1:
         return named.pop(), False
     if len(named) > 1:
@@ -244,8 +256,6 @@ def candidate_answer(raw: str, text: str) -> tuple[str, bool] | None:
         return "Cevap vermek istemiyor", False
     if has_any(text, *NONE_OF_THEM):
         return "Hiçbiri", False
-    if has_any(text, *UNDECIDED):
-        return "Kararsız", False
     # Numbers are not a name. A bare "üç" might mean the third name, but the question is asked again
     # rather than guessed.
     if spoken_number(text) is not None:
@@ -348,6 +358,7 @@ class SurveyAgent(Agent):
         self.flow, self.recorder, self.http, self.hang_up = flow, recorder, http, hang_up
         self.gender = gender
         self.leveler = VoiceLeveler()
+        self.tts_cache = TtsCache(VOICE_ID, TTS_MODEL)
         # What the agent sent to the line, one reply after another, written to logs/ when the call ends.
         self.sent_audio: list[bytes] = []
         self.sent_sample_rate = 16000
@@ -397,13 +408,31 @@ class SurveyAgent(Agent):
         return len(heard) < 0.6 * len(said)
 
     async def tts_node(self, text, model_settings):
+        # Replies come whole from session.say(), so the full text is known before synthesis starts.
+        reply = "".join([part async for part in text])
+        cached = self.tts_cache.get(reply)
+        if cached is not None:
+            source = iter_frames(cached)
+        else:
+            source = self._synthesize_and_keep(reply, model_settings)
         # One leveler for the whole call, so each reply starts at the gain the previous one ended with.
-        async for frame in Agent.default.tts_node(self, text, model_settings):
+        async for frame in source:
             levelled = self.leveler.process_frame(frame)
             self.sent_sample_rate = levelled.sample_rate
             self.sent_audio.append(bytes(levelled.data))
             yield levelled
         self.sent_audio.append(bytes(int(self.sent_sample_rate * 0.5) * 2))  # half a second between replies
+
+    async def _synthesize_and_keep(self, reply: str, model_settings):
+        async def once():
+            yield reply
+
+        frames = []
+        async for frame in Agent.default.tts_node(self, once(), model_settings):
+            frames.append(frame)
+            yield frame
+        # Only a reply synthesized to the end is kept; an interrupted one stops at the yield above.
+        self.tts_cache.put(reply, frames)
 
     def save_audio(self, room_name: str) -> None:
         write_wav(LOG_DIR / f"{room_name}.agent.wav", self.sent_audio, self.sent_sample_rate)
@@ -445,6 +474,31 @@ class SurveyAgent(Agent):
         if end_call:
             asyncio.create_task(self.hang_up(speech))
         raise StopResponse()
+
+
+async def iter_frames(frames):
+    """Cached audio, paced at about 4x real time after the first half second. Handing LiveKit a whole
+    reply at once blocked its event loop for ~200 ms (transcript sync), which delayed the reply's start."""
+    for index, frame in enumerate(frames):
+        yield frame
+        await asyncio.sleep(0.005 if index >= 25 else 0)
+
+
+async def synthesize_missing(tts, cache: TtsCache, replies: list[str]) -> None:
+    """Fills the reply cache in the background; a reply that is not ready in time is synthesized as usual."""
+    async def one(reply: str) -> None:
+        stream = tts.stream()
+        try:
+            stream.push_text(reply)
+            stream.end_input()
+            cache.put(reply, [event.frame async for event in stream])
+            logger.info("cached reply audio: %r", reply[:40])
+        except Exception as error:  # a missing cache entry only costs the usual synthesis time
+            logger.warning("could not cache %r: %s", reply[:40], error)
+        finally:
+            await stream.aclose()
+
+    await asyncio.gather(*(one(reply) for reply in replies if not cache.has(reply)))
 
 
 def write_wav(path, chunks: list[bytes], sample_rate: int) -> None:
@@ -558,6 +612,9 @@ async def entrypoint(ctx: JobContext) -> None:
             logger.warning("backend warm-up failed: %s", error)
 
     warm_up = asyncio.create_task(warm_backend())
+    # While the phone rings: synthesize the replies of a normal call that are not cached yet.
+    survey_agent.caching = asyncio.create_task(
+        synthesize_missing(session.tts, survey_agent.tts_cache, main_replies()))  # held so it is not collected
     try:
         await ctx.api.sip.create_sip_participant(api.CreateSIPParticipantRequest(
             room_name=ctx.room.name,
