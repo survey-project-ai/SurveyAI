@@ -55,9 +55,31 @@ DECLINED = "Anladım, teşekkür ederim. İyi günler dilerim."
 # noted from the callee's voice over the whole call (gender.py).
 QUESTIONS = [
     ("age", "Kaç yaşındasınız?", "Kaç yaşındasınız?"),
-    ("rating", "Belediye hizmetlerinden ne kadar memnunsunuz? Bir ile beş arasında bir puan verir misiniz?",
-     "Bir ile beş arasında kaç puan verirsiniz?"),
+    ("candidate", "Cumhurbaşkanı adayı olarak kimi görmek istersiniz? Recep Tayyip Erdoğan, Ekrem İmamoğlu ya da "
+     "Mansur Yavaş?", "Recep Tayyip Erdoğan, Ekrem İmamoğlu ve Mansur Yavaş arasından kimi aday olarak görmek istersiniz?"),
 ]
+# Any part of a name counts ("Tayyip", "İmamoğlu'nu"). "Yavaş" alone is also an everyday word ("yavaş
+# konuşun"), so it only counts in a short reply.
+CANDIDATES = {
+    "Recep Tayyip Erdoğan": ("recep", "tayyip", "erdogan", "rte"),
+    "Ekrem İmamoğlu": ("ekrem", "imamoglu", "imam oglu"),
+    "Mansur Yavaş": ("mansur",),
+}
+UNDECIDED = ("kararsizim", "kararsiz", "bilmiyorum", "bilmem", "emin degilim", "fikrim yok", "dusunmedim")
+NONE_OF_THEM = ("hicbiri", "hicbirini", "kimseyi", "hic kimse", "hicbirisi")
+WITHHELD = ("soylemek istemiyorum", "soylemeyeyim", "soylemem", "cevap vermek istemiyorum", "gizli",
+            "kalsin", "sizi ilgilendirmez")
+# Words that are not an answer to "who", so a reply made only of them is not recorded as another name.
+NOT_A_NAME = {"evet", "hayir", "tamam", "peki", "olur", "alo", "efendim", "pardon", "ne", "nasil", "hm", "hmm",
+              "aday", "cumhurbaskani", "bilir", "misiniz", "mi"}
+# "Erdoğan'ı istemiyorum", "İmamoğlu olmasın": a name with one of these is not a choice.
+NEGATIONS = ("istemiyorum", "istemem", "olmasin", "degil", "asla")
+# Trimmed from both ends of another name before it is recorded and read back ("Bence Özgür Özel olsun").
+NAME_PADDING = {"olsun", "isterim", "derim", "diyorum", "valla", "vallahi", "bence", "tabii", "tabi", "ee", "eee",
+                "yani", "sey", "herhalde", "olabilir", "bey", "hanim"}
+# Ending the survey. A bare "istemiyorum" only counts before the questions: during them it is usually
+# about the question ("söylemek istemiyorum") or a candidate ("Erdoğan'ı istemiyorum").
+STOP_SURVEY = ("rahatsiz etmeyin", "aramayin", "ilgilenmiyorum", "anket istemiyorum", "devam etmek istemiyorum")
 # Short sounds that arrive before the agent's reply has been played cannot answer the next question; the
 # recognizer also produced a phantom "Evet." from near-silence in the first test call.
 FILLERS = {"", "evet", "tamam", "hi", "hm", "hmm", "ee", "eee", "aha", "alo", "efendim", "he", "hi hi"}
@@ -123,7 +145,7 @@ class SurveyFlow:
         if self.step == "greeting":
             self.step = "consent"
             return OPENING, False
-        if has_any(text, "istemiyorum", "rahatsiz etmeyin", "aramayin", "ilgilenmiyorum"):
+        if has_any(text, *STOP_SURVEY) or (self.step == "consent" and has_any(text, "istemiyorum")):
             self.step = "done"
             return DECLINED, True
         if has_any(text, "kimsiniz", "kim ariyor", "nereden ariyorsunuz", "siz kimsiniz"):
@@ -141,27 +163,72 @@ class SurveyFlow:
         code = self.questions[self.question_index][0]
         if has_any(text, "neden", "niye", "nicin", "belli degil mi", "ne gerek var"):
             return REASON + " " + self.current_question(), False
-        if has_any(text, "tekrar", "anlamadim", "ne dediniz", "efendim"):
+        if has_any(text, "tekrar", "anlamadim", "ne dediniz", "efendim", "pardon", "yavas konusur", "yavas konusun",
+                           "yavas konusabilir", "yavas soyler", "yavas soyleyin"):
             return self.current_question(full=True), False
-        if not self.accepts(code, text):
+        if code == "candidate" and has_any(text, *NEGATIONS) and any(
+                has_any(text, *keys) for keys in CANDIDATES.values()):
+            return "Anladım. Peki " + self.current_question(), False
+        answer = self.interpret(code, raw, text)
+        if answer is None:
             if presence_check:
                 return HEARD + " " + self.current_question(), False
             if previous_reply_missed:
                 return self.current_question(), False
             return UNCLEAR + " " + self.current_question(), False
-        self.answers[code] = raw
+        value, read_back = answer
+        self.answers[code] = value
         self.question_index += 1
+        lead = read_back + " " if read_back else ""
         if self.question_index >= len(self.questions):
             self.step = "done"
-            return CLOSING, True
-        return self.current_question(), False
+            return lead + CLOSING, True
+        return lead + self.current_question(), False
 
     @staticmethod
-    def accepts(code: str, text: str) -> bool:
+    def interpret(code: str, raw: str, text: str) -> tuple[str, str | None] | None:
+        """(value to record, sentence that reads it back or None), or None when the reply is not an answer."""
         if code == "age":
-            return spoken_number(text) is not None
-        number = spoken_number(text)
-        return number is not None and 1 <= number <= 5
+            number = spoken_number(text)
+            return None if number is None else (str(number), None)
+        if code == "candidate":
+            return candidate_answer(raw, text)
+        return None
+
+
+def candidate_answer(raw: str, text: str) -> tuple[str, str | None] | None:
+    words = text.split()
+    named = {name for name, keys in CANDIDATES.items() if has_any(text, *keys)}
+    if "yavas" in words and len(words) <= 3:
+        named.add("Mansur Yavaş")
+    if len(named) == 1:
+        return named.pop(), None
+    if len(named) > 1:
+        return None  # "Erdoğan değil, İmamoğlu": ask again rather than guess
+    if has_any(text, *WITHHELD):
+        return "Cevap vermek istemiyor", None
+    if has_any(text, *NONE_OF_THEM):
+        return "Hiçbiri", None
+    if has_any(text, *UNDECIDED):
+        return "Kararsız", None
+    if 1 <= len(words) <= 5 and not set(words) <= NOT_A_NAME and not raw.rstrip().endswith("?"):
+        # Someone not on the list. Read it back so a misheard name can be corrected.
+        name = other_name(raw)
+        if name:
+            return f"Diğer: {name}", f"{name} olarak not aldım."
+    return None
+
+
+def other_name(raw: str) -> str:
+    """'Bence Özgür Özel'i olsun.' -> 'Özgür Özel'"""
+    words = raw.strip(" .,!?").replace(",", " ").split()
+    while words and normalize(words[0]) in NAME_PADDING:
+        words.pop(0)
+    while words and normalize(words[-1]) in NAME_PADDING:
+        words.pop()
+    if words and "'" in words[-1]:
+        words[-1] = words[-1].split("'")[0]  # case suffix: Özel'i, Davutoğlu'nu
+    return " ".join(words)
 
 
 class TurnRecorder:
