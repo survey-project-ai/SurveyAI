@@ -341,8 +341,8 @@ async def entrypoint(ctx: JobContext) -> None:
             # jump at each new sentence.
             encoding="pcm_16000",
             auto_mode=False,
-            # The ElevenLabs agent's settings for this voice. v4 Turbo goes through the text-to-dialogue API
-            # and ignores similarity_boost and speed.
+            # v4 Turbo goes through the text-to-dialogue API and ignores similarity_boost and speed; a higher
+            # stability barely steadied the pitch (largest 300 ms jump 3.9 -> 3.2 semitones at 1.0).
             voice_settings=elevenlabs.VoiceSettings(stability=0.5, similarity_boost=0.8, speed=1.02),
         ),
         turn_detection="stt",

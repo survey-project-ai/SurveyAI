@@ -27,11 +27,16 @@ Her arama `logs/<oda>.jsonl` dosyasına tur tur kaydedilir.
 
 ## Notlar
 
-- Ses: Gözde Arıkan (ElevenLabs kütüphane sesi). API ile kullanmak için ElevenLabs hesabında kredi gerekir.
+- Ses: Duygu Eris (ElevenLabs kütüphane sesi), model `eleven_v4_turbo`. API ile kullanmak için ElevenLabs
+  hesabında kredi gerekir. Gözde cümle içinde ses perdesini çok oynatıyordu; dinleme testinde Duygu seçildi.
+- Ses yüksekliği: `leveler.py` ajanın sesini telefona gitmeden önce dengeler (v4 Turbo kısık ve dalgalı
+  geliyordu). Arkada hafif ofis sesi çalar (`PROTOTYPE_AMBIENT_VOLUME`, 0 kapatır).
 - Konuşma tanıma: ElevenLabs Scribe v2 realtime, 0,5 sn sessizlikte cümleyi kesinleştirir (server VAD).
-- Cinsiyet: kişinin "Alo" ve onay cevabından ses modeliyle tahmin edilir (`gender.py`). Güven 0,85'in
-  altındaysa soru sorulur. Ses perdesine dayalı yöntem telefon sesinde çalışmadığı için kullanılmıyor.
+- Cinsiyet hiç sorulmaz: kişinin her konuşma turu ses modeliyle puanlanır, görüşme sonunda konuşma
+  süresine göre ağırlıklı ortalama 0,8'in üstündeyse kaydedilir, değilse "belirsiz" (`gender.py`).
+- Ajanın gönderdiği ses her arama için `logs/<oda>.agent.wav` dosyasına yazılır.
 - Ses: sıkıştırılmamış PCM ve cevap başına tek parça üretim (`auto_mode=False`); eklentinin varsayılanı
   32 kbps MP3 ve cümle cümle üretimdi, ses yüksekliği cümleler arasında dalgalanıyordu.
-- `common.py` isim çözümlemeyi IPv4'e zorlar: geliştirme makinesinde IPv6 DNS sunucuları cevap vermediği
-  için her sorgu 12 sn bekliyordu.
+- DNS: geliştirme makinesinde modemin IPv6 DNS'i cevap vermiyordu. Python tarafı için `common.py` isim
+  çözümlemeyi IPv4'e zorlar; LiveKit'in ses bağlantısı (Rust) bundan etkilenmez ve 24 sn gecikip hiç ses
+  taşımamıştı. Çözüm Windows'ta Wi-Fi DNS'ini çalışan sunuculara ayarlamaktı.
