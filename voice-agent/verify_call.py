@@ -11,13 +11,24 @@ logs/<room>.callee.wav, transcribed again by CHECK_MODELS, and read with the sam
 - "kaçırılan cevap": nothing was recorded in the call, but a check heard an answer
 - "cevap yok": no answer either way; the checks' text shows what was said
 
+Each question then gets its final answer in logs/<room>.final.json:
+- the call's value when the checks confirm it; REVIEW_SAMPLE of these still go to a person, so the
+  system's real accuracy can be measured over time
+- the checks' value when both agree on a valid answer that differs from the call ("otomatik düzeltme");
+  the call's value is kept next to it
+- otherwise the call's value (or none) waiting for a person who listens to the clip
+
+With skip logic a corrected answer may mean the callee was asked the wrong follow-up questions, so such
+questions should always go to a person; this survey has none.
+
 agent.py starts this when a call ends; it can also be run by hand: python verify_call.py <room>
-Writes logs/<room>.verified.json.
+Writes logs/<room>.verified.json (every reply) and logs/<room>.final.json (every question).
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import random
 import sys
 import time
 import wave
@@ -36,6 +47,7 @@ from agent import SurveyFlow, normalize  # noqa: E402
 
 # Linden-1 got every key answer of the recorded test calls right; Gemini is the second opinion.
 CHECK_MODELS = ["speechmatics/linden-1", "google/gemini-3.5-transcribe-live"]
+REVIEW_SAMPLE = 0.05
 RATE = 16000
 CHUNK_SECONDS = 0.02
 
@@ -110,6 +122,33 @@ def verdict(recorded: str | None, checked: list[str | None]) -> tuple[str, str |
     return "kontrol edilecek", None
 
 
+def final_answers(room: str, results: list[dict]) -> dict[str, dict]:
+    sample = random.Random(room)  # the same call always draws the same sample
+    final: dict[str, dict] = {}
+    for question in dict.fromkeys(entry["question"] for entry in results):
+        entries = [entry for entry in results if entry["question"] == question]
+        answered = [entry for entry in entries if entry["recorded"] is not None]
+        if answered:
+            entry = answered[-1]
+            if entry["status"] == "doğrulandı":
+                review = "rastgele kontrol" if sample.random() < REVIEW_SAMPLE else None
+                final[question] = {"value": entry["recorded"], "source": "görüşme", "review": review}
+            elif entry["status"] == "düzeltme önerisi":
+                final[question] = {"value": entry["suggested"], "in_call": entry["recorded"],
+                                   "source": "otomatik düzeltme", "review": None}
+            else:
+                final[question] = {"value": entry["recorded"], "source": "görüşme",
+                                   "review": "kontrol modelleri farklı duydu"}
+            continue
+        missed = [entry for entry in entries if entry["status"] == "kaçırılan cevap"]
+        if missed:
+            final[question] = {"value": None, "suggested": missed[-1]["suggested"], "source": None,
+                               "review": "görüşmede kaydedilmedi, kayıtta cevap var"}
+        else:
+            final[question] = {"value": None, "source": None, "review": None}
+    return final
+
+
 async def main(room: str) -> None:
     started = time.time()
     audio = load_callee(room)
@@ -141,10 +180,15 @@ async def main(room: str) -> None:
                 entry["suggested"] = suggested
             results.append(entry)
     (LOG_DIR / f"{room}.verified.json").write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
+    final = final_answers(room, results)
+    (LOG_DIR / f"{room}.final.json").write_text(json.dumps(final, ensure_ascii=False, indent=1), encoding="utf-8")
     for entry in results:
         checks = "; ".join(f"{model.split('/')[0]}: {c['text']!r}" for model, c in entry["checks"].items())
         print(f"{entry['status']:17} {entry['question']:9} call: {entry['in_call_text']!r} -> {entry['recorded']!r}"
               f"{'  suggested: ' + repr(entry['suggested']) if 'suggested' in entry else ''}  [{checks}]")
+    for question, answer in final.items():
+        print(f"final {question:9} {answer['value']!r:30} {answer['source'] or '':17} "
+              f"{'-> review: ' + answer['review'] if answer['review'] else ''}")
     print(f"checked {len(results)} answers in {time.time() - started:.1f}s")
 
 
