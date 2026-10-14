@@ -59,14 +59,25 @@ QUESTIONS = [
      "Mansur Yavaş?", "Recep Tayyip Erdoğan, Ekrem İmamoğlu ve Mansur Yavaş arasından kimi aday olarak görmek istersiniz?"),
 ]
 # Any part of a name counts ("Tayyip", "İmamoğlu'nu"). "Yavaş" alone is also an everyday word ("yavaş
-# konuşun"), so it only counts in a short reply.
+# konuşun"), so it only counts in a short reply. Listed in the order the question reads them out.
 CANDIDATES = {
     "Recep Tayyip Erdoğan": ("recep", "tayyip", "erdogan", "rte"),
     "Ekrem İmamoğlu": ("ekrem", "imamoglu", "imam oglu"),
     "Mansur Yavaş": ("mansur",),
 }
+# Hints for speech recognition (Scribe realtime: up to 50 terms of up to 20 characters). It once wrote
+# "Hiçbiri" as "Bir, iki, üç."
+KEYTERMS = ["Recep Tayyip Erdoğan", "Erdoğan", "Ekrem İmamoğlu", "İmamoğlu", "Mansur Yavaş", "Hiçbiri",
+            "Hiçbirini", "Kararsızım"]
+# "İkincisi", "sonuncusu": a choice by the order the names were read out.
+ORDINALS = {"birinci": 0, "birincisi": 0, "ilki": 0, "ikinci": 1, "ikincisi": 1, "ucuncu": 2, "ucuncusu": 2,
+            "sonuncu": 2, "sonuncusu": 2}
+# Replies to "X olarak not alıyorum, doğru mu?"
+CONFIRM_YES = ("evet", "dogru", "aynen", "tamam", "oyle", "evet dogru")
+CONFIRM_NO = ("hayir", "yanlis", "degil", "oyle degil", "yok")
 UNDECIDED = ("kararsizim", "kararsiz", "bilmiyorum", "bilmem", "emin degilim", "fikrim yok", "dusunmedim")
-NONE_OF_THEM = ("hicbiri", "hicbirini", "kimseyi", "hic kimse", "hicbirisi")
+NONE_OF_THEM = ("hicbiri", "hicbirini", "hicbirisi", "hicbire", "hicbirine", "hic biri", "hic birini", "kimseyi",
+                "hic kimse")  # Scribe wrote "Eee, hiçbiri" as "hiçbire"
 WITHHELD = ("soylemek istemiyorum", "soylemeyeyim", "soylemem", "cevap vermek istemiyorum", "gizli",
             "kalsin", "sizi ilgilendirmez")
 # Words that are not an answer to "who", so a reply made only of them is not recorded as another name.
@@ -76,7 +87,7 @@ NOT_A_NAME = {"evet", "hayir", "tamam", "peki", "olur", "alo", "efendim", "pardo
 NEGATIONS = ("istemiyorum", "istemem", "olmasin", "degil", "asla")
 # Trimmed from both ends of another name before it is recorded and read back ("Bence Özgür Özel olsun").
 NAME_PADDING = {"olsun", "isterim", "derim", "diyorum", "valla", "vallahi", "bence", "tabii", "tabi", "ee", "eee",
-                "yani", "sey", "herhalde", "olabilir", "bey", "hanim"}
+                "yani", "sey", "herhalde", "olabilir", "bey", "hanim", "hayir", "evet"}
 # Ending the survey. A bare "istemiyorum" only counts before the questions: during them it is usually
 # about the question ("söylemek istemiyorum") or a candidate ("Erdoğan'ı istemiyorum").
 STOP_SURVEY = ("rahatsiz etmeyin", "aramayin", "ilgilenmiyorum", "anket istemiyorum", "devam etmek istemiyorum")
@@ -129,6 +140,8 @@ class SurveyFlow:
         self.question_index = 0
         self.asked: set[str] = set()
         self.answers: dict[str, str] = {}
+        # (question code, value) of an answer read back to the callee and waiting for "doğru mu?"
+        self.confirming: tuple[str, str] | None = None
 
     def current_question(self, full: bool = False) -> str:
         """The question in full the first time (or when asked to repeat it), the short form after that."""
@@ -161,6 +174,18 @@ class SurveyFlow:
                 return OPENING, False
             return "Kısaca onayınızı rica edeceğim. " + CONSENT_QUESTION, False
         code = self.questions[self.question_index][0]
+        if self.confirming is not None:
+            confirm_code, value = self.confirming
+            self.confirming = None
+            if has_any(text, *CONFIRM_NO):
+                # "Hayır, hiçbiri" carries the right answer; a bare "Hayır" gets the question again.
+                answer = self.interpret(code, raw, text)
+                if answer is None:
+                    return "Peki. " + self.current_question(), False
+                return self._take(code, *answer)
+            if has_any(text, *CONFIRM_YES):
+                return self._take(confirm_code, value, False)
+            # Anything else is taken as a new answer to the question.
         if has_any(text, "neden", "niye", "nicin", "belli degil mi", "ne gerek var"):
             return REASON + " " + self.current_question(), False
         if has_any(text, "tekrar", "anlamadim", "ne dediniz", "efendim", "pardon", "yavas konusur", "yavas konusun",
@@ -176,46 +201,58 @@ class SurveyFlow:
             if previous_reply_missed:
                 return self.current_question(), False
             return UNCLEAR + " " + self.current_question(), False
-        value, read_back = answer
+        return self._take(code, *answer)
+
+    def _take(self, code: str, value: str, confirm: bool) -> tuple[str, bool]:
+        if confirm:
+            # A name not on the list may be misheard (once "Hiçbiri" came out as "Bir, iki, üç"), so the
+            # callee hears it back and can correct it before the call moves on.
+            self.confirming = (code, value)
+            return f"{value.removeprefix('Diğer: ')} olarak not alıyorum, doğru mu?", False
         self.answers[code] = value
         self.question_index += 1
-        lead = read_back + " " if read_back else ""
         if self.question_index >= len(self.questions):
             self.step = "done"
-            return lead + CLOSING, True
-        return lead + self.current_question(), False
+            return CLOSING, True
+        return self.current_question(), False
 
     @staticmethod
-    def interpret(code: str, raw: str, text: str) -> tuple[str, str | None] | None:
-        """(value to record, sentence that reads it back or None), or None when the reply is not an answer."""
+    def interpret(code: str, raw: str, text: str) -> tuple[str, bool] | None:
+        """(value to record, whether to read it back for confirmation), or None when it is not an answer."""
         if code == "age":
             number = spoken_number(text)
-            return None if number is None else (str(number), None)
+            return None if number is None else (str(number), False)
         if code == "candidate":
             return candidate_answer(raw, text)
         return None
 
 
-def candidate_answer(raw: str, text: str) -> tuple[str, str | None] | None:
+def candidate_answer(raw: str, text: str) -> tuple[str, bool] | None:
     words = text.split()
     named = {name for name, keys in CANDIDATES.items() if has_any(text, *keys)}
     if "yavas" in words and len(words) <= 3:
         named.add("Mansur Yavaş")
     if len(named) == 1:
-        return named.pop(), None
+        return named.pop(), False
     if len(named) > 1:
         return None  # "Erdoğan değil, İmamoğlu": ask again rather than guess
+    picked = {ORDINALS[word] for word in words if word in ORDINALS}
+    if len(picked) == 1:
+        return list(CANDIDATES)[picked.pop()], False
     if has_any(text, *WITHHELD):
-        return "Cevap vermek istemiyor", None
+        return "Cevap vermek istemiyor", False
     if has_any(text, *NONE_OF_THEM):
-        return "Hiçbiri", None
+        return "Hiçbiri", False
     if has_any(text, *UNDECIDED):
-        return "Kararsız", None
+        return "Kararsız", False
+    # Numbers are not a name. A bare "üç" might mean the third name, but the question is asked again
+    # rather than guessed.
+    if spoken_number(text) is not None:
+        return None
     if 1 <= len(words) <= 5 and not set(words) <= NOT_A_NAME and not raw.rstrip().endswith("?"):
-        # Someone not on the list. Read it back so a misheard name can be corrected.
         name = other_name(raw)
         if name:
-            return f"Diğer: {name}", f"{name} olarak not aldım."
+            return f"Diğer: {name}", True  # someone not on the list, read back for confirmation
     return None
 
 
@@ -343,7 +380,8 @@ class SurveyAgent(Agent):
 
     async def on_user_turn_completed(self, turn_ctx, new_message) -> None:
         user_text = new_message.text_content or ""
-        if self.last_reply is not None and not self.last_reply.done() and normalize(user_text) in FILLERS:
+        if (self.last_reply is not None and not self.last_reply.done() and normalize(user_text) in FILLERS
+                and self.flow.confirming is None):
             logger.info("ignoring %r: the previous reply has not been played yet", user_text)
             raise StopResponse()
         if self.flow.step != "greeting" and is_hesitation(user_text):
@@ -402,7 +440,8 @@ async def entrypoint(ctx: JobContext) -> None:
         # Scribe realtime only finalizes a transcript on a commit; with server VAD it commits after
         # 0.5 s of silence, and that commit ends the user's turn.
         stt=elevenlabs.STT(model=STT_MODEL, language_code="tr",
-                           server_vad=elevenlabs.stt.VADOptions(vad_silence_threshold_secs=0.5)),
+                           server_vad=elevenlabs.stt.VADOptions(vad_silence_threshold_secs=0.5),
+                           keyterms=KEYTERMS),
         tts=elevenlabs.TTS(
             voice_id=VOICE_ID,
             model=TTS_MODEL,
