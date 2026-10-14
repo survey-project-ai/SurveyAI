@@ -15,6 +15,7 @@ import unicodedata
 import wave
 
 import aiohttp
+import numpy as np
 from livekit import api
 from livekit.agents import (
     Agent,
@@ -341,17 +342,35 @@ class SurveyAgent(Agent):
         # What the agent sent to the line, one reply after another, written to logs/ when the call ends.
         self.sent_audio: list[bytes] = []
         self.sent_sample_rate = 16000
+        # The callee's side as it reached speech recognition, in real time, to check transcripts against.
+        self.heard_audio: list[bytes] = []
+        self.heard_sample_rate = 16000
+        self.heard_started_at: float | None = None
         self.last_reply = None
 
     async def stt_node(self, audio, model_settings):
-        # The callee's audio also goes to the gender detector.
+        # The callee's audio also goes to the gender detector and the recording.
         async def tee():
             async for frame in audio:
                 self.gender.push_frame(frame)
+                self._keep_heard(frame)
                 yield frame
 
         async for event in Agent.default.stt_node(self, tee(), model_settings):
             yield event
+
+    def _keep_heard(self, frame) -> None:
+        if self.heard_started_at is None:
+            self.heard_started_at = time.time()
+            self.heard_sample_rate = frame.sample_rate
+        samples = np.frombuffer(frame.data, dtype=np.int16)
+        if frame.num_channels > 1:
+            samples = samples[::frame.num_channels]
+        self.heard_audio.append(samples.tobytes())
+
+    def heard_offset(self) -> float | None:
+        """Seconds into the callee recording, so a transcript can be found in it."""
+        return None if self.heard_started_at is None else round(time.time() - self.heard_started_at, 1)
 
     def _last_reply_missed(self) -> bool:
         """True when the previous reply was interrupted before most of it was played."""
@@ -371,12 +390,9 @@ class SurveyAgent(Agent):
             yield levelled
         self.sent_audio.append(bytes(int(self.sent_sample_rate * 0.5) * 2))  # half a second between replies
 
-    def save_sent_audio(self, path) -> None:
-        with wave.open(str(path), "wb") as handle:
-            handle.setnchannels(1)
-            handle.setsampwidth(2)
-            handle.setframerate(self.sent_sample_rate)
-            handle.writeframes(b"".join(self.sent_audio))
+    def save_audio(self, room_name: str) -> None:
+        write_wav(LOG_DIR / f"{room_name}.agent.wav", self.sent_audio, self.sent_sample_rate)
+        write_wav(LOG_DIR / f"{room_name}.callee.wav", self.heard_audio, self.heard_sample_rate)
 
     async def on_user_turn_completed(self, turn_ctx, new_message) -> None:
         user_text = new_message.text_content or ""
@@ -388,6 +404,7 @@ class SurveyAgent(Agent):
             logger.info("ignoring %r: the callee is thinking", user_text)
             raise StopResponse()
         turn = self.recorder.start_turn(self.flow.step, user_text)
+        turn["heard_at_s"] = self.heard_offset()
         started = time.time()
         # Stands in for the backend /answer round trip: same host, same network path.
         backend_started = time.time()
@@ -413,6 +430,14 @@ class SurveyAgent(Agent):
         if end_call:
             asyncio.create_task(self.hang_up(speech))
         raise StopResponse()
+
+
+def write_wav(path, chunks: list[bytes], sample_rate: int) -> None:
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(sample_rate)
+        handle.writeframes(b"".join(chunks))
 
 
 def prewarm(proc: JobProcess) -> None:
@@ -494,7 +519,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
     async def finish_call() -> None:
         await http.close()
-        survey_agent.save_sent_audio(LOG_DIR / f"{ctx.room.name}.agent.wav")
+        survey_agent.save_audio(ctx.room.name)
         decision = await gender.decide(timeout=2.0)
         flow.answers["gender"] = f"{decision.label or 'belirsiz'} (sesten)"
         logger.info("call finished: %d turns, answers=%s, gender=%s, scores=%s", len(recorder.turns), flow.answers,
