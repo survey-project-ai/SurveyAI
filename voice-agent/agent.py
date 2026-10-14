@@ -10,9 +10,12 @@ import faulthandler
 import json
 import logging
 import re
+import subprocess
+import sys
 import time
 import unicodedata
 import wave
+from pathlib import Path
 
 import aiohttp
 import numpy as np
@@ -396,6 +399,10 @@ class SurveyAgent(Agent):
         self.heard_sample_rate = 16000
         self.heard_started_at: float | None = None
         self.heard_peak = 0.0
+        # Every reply to a survey question, for the check after the call (verify_call.py). Kept apart from
+        # the turn log, which is written when the reply starts playing and so misses interrupted replies.
+        self.answer_turns: list[dict] = []
+        self.previous_heard_at: float | None = None
         self.last_voice_at: float | None = None  # wall time of the callee's last loud audio frame
         self.last_reply = None
 
@@ -463,6 +470,11 @@ class SurveyAgent(Agent):
         # Only a reply synthesized to the end is kept; an interrupted one stops at the yield above.
         self.tts_cache.put(reply, frames)
 
+    def save_answer_turns(self, room_name: str) -> None:
+        with (LOG_DIR / f"{room_name}.answers.jsonl").open("w", encoding="utf-8") as handle:
+            for entry in self.answer_turns:
+                handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
     def save_audio(self, room_name: str) -> None:
         write_wav(LOG_DIR / f"{room_name}.agent.wav", self.sent_audio, self.sent_sample_rate)
         write_wav(LOG_DIR / f"{room_name}.callee.wav", self.heard_audio, self.heard_sample_rate)
@@ -478,6 +490,8 @@ class SurveyAgent(Agent):
             raise StopResponse()
         turn = self.recorder.start_turn(self.flow.step, user_text, self.last_voice_at)
         turn["heard_at_s"] = self.heard_offset()
+        question = self.flow.questions[self.flow.question_index][0] if self.flow.step == "questions" else None
+        answers_before = dict(self.flow.answers)
         started = time.time()
         # Stands in for the backend /answer round trip: same host, same network path.
         backend_started = time.time()
@@ -493,6 +507,16 @@ class SurveyAgent(Agent):
         if missed:
             turn["previous_reply_missed"] = True
         reply, end_call = self.flow.handle(user_text, previous_reply_missed=missed)
+        if question is not None:
+            recorded = self.flow.answers.get(question)
+            self.answer_turns.append({
+                "question": question,
+                "heard_at_s": turn["heard_at_s"],
+                "previous_heard_at_s": self.previous_heard_at,
+                "text": user_text,
+                "recorded": recorded if recorded != answers_before.get(question) else None,
+            })
+        self.previous_heard_at = turn["heard_at_s"]
         turn["handler_ms"] = round((time.time() - started) * 1000)
         turn["reply"] = reply
         # The opening is said in full even if the callee says "Alo?" again over it, as a person would; in the
@@ -528,6 +552,15 @@ async def synthesize_missing(tts, cache: TtsCache, replies: list[str]) -> None:
             await stream.aclose()
 
     await asyncio.gather(*(one(reply) for reply in replies if not cache.has(reply)))
+
+
+def start_verification(room_name: str) -> None:
+    """Runs verify_call.py for this call in its own process, so the job can end meanwhile."""
+    script = Path(__file__).resolve().with_name("verify_call.py")
+    log = (LOG_DIR / f"{room_name}.verify.log").open("w", encoding="utf-8")
+    flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
+    subprocess.Popen([sys.executable, str(script), room_name], stdout=log, stderr=subprocess.STDOUT,
+                     cwd=str(script.parent), creationflags=flags)
 
 
 def write_wav(path, chunks: list[bytes], sample_rate: int) -> None:
@@ -629,6 +662,8 @@ async def entrypoint(ctx: JobContext) -> None:
     async def finish_call() -> None:
         await http.close()
         survey_agent.save_audio(ctx.room.name)
+        survey_agent.save_answer_turns(ctx.room.name)
+        start_verification(ctx.room.name)
         decision = await gender.decide(timeout=2.0)
         flow.answers["gender"] = f"{decision.label or 'belirsiz'} (sesten)"
         logger.info("call finished: %d turns, answers=%s, gender=%s, scores=%s", len(recorder.turns), flow.answers,
