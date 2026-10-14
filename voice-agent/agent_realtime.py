@@ -46,6 +46,7 @@ DEFAULT_MODEL = "openai/gpt-realtime-2.1-mini"
 
 OPENING = "Merhaba, ben Ayna Araştırma adına kısa bir anket için arıyorum. Size birkaç soru sorabilir miyim?"
 AGE_QUESTION = "Kaç yaşındasınız?"
+RATING_QUESTION = "Belediye hizmetlerinden ne kadar memnunsunuz? Bir ile beş arasında bir puan verir misiniz?"
 CANDIDATE_QUESTION = ("Cumhurbaşkanı adayı olarak kimi görmek istersiniz? Recep Tayyip Erdoğan, Ekrem İmamoğlu ya da "
                       "Mansur Yavaş?")
 CLOSING = "Vakit ayırdığınız için teşekkür ederim. Anketimiz burada sona erdi. İyi günler dilerim."
@@ -58,8 +59,10 @@ Görüşmenin akışı:
 2. Kabul ederse "Teşekkür ederim." de ve aynen şunu sor: "{AGE_QUESTION}". Kabul etmezse kibarca teşekkür
    edip vedalaş ve gorusmeyi_bitir aracını çağır.
 3. Yaşını söyleyince cevap_kaydet(soru="yas", cevap=<yaş, rakamla>) aracını çağır, sonra aynen şunu sor:
-   "{CANDIDATE_QUESTION}"
-4. Cevabı cevap_kaydet(soru="aday", cevap=...) ile kaydet:
+   "{RATING_QUESTION}"
+   Puanı (1-5, rakamla) cevap_kaydet(soru="belediye", cevap=...) ile kaydet; bilmiyorsa "Bilmiyor", söylemek
+   istemiyorsa "Cevap vermek istemiyor". Sonra aynen şunu sor: "{CANDIDATE_QUESTION}"
+4. Aday cevabını cevap_kaydet(soru="aday", cevap=...) ile kaydet:
    - İsmin bir kısmı yeterli: "Tayyip" ya da "Erdoğan" -> "Recep Tayyip Erdoğan"; "Ekrem" -> "Ekrem İmamoğlu";
      "Mansur" ya da "Yavaş" -> "Mansur Yavaş".
    - Listede olmayan biri söylenirse ismi tekrar edip doğru anladığını teyit et, sonra "Diğer: <isim>" kaydet.
@@ -90,7 +93,7 @@ class RealtimeSurveyAgent(Agent):
         """Bir anket cevabını kaydeder.
 
         Args:
-            soru: "yas" ya da "aday".
+            soru: "yas", "belediye" ya da "aday".
             cevap: kaydedilecek değer.
         """
         self.answers[soru] = cevap

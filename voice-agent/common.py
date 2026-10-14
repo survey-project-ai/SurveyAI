@@ -27,10 +27,10 @@ LOG_DIR = HERE / "logs"
 AGENT_NAME = "survey-prototype"
 CALLER_NUMBER = "+903229110347"
 SIP_ADDRESS = "sip.netgsm.com.tr"
-# Duygu Eris (a library voice; needs API credits). Gözde Arıkan, the ElevenLabs agent's voice, swung its
-# pitch a lot within sentences and the user picked Duygu in a listening test of the survey lines.
-# PROTOTYPE_VOICE_ID overrides it.
-VOICE_ID = os.environ.get("PROTOTYPE_VOICE_ID", "MzfWWOj9g3sIKex1YFMV")
+# Gökçe Deniz (a library voice; needs API credits), picked by the user from 8 voices reading the survey
+# lines. Before: Duygu Eris (MzfWWOj9g3sIKex1YFMV), and Gözde Arıkan, the ElevenLabs agent's voice, which
+# swung its pitch a lot within sentences. PROTOTYPE_VOICE_ID overrides it.
+VOICE_ID = os.environ.get("PROTOTYPE_VOICE_ID", "oPC5I9GKjMReiaM29gjY")
 # v4 Turbo sounded more natural than Flash v2.5 in a listening test and started faster (0.34 s vs 0.66 s).
 TTS_MODEL = os.environ.get("PROTOTYPE_TTS_MODEL", "eleven_v4_turbo")
 # Office ambience under the call, 0 turns it off; the player multiplies and clips, so values above 1 work.

@@ -27,11 +27,17 @@ Her arama `logs/<oda>.jsonl` dosyasına tur tur kaydedilir.
 
 ## Notlar
 
-- Ses: Duygu Eris (ElevenLabs kütüphane sesi), model `eleven_v4_turbo`. API ile kullanmak için ElevenLabs
-  hesabında kredi gerekir. Gözde cümle içinde ses perdesini çok oynatıyordu; dinleme testinde Duygu seçildi.
+- Ses: Gökçe Deniz (ElevenLabs kütüphane sesi), model `eleven_v4_turbo`. API ile kullanmak için ElevenLabs
+  hesabında kredi gerekir. Gözde cümle içinde ses perdesini çok oynatıyordu; sonra Duygu, 8 sesin
+  dinlendiği testten sonra Gökçe Deniz seçildi. Ajanın cümleleri `cache/tts/` altında saklanır; ilk aramada
+  telefon çalarken üretilir.
 - Ses yüksekliği: `leveler.py` ajanın sesini telefona gitmeden önce dengeler (v4 Turbo kısık ve dalgalı
   geliyordu). Arkada hafif ofis sesi çalar (`PROTOTYPE_AMBIENT_VOLUME`, 0 kapatır).
-- Konuşma tanıma: ElevenLabs Scribe v2 realtime, 0,5 sn sessizlikte cümleyi kesinleştirir (server VAD).
+- Konuşma tanıma: Speechmatics Linden-1 (LiveKit Inference üzerinden). Test aramalarının kayıtlarındaki 15
+  önemli cevabın hepsini doğru anladı; önceki ElevenLabs Scribe v2 realtime 13'ünü
+  (`PROTOTYPE_STT_MODEL=scribe_v2_realtime` ile geri dönülür).
+- `agent_realtime.py`: aynı anket OpenAI'nin konuşan modeliyle (`python call.py <numara> openai/gpt-realtime-2.1-mini`).
+  Bir test aramasında turlar 2–7 sn sürdü ve model metne kendi cümlelerini ekledi; karşılaştırma için duruyor.
 - Cinsiyet hiç sorulmaz: kişinin her konuşma turu ses modeliyle puanlanır, görüşme sonunda konuşma
   süresine göre ağırlıklı ortalama 0,8'in üstündeyse kaydedilir, değilse "belirsiz" (`gender.py`).
 - Ajanın gönderdiği ses her arama için `logs/<oda>.agent.wav` dosyasına yazılır.

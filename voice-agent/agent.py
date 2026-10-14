@@ -58,6 +58,9 @@ DECLINED = "Anladım, teşekkür ederim. İyi günler dilerim."
 # noted from the callee's voice over the whole call (gender.py).
 QUESTIONS = [
     ("age", "Kaç yaşındasınız?", "Kaç yaşındasınız?"),
+    ("rating", "Belediye hizmetlerinden ne kadar memnunsunuz? Bir ile beş arasında bir puan verir misiniz?",
+     "Bir ile beş arasında kaç puan verirsiniz?"),
+    # The political question comes last.
     ("candidate", "Cumhurbaşkanı adayı olarak kimi görmek istersiniz? Recep Tayyip Erdoğan, Ekrem İmamoğlu ya da "
      "Mansur Yavaş?", "Recep Tayyip Erdoğan, Ekrem İmamoğlu ve Mansur Yavaş arasından kimi aday olarak görmek istersiniz?"),
 ]
@@ -233,6 +236,13 @@ class SurveyFlow:
         if code == "age":
             number = spoken_number(text)
             return None if number is None else (str(number), False)
+        if code == "rating":
+            if has_any(text, *WITHHELD):
+                return "Cevap vermek istemiyor", False
+            if has_any(text, *UNDECIDED):
+                return "Bilmiyor", False
+            number = spoken_number(text)
+            return (str(number), False) if number is not None and 1 <= number <= 5 else None
         if code == "candidate":
             return candidate_answer(raw, text)
         return None
