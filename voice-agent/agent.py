@@ -84,7 +84,9 @@ WITHHELD = ("soylemek istemiyorum", "soylemeyeyim", "soylemem", "cevap vermek is
             "kalsin", "sizi ilgilendirmez")
 # Words that are not an answer to "who", so a reply made only of them is not recorded as another name.
 NOT_A_NAME = {"evet", "hayir", "tamam", "peki", "olur", "alo", "efendim", "pardon", "ne", "nasil", "hm", "hmm",
-              "aday", "cumhurbaskani", "bilir", "misiniz", "mi"}
+              "aday", "cumhurbaskani", "bilir", "misiniz", "mi",
+              # courtesy, once recognised in place of "Hiçbiri" and read back as a name
+              "tesekkurler", "tesekkur", "ederim", "sag", "olun", "sagolun", "rica"}
 # "Erdoğan'ı istemiyorum", "İmamoğlu olmasın": a name with one of these is not a choice.
 NEGATIONS = ("istemiyorum", "istemem", "olmasin", "degil", "asla")
 # Trimmed from both ends of another name before it is recorded and read back ("Bence Özgür Özel olsun").
