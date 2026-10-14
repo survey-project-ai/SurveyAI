@@ -80,6 +80,16 @@ Başarı ölçütleri (aynı senaryo, en az 20 tur):
 
 ### Aşama 0 sonuçları (13 Ekim 2026)
 
+> **Düzeltme (14 Ekim 2026): aşağıdaki süreler yanlış ölçüldü.** Ölçüm, kişinin konuşmasının bittiği andan değil, LiveKit'in konuşma bitti olayından başlıyordu ve bu olay yaklaşık 1 sn geç geliyor. Konuşmacı tarafının ses kaydıyla yapılan ölçümde (3 kişi, 13 tur) konuşmanın bitişinden agent sesine **1,6–1,9 sn** (ortalama ~1,7 sn) geçti; başarı ölçütü (medyan ≤ 0,9 sn) **karşılanmadı**. Dağılım:
+>
+> | Adım | Süre |
+> |---|---|
+> | Konuşma bitişi → Scribe kesin metni (0,5 sn sessizlik eşiği + tanıma) | ~0,9 sn |
+> | Kesin metin → LiveKit turu kabul (varsayılan 0,5 sn bekleme; Scribe zaten beklediği için gereksiz) | 0,48–0,51 sn |
+> | Tur → agent sesi (backend ~0,08 sn + TTS ilk ses ~0,15 sn) | 0,21–0,24 sn |
+>
+> İkinci bekleme kaldırıldı (`endpointing.min_delay = 0`): sonraki aramada 4 turda **1,24–1,39 sn** (konuşma bitişi → tur ~1,0 sn, tur → ses ~0,23 sn), kayıttan bağımsız ölçümle doğrulandı. ElevenLabs agent'ı aynı yöntemle, kendi görüşme kaydından ölçüldü: 4 turda 1,38–1,78 sn (ortalama ~1,5; dil modelinin hatalı davrandığı ilk test araması, iki tarafın karışık kaydı). Prototip artık gecikmeyi konuşmacı kaydındaki son konuşma anından ölçüyor (`latency`); eski ölçüm `latency_after_vad` olarak duruyor.
+
 Prototip (`voice-agent/`): LiveKit Cloud "Germany 2" bölgesi, Netgsm giden SIP hattı, ElevenLabs Scribe v2 realtime (0,5 sn sessizlikte kesinleştirme), ElevenLabs Flash v2.5 ve Gözde sesi (ElevenLabs agent'ıyla aynı ses ve ayarlar), dil modeli yok. Agent geliştirme makinesinde (Türkiye) çalıştı; backend yerine backend'in sağlık uç noktası çağrıldı.
 
 | Tur | Konuşmanın bitişinden agent sesine |

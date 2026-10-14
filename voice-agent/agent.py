@@ -270,7 +270,12 @@ def other_name(raw: str) -> str:
 
 
 class TurnRecorder:
-    """Collects per-turn timings: callee stops speaking -> agent audio starts."""
+    """Collects per-turn timings: callee stops speaking -> agent audio starts.
+
+    "latency" runs from the last loud frame of the callee's audio. LiveKit's own end-of-speech event
+    ("latency_after_vad") comes about a second later: in the 2026-10-14 calls it logged 0.7 s for turns
+    that took 1.6-1.9 s from the end of speech in the recording.
+    """
 
     def __init__(self, room_name: str) -> None:
         LOG_DIR.mkdir(exist_ok=True)
@@ -283,8 +288,9 @@ class TurnRecorder:
         if new_state == "listening":
             self.user_stopped_at = at
 
-    def start_turn(self, step: str, user_text: str) -> dict:
-        self.pending = {"step": step, "user_text": user_text, "user_stopped_at": self.user_stopped_at}
+    def start_turn(self, step: str, user_text: str, speech_end_at: float | None) -> dict:
+        self.pending = {"step": step, "user_text": user_text, "user_stopped_at": self.user_stopped_at,
+                        "speech_end_at": speech_end_at}
         return self.pending
 
     def eou(self, m: metrics.EOUMetrics) -> None:
@@ -323,9 +329,12 @@ class TurnRecorder:
         turn, self.pending = self.pending, None
         if turn is None:
             return
-        if turn.get("user_stopped_at"):
-            turn["latency"] = round(at - turn["user_stopped_at"], 3)
-        turn.pop("user_stopped_at", None)
+        speech_end_at = turn.pop("speech_end_at", None)
+        if speech_end_at:
+            turn["latency"] = round(at - speech_end_at, 3)
+        user_stopped_at = turn.pop("user_stopped_at", None)
+        if user_stopped_at:
+            turn["latency_after_vad"] = round(at - user_stopped_at, 3)
         self.turns.append(turn)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(turn, ensure_ascii=False) + "\n")
@@ -346,6 +355,8 @@ class SurveyAgent(Agent):
         self.heard_audio: list[bytes] = []
         self.heard_sample_rate = 16000
         self.heard_started_at: float | None = None
+        self.heard_peak = 0.0
+        self.last_voice_at: float | None = None  # wall time of the callee's last loud audio frame
         self.last_reply = None
 
     async def stt_node(self, audio, model_settings):
@@ -367,6 +378,10 @@ class SurveyAgent(Agent):
         if frame.num_channels > 1:
             samples = samples[::frame.num_channels]
         self.heard_audio.append(samples.tobytes())
+        rms = float(np.sqrt(np.mean((samples.astype(np.float32) / 32768) ** 2))) if len(samples) else 0.0
+        self.heard_peak = max(self.heard_peak, rms)
+        if rms > max(0.003, 0.1 * self.heard_peak):  # above line noise and within 20 dB of the loudest speech
+            self.last_voice_at = time.time()
 
     def heard_offset(self) -> float | None:
         """Seconds into the callee recording, so a transcript can be found in it."""
@@ -403,7 +418,7 @@ class SurveyAgent(Agent):
         if self.flow.step != "greeting" and is_hesitation(user_text):
             logger.info("ignoring %r: the callee is thinking", user_text)
             raise StopResponse()
-        turn = self.recorder.start_turn(self.flow.step, user_text)
+        turn = self.recorder.start_turn(self.flow.step, user_text, self.last_voice_at)
         turn["heard_at_s"] = self.heard_offset()
         started = time.time()
         # Stands in for the backend /answer round trip: same host, same network path.
@@ -480,10 +495,14 @@ async def entrypoint(ctx: JobContext) -> None:
             # stability barely steadied the pitch (largest 300 ms jump 3.9 -> 3.2 semitones at 1.0).
             voice_settings=elevenlabs.VoiceSettings(stability=0.5, similarity_boost=0.8, speed=1.02),
         ),
-        turn_detection="stt",
-        # A short noise must not cut the agent off; if no real speech follows, the agent resumes.
-        min_interruption_duration=0.6,
-        resume_false_interruption=True,
+        turn_handling={
+            "turn_detection": "stt",
+            # Scribe already waits 0.5 s of silence before its final transcript, and LiveKit then waited
+            # another 0.5 s by default before taking the turn (0.48-0.51 s in every measured turn).
+            "endpointing": {"min_delay": 0.0},
+            # A short noise must not cut the agent off; if no real speech follows, the agent resumes.
+            "interruption": {"min_duration": 0.6, "resume_false_interruption": True},
+        },
     )
 
     async def hang_up(speech) -> None:
