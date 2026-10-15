@@ -3,3 +3,5 @@ livekit-agents==1.8.6
 livekit-api==1.2.1
 livekit-plugins-elevenlabs==1.8.6
 livekit-plugins-silero==1.8.6
+numpy==2.5.4
+onnxruntime==1.31.0
