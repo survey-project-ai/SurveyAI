@@ -10,12 +10,9 @@ import faulthandler
 import json
 import logging
 import re
-import subprocess
-import sys
 import time
 import unicodedata
 import wave
-from pathlib import Path
 
 import aiohttp
 import numpy as np
@@ -516,6 +513,11 @@ class SurveyAgent(Agent):
 
     async def on_user_turn_completed(self, turn_ctx, new_message) -> None:
         user_text = new_message.text_content or ""
+        if self.flow.step == "done":
+            # The survey is over and the goodbye is playing; once the end of the callee's own sentence
+            # ("...diyeceğim") arrived here and crashed the handler.
+            logger.info("ignoring %r: the survey is over", user_text)
+            raise StopResponse()
         if (self.last_reply is not None and not self.last_reply.done() and normalize(user_text) in FILLERS
                 and self.flow.confirming is None):
             logger.info("ignoring %r: the previous reply has not been played yet", user_text)
@@ -556,7 +558,8 @@ class SurveyAgent(Agent):
         turn["reply"] = reply
         # The opening is said in full even if the callee says "Alo?" again over it, as a person would; in the
         # second test call a repeated "Alo" cancelled it before it started and the callee never heard it.
-        speech = self.session.say(reply, allow_interruptions=reply != OPENING)
+        # The goodbye too: the tail of the callee's last answer once cut it after "Vakit" and the line dropped.
+        speech = self.session.say(reply, allow_interruptions=reply != OPENING and not end_call)
         speech._reply_text = reply
         self.last_reply = speech
         if end_call:
@@ -587,15 +590,6 @@ async def synthesize_missing(tts, cache: TtsCache, replies: list[str]) -> None:
             await stream.aclose()
 
     await asyncio.gather(*(one(reply) for reply in replies if not cache.has(reply)))
-
-
-def start_verification(room_name: str) -> None:
-    """Runs verify_call.py for this call in its own process, so the job can end meanwhile."""
-    script = Path(__file__).resolve().with_name("verify_call.py")
-    log = (LOG_DIR / f"{room_name}.verify.log").open("w", encoding="utf-8")
-    flags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
-    subprocess.Popen([sys.executable, str(script), room_name], stdout=log, stderr=subprocess.STDOUT,
-                     cwd=str(script.parent), creationflags=flags)
 
 
 def write_wav(path, chunks: list[bytes], sample_rate: int) -> None:
@@ -697,8 +691,8 @@ async def entrypoint(ctx: JobContext) -> None:
     async def finish_call() -> None:
         await http.close()
         survey_agent.save_audio(ctx.room.name)
+        # verify_watch.py picks the call up from logs/ and checks the answers.
         survey_agent.save_answer_turns(ctx.room.name)
-        start_verification(ctx.room.name)
         decision = await gender.decide(timeout=2.0)
         flow.answers["gender"] = f"{decision.label or 'belirsiz'} (sesten)"
         logger.info("call finished: %d turns, answers=%s, gender=%s, scores=%s", len(recorder.turns), flow.answers,

@@ -20,10 +20,13 @@ Anahtarlar repo dışındaki bir dosyadan okunur (`SURVEYAI_KEYS_FILE`, varsayı
 .venv/Scripts/python setup_models.py       # cinsiyet modelini models/ altına indirir (95 MB, Apache-2.0)
 .venv/Scripts/python setup_trunk.py        # Netgsm giden SIP hattını LiveKit'te bir kez tanımlar
 .venv/Scripts/python agent.py dev          # agent'ı başlatır (açık kalmalı)
+.venv/Scripts/python verify_watch.py       # biten aramaların cevaplarını kontrol eder (açık kalmalı)
 .venv/Scripts/python call.py +905xxxxxxxxx # numarayı arar
 ```
 
-Her arama `logs/<oda>.jsonl` dosyasına tur tur kaydedilir.
+Her arama `logs/` altına yazılır: turlar (`<oda>.jsonl`), soru cevapları (`<oda>.answers.jsonl`), iki tarafın
+sesi (`<oda>.agent.wav`, `<oda>.callee.wav`). `verify_watch.py` cevapları kayıttan iki modelle yeniden dinler ve
+her sorunun son cevabını `<oda>.final.json` dosyasına yazar (otomatik düzeltme ya da insan kontrolü gerekenler).
 
 ## Notlar
 
