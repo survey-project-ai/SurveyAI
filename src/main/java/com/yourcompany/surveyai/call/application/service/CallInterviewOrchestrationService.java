@@ -4,8 +4,13 @@ import com.yourcompany.surveyai.call.application.dto.request.InterviewAnswerRequ
 import com.yourcompany.surveyai.call.application.dto.request.InterviewFinishRequest;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewSessionRequest;
 import com.yourcompany.surveyai.call.application.dto.response.InterviewOrchestrationResponse;
+import com.yourcompany.surveyai.call.domain.enums.CallProvider;
+import java.util.List;
 
 public interface CallInterviewOrchestrationService {
+
+    // Providers whose voice agents drive the interview through the tool API.
+    List<CallProvider> TOOL_PROVIDERS = List.of(CallProvider.ELEVENLABS, CallProvider.LIVEKIT);
 
     InterviewOrchestrationResponse startInterview(InterviewSessionRequest request);
 

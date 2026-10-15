@@ -27,6 +27,7 @@ public class VoiceProviderConfigurationResolver {
         VoiceExecutionProperties.ProviderProperties config = switch (provider) {
             case MOCK -> properties.getMock();
             case ELEVENLABS -> properties.getElevenlabs();
+            case LIVEKIT -> properties.getLivekit();
             default -> throw new ValidationException("Provider configuration is not modeled yet for: " + provider);
         };
 

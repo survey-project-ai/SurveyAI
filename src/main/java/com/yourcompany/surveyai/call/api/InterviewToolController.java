@@ -12,6 +12,7 @@ import com.yourcompany.surveyai.common.exception.UnauthorizedException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,17 +23,20 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+// The interview API voice agents call during a call: ElevenLabs Agents through the original
+// /elevenlabs/ path, our own LiveKit agent through the provider-neutral one.
 @RestController
-@RequestMapping("/api/v1/provider-tools/elevenlabs/interviews")
-public class ElevenLabsInterviewToolController {
+@RequestMapping({"/api/v1/provider-tools/interviews", "/api/v1/provider-tools/elevenlabs/interviews"})
+public class InterviewToolController {
+
 
     private static final String TOOL_SECRET_HEADER = "X-SurveyAI-Tool-Secret";
-    private static final Logger log = LoggerFactory.getLogger(ElevenLabsInterviewToolController.class);
+    private static final Logger log = LoggerFactory.getLogger(InterviewToolController.class);
 
     private final CallInterviewOrchestrationService callInterviewOrchestrationService;
     private final VoiceProviderConfigurationResolver configurationResolver;
 
-    public ElevenLabsInterviewToolController(
+    public InterviewToolController(
             CallInterviewOrchestrationService callInterviewOrchestrationService,
             VoiceProviderConfigurationResolver configurationResolver
     ) {
@@ -120,7 +124,7 @@ public class ElevenLabsInterviewToolController {
     ) {
         long startedAtNanos = System.nanoTime();
         log.info(
-                "ElevenLabs tool hit. endpoint={} callAttemptId={} providerCallId={} {}",
+                "Interview tool hit. endpoint={} callAttemptId={} providerCallId={} {}",
                 endpoint,
                 callAttemptId,
                 providerCallId,
@@ -130,7 +134,7 @@ public class ElevenLabsInterviewToolController {
             InterviewOrchestrationResponse response = action.get();
             long elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000L;
             log.info(
-                    "ElevenLabs tool completed. endpoint={} callAttemptId={} providerCallId={} elapsedMs={} completed={} endCall={} questionId={} promptLength={} closingLength={} {}",
+                    "Interview tool completed. endpoint={} callAttemptId={} providerCallId={} elapsedMs={} completed={} endCall={} questionId={} promptLength={} closingLength={} {}",
                     endpoint,
                     response.callAttemptId(),
                     providerCallId,
@@ -146,7 +150,7 @@ public class ElevenLabsInterviewToolController {
         } catch (RuntimeException error) {
             long elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000L;
             log.warn(
-                    "ElevenLabs tool failed. endpoint={} callAttemptId={} providerCallId={} elapsedMs={} error={} {}",
+                    "Interview tool failed. endpoint={} callAttemptId={} providerCallId={} elapsedMs={} error={} {}",
                     endpoint,
                     callAttemptId,
                     providerCallId,
@@ -180,7 +184,7 @@ public class ElevenLabsInterviewToolController {
     // since it is otherwise invisible: the call goes on.
     private InterviewOrchestrationResponse recoverFailedAnswer(InterviewAnswerRequest request, RuntimeException originalError) {
         log.error(
-                "ElevenLabs answer tool failed; recording it as an unclear answer. callAttemptId={} providerCallId={} signal={}",
+                "Interview answer tool failed; recording it as an unclear answer. callAttemptId={} providerCallId={} signal={}",
                 request.callAttemptId(),
                 request.providerCallId(),
                 request.signal(),
@@ -200,24 +204,32 @@ public class ElevenLabsInterviewToolController {
         }
     }
 
+    // Each provider's agent has its own secret; the call attempt's provider is checked by the service.
     private void validateToolSecret(String providedSecret) {
-        VoiceProviderConfiguration configuration = configurationResolver.getConfiguration(CallProvider.ELEVENLABS);
-        String expectedSecret = configuration.settings().get("tool-api-secret");
-        if (expectedSecret == null || expectedSecret.isBlank()) {
-            expectedSecret = configuration.webhookSecret();
-        }
-
-        if (expectedSecret == null || expectedSecret.isBlank() || !expectedSecret.equals(providedSecret)) {
+        List<String> expectedSecrets = CallInterviewOrchestrationService.TOOL_PROVIDERS.stream()
+                .map(this::expectedToolSecret)
+                .filter(this::hasText)
+                .toList();
+        boolean accepted = hasText(providedSecret) && expectedSecrets.stream().anyMatch(expected -> MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.UTF_8), providedSecret.getBytes(StandardCharsets.UTF_8)));
+        if (!accepted) {
             log.warn(
-                    "ElevenLabs tool authentication failed. expectedSecretPresent={} expectedSecretFingerprint={} providedSecretPresent={} providedSecretPreview={} providedSecretFingerprint={}",
-                    hasText(expectedSecret),
-                    fingerprint(expectedSecret),
+                    "Interview tool authentication failed. expectedSecretCount={} expectedSecretFingerprints={} providedSecretPresent={} providedSecretPreview={} providedSecretFingerprint={}",
+                    expectedSecrets.size(),
+                    expectedSecrets.stream().map(this::fingerprint).toList(),
                     hasText(providedSecret),
                     preview(providedSecret),
                     fingerprint(providedSecret)
             );
             throw new UnauthorizedException("Provider tool authentication failed");
         }
+    }
+
+    private String expectedToolSecret(CallProvider provider) {
+        VoiceProviderConfiguration configuration = configurationResolver.getConfiguration(provider);
+        String secret = configuration.settings().get("tool-api-secret");
+        // ElevenLabs falls back to its webhook secret, as it always has.
+        return hasText(secret) || provider != CallProvider.ELEVENLABS ? secret : configuration.webhookSecret();
     }
 
     private boolean hasText(String value) {

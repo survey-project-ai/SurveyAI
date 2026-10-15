@@ -46,6 +46,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
@@ -59,6 +60,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrchestrationService {
 
+    private static final String RATING_RANGE_REASON = "Rating answer must be between ";
     private static final Pattern TRANSCRIPT_MARKUP_PATTERN = Pattern.compile("<[^>]+>");
     private static final Pattern VOICE_DIRECTION_PATTERN = Pattern.compile("\\[(?:[a-zA-Z_\\-]{2,20})]|\\((?:[a-zA-Z_\\-]{2,20})\\)");
     private static final Set<String> SEMANTIC_FILLER_TOKENS = Set.of(
@@ -366,10 +368,12 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             return buildProgressResponse(context, response, buildQuestionReasonLeadIn(context.survey()), currentFlowState);
         }
 
+        // Prompts are spoken as they are: our LiveKit agent sends them straight to speech synthesis, and the
+        // ElevenLabs agent is told to say them word for word.
         if (request.signal() == InterviewConversationSignal.REPEAT_REQUEST) {
             return buildProgressResponse(context, response, localized(context.survey(),
-                    "Soruyu yavaşça bir kez daha sor ve henüz ilerleme.",
-                    "Repeat the same question slowly and do not move forward yet."), currentFlowState);
+                    "Tabii, tekrar soruyorum.",
+                    "Of course, let me repeat the question."), currentFlowState);
         }
 
         if (request.signal() == InterviewConversationSignal.IDENTITY_REQUEST) {
@@ -473,8 +477,8 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         String transitionPrompt = savedAnswer.isValid()
                 ? null
                 : localized(context.survey(),
-                        "Yanıtın net anlaşılmadığını kısaca belirt, nazikçe devam et ve sonraki soruyu sor.",
-                        "Acknowledge that the answer was unclear, move on politely, and ask the next question.");
+                        "Sizi net anlayamadım, bir sonraki soruya geçiyorum.",
+                        "I couldn't quite catch that, so let's move on.");
         return buildProgressResponse(context, response, transitionPrompt, postAnswerFlowState);
     }
 
@@ -545,15 +549,20 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
                     .orElseThrow(() -> new NotFoundException("Call attempt not found: " + callAttemptId));
         }
         if (providerCallId != null && !providerCallId.isBlank()) {
-            return callAttemptRepository.findAndLockByProviderCallId(CallProvider.ELEVENLABS, providerCallId.trim())
-                    .orElseThrow(() -> new NotFoundException("Call attempt not found for provider call: " + providerCallId));
+            for (CallProvider provider : TOOL_PROVIDERS) {
+                Optional<CallAttempt> callAttempt = callAttemptRepository.findAndLockByProviderCallId(provider, providerCallId.trim());
+                if (callAttempt.isPresent()) {
+                    return callAttempt.get();
+                }
+            }
+            throw new NotFoundException("Call attempt not found for provider call: " + providerCallId);
         }
         throw new ValidationException("callAttemptId or providerCallId is required");
     }
 
     private void validateProvider(CallAttempt callAttempt) {
-        if (callAttempt.getProvider() != CallProvider.ELEVENLABS) {
-            throw new ValidationException("Interview tools are only enabled for ElevenLabs call attempts");
+        if (!TOOL_PROVIDERS.contains(callAttempt.getProvider())) {
+            throw new ValidationException("Interview tools are not enabled for " + callAttempt.getProvider() + " call attempts");
         }
     }
 
@@ -876,7 +885,7 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             parsed = extractSemanticRating(question, raw, min, max);
         }
         if (parsed == null || parsed < min || parsed > max) {
-            return NormalizedAnswer.invalid("Rating answer must be between " + min + " and " + max, raw);
+            return NormalizedAnswer.invalid(RATING_RANGE_REASON + min + " and " + max, raw);
         }
         return NormalizedAnswer.validNumber(raw, BigDecimal.valueOf(parsed));
     }
@@ -2618,7 +2627,11 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             return matrixPrompt;
         }
         StringBuilder builder = new StringBuilder();
-        appendPromptSentence(builder, stripInlineChoiceListFromPrompt(question, options));
+        String title = stripInlineChoiceListFromPrompt(question, options);
+        appendPromptSentence(builder, title);
+        if (shouldReadOptions(question, options) && countInlineChoiceMatches(title == null ? "" : title, options) < options.size()) {
+            appendPromptSentence(builder, spokenChoiceList(options, turkish));
+        }
         if (question.getDescription() != null && !question.getDescription().isBlank()) {
             appendPromptSentence(builder, question.getDescription());
         }
@@ -2637,6 +2650,54 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             }
         }
         return normalizePromptPacing(builder.toString());
+    }
+
+    // Whether the choices are read out after the question. settingsJson "readOptions" (true/false) decides;
+    // without it, single-choice questions with 2 to 5 choices are read, except a yes/no pair and numeric
+    // brackets (an age is asked as a number and placed in its bracket).
+    private boolean shouldReadOptions(SurveyQuestion question, List<SurveyQuestionOption> options) {
+        if (options == null || options.isEmpty()
+                || (question.getQuestionType() != QuestionType.SINGLE_CHOICE && question.getQuestionType() != QuestionType.MULTI_CHOICE)) {
+            return false;
+        }
+        Boolean configured = readBooleanSetting(question, "readOptions");
+        if (configured != null) {
+            return configured;
+        }
+        return question.getQuestionType() == QuestionType.SINGLE_CHOICE
+                && options.size() >= 2
+                && options.size() <= 5
+                && !looksLikeYesNo(options)
+                && !options.stream().allMatch(option -> option.getLabel() != null && option.getLabel().matches(".*\\d.*"));
+    }
+
+    // "Recep Tayyip Erdoğan, Ekrem İmamoğlu ya da Mansur Yavaş?"
+    private String spokenChoiceList(List<SurveyQuestionOption> options, boolean turkish) {
+        List<String> labels = options.stream()
+                .map(option -> trimToNull(option.getLabel()))
+                .filter(label -> label != null)
+                .toList();
+        if (labels.size() < 2) {
+            return labels.isEmpty() ? null : labels.get(0) + "?";
+        }
+        String head = String.join(", ", labels.subList(0, labels.size() - 1));
+        String last = labels.get(labels.size() - 1);
+        if (turkish) {
+            return head + " ya da " + last + "?";
+        }
+        return head + (labels.size() > 2 ? "," : "") + " or " + last + "?";
+    }
+
+    private Boolean readBooleanSetting(SurveyQuestion question, String key) {
+        if (question.getSettingsJson() == null || question.getSettingsJson().isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode value = objectMapper.readTree(question.getSettingsJson()).get(key);
+            return value != null && value.isBoolean() ? value.booleanValue() : null;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private String stripInlineChoiceListFromPrompt(SurveyQuestion question, List<SurveyQuestionOption> options) {
@@ -2783,7 +2844,10 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         if (clarificationPrompt != null) {
             return clarificationPrompt;
         }
-        if (answer.getInvalidReason() != null && !answer.getInvalidReason().isBlank()) {
+        // A rating's retry prompt already says what is wanted ("Lütfen 1 ile 5 arasında tek bir sayı
+        // söyleyin"), so its stored reason, which is English, is not read out in front of it.
+        if (answer.getInvalidReason() != null && !answer.getInvalidReason().isBlank()
+                && !answer.getInvalidReason().startsWith(RATING_RANGE_REASON)) {
             String invalidReason = localizeInvalidReason(question.getSurvey(), answer.getInvalidReason());
             return invalidReason + ". " + buildRetryPrompt(
                     question,
@@ -2816,10 +2880,9 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         if (cleaned == null) {
             return "";
         }
+        // appendPromptSentence already ends every sentence; adding stops here turned "...? Please answer" into
+        // "...?. Please answer".
         return cleaned
-                .replace(" LÃ¼tfen ", ". LÃ¼tfen ")
-                .replace("? LÃ¼tfen", "? Bir de")
-                .replace(" Please answer ", ". Please answer ")
                 .replaceAll("\\s+", " ")
                 .trim();
     }
@@ -3200,9 +3263,7 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             case "No clear answer captured from the caller" -> "Söylediğinizi net anlayamadım";
             case "Answer did not match a known option" -> "Sizi net duyamadım";
             case "Answer did not match any known options" -> "Sizi net duyamadım";
-            default -> invalidReason.startsWith("Rating answer must be between ")
-                    ? invalidReason
-                    : "Sizi net duyamadım";
+            default -> "Sizi net duyamadım";
         };
     }
 

@@ -115,6 +115,25 @@ surveyai:
         turn-detection-speculative-turn: ${ELEVENLABS_TURN_DETECTION_SPECULATIVE_TURN:false}
         background-voice-detection-enabled: ${ELEVENLABS_BACKGROUND_VOICE_DETECTION_ENABLED:false}
         status-reconciliation-grace-seconds: ${ELEVENLABS_STATUS_RECONCILIATION_GRACE_SECONDS:20}
+    # Our own voice agent (voice-agent/) on LiveKit; the backend dispatches it and it calls the number.
+    livekit:
+      enabled: ${SURVEYAI_CALLING_LIVEKIT_ENABLED:false}
+      mode: ${LIVEKIT_MODE:LIVE}
+      # LiveKit Cloud project URL, for example https://<project>.livekit.cloud
+      base-url: ${LIVEKIT_URL:}
+      api-key: ${LIVEKIT_API_KEY:}
+      # The name the voice agent registers under
+      agent-id: ${LIVEKIT_AGENT_NAME:survey-agent}
+      # The outbound SIP trunk (Netgsm) set up in the LiveKit project
+      phone-number-id: ${LIVEKIT_SIP_TRUNK_ID:}
+      # Signs the call status events the voice agent posts to /api/v1/provider-webhooks/LIVEKIT
+      webhook-secret: ${LIVEKIT_WEBHOOK_SECRET:}
+      sandbox-mode: ${LIVEKIT_SANDBOX_MODE:false}
+      webhook-timestamp-tolerance-seconds: 300
+      settings:
+        api-secret: ${LIVEKIT_API_SECRET:}
+        # The voice agent sends it in X-SurveyAI-Tool-Secret on /api/v1/provider-tools/interviews/*
+        tool-api-secret: ${LIVEKIT_TOOL_API_SECRET:}
 
 logging:
   level:

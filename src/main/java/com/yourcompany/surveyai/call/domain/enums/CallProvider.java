@@ -5,5 +5,6 @@ public enum CallProvider {
     MOCK,
     TWILIO,
     SIP,
-    MANUAL
+    MANUAL,
+    LIVEKIT
 }

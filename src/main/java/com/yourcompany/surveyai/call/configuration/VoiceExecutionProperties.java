@@ -13,6 +13,7 @@ public class VoiceExecutionProperties {
     private CallProvider activeProvider = CallProvider.MOCK;
     private ProviderProperties mock = new ProviderProperties();
     private ProviderProperties elevenlabs = new ProviderProperties();
+    private ProviderProperties livekit = new ProviderProperties();
 
     public CallProvider getActiveProvider() {
         return activeProvider;
@@ -36,6 +37,14 @@ public class VoiceExecutionProperties {
 
     public void setElevenlabs(ProviderProperties elevenlabs) {
         this.elevenlabs = elevenlabs;
+    }
+
+    public ProviderProperties getLivekit() {
+        return livekit;
+    }
+
+    public void setLivekit(ProviderProperties livekit) {
+        this.livekit = livekit;
     }
 
     public static class ProviderProperties {

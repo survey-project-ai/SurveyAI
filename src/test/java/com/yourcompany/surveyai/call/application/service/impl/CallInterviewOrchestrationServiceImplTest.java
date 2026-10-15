@@ -1,6 +1,7 @@
 package com.yourcompany.surveyai.call.application.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -17,6 +18,7 @@ import com.yourcompany.surveyai.call.domain.enums.CallJobStatus;
 import com.yourcompany.surveyai.call.domain.enums.CallProvider;
 import com.yourcompany.surveyai.call.repository.CallAttemptRepository;
 import com.yourcompany.surveyai.common.domain.entity.Company;
+import com.yourcompany.surveyai.common.exception.ValidationException;
 import com.yourcompany.surveyai.operation.application.support.OperationAutoEntityLexiconService;
 import com.yourcompany.surveyai.operation.domain.entity.Operation;
 import com.yourcompany.surveyai.operation.domain.entity.OperationContact;
@@ -220,13 +222,149 @@ class CallInterviewOrchestrationServiceImplTest {
     }
 
     @Test
-    void startInterview_doesNotReadChoiceOptionsInSpokenPrompt() {
+    void startInterview_doesNotReadYesNoChoicesInSpokenPrompt() {
         InterviewOrchestrationResponse response = service.startInterview(
                 new InterviewSessionRequest(fixture.callAttempt.getId(), null, null)
         );
 
         assertThat(response.prompt()).contains("Memnun musunuz?");
         assertThat(response.prompt()).doesNotContain("Evet").doesNotContain("Hay");
+    }
+
+    @Test
+    void startInterview_readsTheChoicesOnceAfterTheQuestion() {
+        fixture.survey.setLanguageCode("tr");
+        fixture.yesNoQuestion.setCode("candidate");
+        fixture.yesNoQuestion.setTitle("Cumhurbaşkanı adayı olarak kimi görmek istersiniz? Recep Tayyip Erdoğan, Ekrem İmamoğlu ya da Mansur Yavaş?");
+        questionOptionsByQuestionId.put(fixture.yesNoQuestion.getId(), List.of(
+                buildOption(fixture.yesNoQuestion, 1, "option_1", "Recep Tayyip Erdoğan"),
+                buildOption(fixture.yesNoQuestion, 2, "option_2", "Ekrem İmamoğlu"),
+                buildOption(fixture.yesNoQuestion, 3, "option_3", "Mansur Yavaş")));
+
+        InterviewOrchestrationResponse response = service.startInterview(
+                new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        assertThat(response.prompt())
+                .contains("Cumhurbaşkanı adayı olarak kimi görmek istersiniz? Recep Tayyip Erdoğan, Ekrem İmamoğlu ya da Mansur Yavaş?");
+        // The list written into the title is replaced, not read twice.
+        assertThat(response.prompt().split("Mansur Yavaş", -1)).hasSize(2);
+    }
+
+    @Test
+    void startInterview_readsTheChoicesInEnglish() {
+        fixture.yesNoQuestion.setTitle("How satisfied are you?");
+        questionOptionsByQuestionId.put(fixture.yesNoQuestion.getId(), List.of(
+                buildOption(fixture.yesNoQuestion, 1, "option_1", "Very satisfied"),
+                buildOption(fixture.yesNoQuestion, 2, "option_2", "Neutral"),
+                buildOption(fixture.yesNoQuestion, 3, "option_3", "Not satisfied")));
+
+        InterviewOrchestrationResponse response = service.startInterview(
+                new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        assertThat(response.prompt()).contains("How satisfied are you? Very satisfied, Neutral, or Not satisfied?");
+    }
+
+    @Test
+    void startInterview_doesNotReadTheChoicesWhenTheQuestionSaysNotTo() {
+        fixture.yesNoQuestion.setTitle("Hangi partiye oy verirdiniz?");
+        fixture.yesNoQuestion.setSettingsJson("{\"readOptions\":false}");
+        questionOptionsByQuestionId.put(fixture.yesNoQuestion.getId(), List.of(
+                buildOption(fixture.yesNoQuestion, 1, "option_1", "Birinci Parti"),
+                buildOption(fixture.yesNoQuestion, 2, "option_2", "İkinci Parti"),
+                buildOption(fixture.yesNoQuestion, 3, "option_3", "Üçüncü Parti")));
+
+        InterviewOrchestrationResponse response = service.startInterview(
+                new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        assertThat(response.prompt()).contains("Hangi partiye oy verirdiniz?").doesNotContain("Parti,");
+    }
+
+    @Test
+    void startInterview_readsMoreThanFiveChoicesOnlyWhenTheQuestionSaysTo() {
+        fixture.yesNoQuestion.setTitle("Hangi ilçede yaşıyorsunuz?");
+        List<SurveyQuestionOption> districts = List.of("Konak", "Bornova", "Karşıyaka", "Buca", "Bayraklı", "Çiğli").stream()
+                .map(name -> buildOption(fixture.yesNoQuestion, 1, name.toLowerCase(), name))
+                .toList();
+        questionOptionsByQuestionId.put(fixture.yesNoQuestion.getId(), districts);
+
+        String byDefault = service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null)).prompt();
+        fixture.yesNoQuestion.setSettingsJson("{\"readOptions\":true}");
+        String whenAsked = service.getCurrentQuestion(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null)).prompt();
+
+        assertThat(byDefault).doesNotContain("Konak");
+        assertThat(whenAsked).contains("Konak, Bornova, Karşıyaka, Buca, Bayraklı, or Çiğli?");
+    }
+
+    @Test
+    void startInterview_doesNotReadNumericBrackets() {
+        fixture.yesNoQuestion.setCode("age_group");
+        fixture.yesNoQuestion.setTitle("Kaç yaşındasınız?");
+        questionOptionsByQuestionId.put(fixture.yesNoQuestion.getId(), List.of(
+                buildOption(fixture.yesNoQuestion, 1, "option_1", "18-24"),
+                buildOption(fixture.yesNoQuestion, 2, "option_2", "25-34"),
+                buildOption(fixture.yesNoQuestion, 3, "option_3", "35 ve üzeri")));
+
+        InterviewOrchestrationResponse response = service.startInterview(
+                new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        assertThat(response.prompt()).contains("Kaç yaşındasınız?").doesNotContain("18-24");
+    }
+
+    @Test
+    void repeatRequest_repeatsTheQuestionWithWordsMeantToBeSpoken() {
+        fixture.survey.setLanguageCode("tr");
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        InterviewOrchestrationResponse response = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Tekrar eder misiniz?", InterviewConversationSignal.REPEAT_REQUEST));
+
+        // Our LiveKit agent speaks the prompt as it is; it used to be an instruction to the ElevenLabs LLM.
+        assertThat(response.prompt()).startsWith("Tabii, tekrar soruyorum.").contains("Memnun musunuz?");
+    }
+
+    @Test
+    void unclearAnswerAfterTheLastRetry_movesOnWithWordsMeantToBeSpoken() {
+        fixture.survey.setLanguageCode("tr");
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        // Two different replies: the same words again within seconds count as a doubled tool call.
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Ulasim sorunlarini cozmesi", InterviewConversationSignal.ANSWER));
+        InterviewOrchestrationResponse response = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Trafik cok kotu", InterviewConversationSignal.ANSWER));
+
+        assertThat(response.question().code()).isEqualTo("why");
+        assertThat(response.prompt()).startsWith("Sizi net anlayamadım, bir sonraki soruya geçiyorum.");
+    }
+
+    @Test
+    void interviewTools_acceptLiveKitCallAttempts() {
+        fixture.callAttempt.setProvider(CallProvider.LIVEKIT);
+
+        InterviewOrchestrationResponse response = service.startInterview(
+                new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        assertThat(response.question().code()).isEqualTo("satisfied");
+    }
+
+    @Test
+    void interviewTools_findALiveKitCallByItsRoomName() {
+        fixture.callAttempt.setProvider(CallProvider.LIVEKIT);
+        when(callAttemptRepository.findAndLockByProviderCallId(CallProvider.ELEVENLABS, "call-room")).thenReturn(Optional.empty());
+        when(callAttemptRepository.findAndLockByProviderCallId(CallProvider.LIVEKIT, "call-room"))
+                .thenReturn(Optional.of(fixture.callAttempt));
+
+        InterviewOrchestrationResponse response = service.startInterview(new InterviewSessionRequest(null, "call-room", null));
+
+        assertThat(response.callAttemptId()).isEqualTo(fixture.callAttempt.getId());
+    }
+
+    @Test
+    void interviewTools_rejectCallsOfOtherProviders() {
+        fixture.callAttempt.setProvider(CallProvider.MOCK);
+
+        assertThatThrownBy(() -> service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null)))
+                .isInstanceOf(ValidationException.class);
     }
 
     @Test
@@ -358,7 +496,40 @@ class CallInterviewOrchestrationServiceImplTest {
         assertThat(answers.getFirst().getRetryCount()).isEqualTo(1);
         assertThat(response.question()).isNotNull();
         assertThat(response.question().code()).isEqualTo(fixture.ratingQuestion.getCode());
-        assertThat(response.prompt()).contains("Rating answer must be between 1 and 5");
+        // The retry prompt says what is wanted; the stored reason is not read out in front of it.
+        assertThat(response.prompt()).contains("Please say one number between 1 and 5").doesNotContain("Rating answer must be between");
+        assertThat(answers.getFirst().getInvalidReason()).isEqualTo("Rating answer must be between 1 and 5");
+    }
+
+    @Test
+    void invalidRatingAnswer_retriesInTurkishWithoutEnglishWords() {
+        fixture.survey.setLanguageCode("tr");
+        fixture.ratingQuestion.setSettingsJson("{\"min\":1,\"max\":5}");
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
+                .thenReturn(List.of(fixture.ratingQuestion, fixture.openQuestion));
+        questionOptionsByQuestionId.put(fixture.ratingQuestion.getId(), List.of());
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        InterviewOrchestrationResponse response = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "sekiz", InterviewConversationSignal.ANSWER));
+
+        assertThat(response.prompt())
+                .startsWith("Yanıtı puan olarak anlayamadım. Lütfen 1 ile 5 arasında tek bir sayı söyleyin.")
+                .doesNotContain("Rating");
+    }
+
+    @Test
+    void ratingQuestion_endsEachSentenceOnceInEnglish() {
+        fixture.ratingQuestion.setTitle("How would you rate us?");
+        fixture.ratingQuestion.setSettingsJson("{\"min\":1,\"max\":5}");
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
+                .thenReturn(List.of(fixture.ratingQuestion, fixture.openQuestion));
+        questionOptionsByQuestionId.put(fixture.ratingQuestion.getId(), List.of());
+
+        InterviewOrchestrationResponse response = service.startInterview(
+                new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        assertThat(response.prompt()).isEqualTo("How would you rate us? Please answer with one number between 1 and 5.");
     }
 
     @Test

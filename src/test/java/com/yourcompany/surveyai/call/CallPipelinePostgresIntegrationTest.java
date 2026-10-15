@@ -143,6 +143,18 @@ class CallPipelinePostgresIntegrationTest {
     }
 
     @Test
+    void migrationsAllowLiveKitCallAttempts() {
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '18' AND success",
+                Long.class
+        )).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'chk_call_attempt_provider'",
+                String.class
+        )).contains("'LIVEKIT'").contains("'ELEVENLABS'");
+    }
+
+    @Test
     void lockForDispatchSkipsAnOperationThatAnotherTransactionHolds() throws Exception {
         UUID operationId = createRunningOperationWithJobs(1);
         CountDownLatch locked = new CountDownLatch(1);
