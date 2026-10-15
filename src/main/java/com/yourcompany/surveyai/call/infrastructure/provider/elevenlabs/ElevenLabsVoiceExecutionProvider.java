@@ -15,6 +15,7 @@ import com.yourcompany.surveyai.call.application.provider.ProviderDispatchResult
 import com.yourcompany.surveyai.call.application.provider.ProviderWebhookEvent;
 import com.yourcompany.surveyai.call.application.provider.ProviderWebhookRequest;
 import com.yourcompany.surveyai.call.application.provider.VoiceExecutionProvider;
+import com.yourcompany.surveyai.call.application.support.SurveyAsrKeywords;
 import com.yourcompany.surveyai.call.configuration.VoiceProviderConfiguration;
 import com.yourcompany.surveyai.call.domain.entity.CallAttempt;
 import com.yourcompany.surveyai.call.domain.enums.CallAttemptStatus;
@@ -24,7 +25,6 @@ import com.yourcompany.surveyai.common.exception.ValidationException;
 import com.yourcompany.surveyai.operation.application.support.OperationAutoEntityLexiconService;
 import com.yourcompany.surveyai.operation.support.OperationContactPhoneResolver;
 import com.yourcompany.surveyai.operation.support.PhoneNumberNormalizer;
-import com.yourcompany.surveyai.survey.domain.entity.SurveyQuestion;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
@@ -36,11 +36,9 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import javax.crypto.Mac;
@@ -562,39 +560,7 @@ public class ElevenLabsVoiceExecutionProvider implements VoiceExecutionProvider 
     }
 
     private List<String> buildAsrKeywords(ProviderDispatchRequest request) {
-        Set<String> keywords = new LinkedHashSet<>();
-        for (SurveyQuestion question : request.survey().getQuestions()) {
-            String settingsJson = question.getSettingsJson();
-            if (settingsJson == null || settingsJson.isBlank()) {
-                continue;
-            }
-            try {
-                JsonNode root = objectMapper.readTree(settingsJson);
-                JsonNode entriesNode = root.path("autoEntityLexicon").path("entries");
-                if (!entriesNode.isArray()) {
-                    continue;
-                }
-                entriesNode.forEach(entry -> {
-                    String label = entry.path("label").asText(null);
-                    if (label != null && !label.isBlank()) {
-                        keywords.add(label.trim());
-                    }
-                    JsonNode aliases = entry.get("aliases");
-                    if (aliases != null && aliases.isArray()) {
-                        aliases.forEach(a -> {
-                            String alias = a.asText(null);
-                            if (alias != null && !alias.isBlank()) {
-                                keywords.add(alias.trim());
-                            }
-                        });
-                    }
-                });
-            } catch (Exception ignored) {
-                // malformed settingsJson — skip
-            }
-        }
-        keywords.addAll(operationAutoEntityLexiconService.extractKeywords(request.operation().getSourcePayloadJson()));
-        return new ArrayList<>(keywords);
+        return SurveyAsrKeywords.collect(request.survey(), request.operation(), objectMapper, operationAutoEntityLexiconService);
     }
 
     private String sanitizePromptForSpeech(String value) {

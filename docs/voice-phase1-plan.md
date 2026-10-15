@@ -153,6 +153,16 @@ kalır.
 
 **A3. Durum bildirimleri.** Ajan çalma, açılma, bitiş, meşgul ve cevapsız olaylarını HMAC imzalı olarak
 `/api/v1/provider-webhooks/LIVEKIT` adresine gönderir. Dökümü de bitişte ekler.
+- Biçim `LiveKitVoiceExecutionProvider` sınıfının başındaki açıklamada:
+  - `event`: `ringing`, `answered`, `ended` ya da `failed`;
+  - `room` ve `callAttemptId`;
+  - aranan açmadıysa `sipStatusCode`;
+  - bitişte `transcript`.
+- İmza başlığı `X-SurveyAI-Signature: t=<unix saniye>,v1=<"t.gövde" metninin HMAC-SHA256 hex değeri>`.
+- Ajan önce `/finish` çağırır, sonra `ended` gönderir, en son odayı kapatır. Oda olay gelmeden kapanırsa backend
+  aramayı 60 saniye sonra `FAILED` sayar.
+- Aynı cümlenin 3 saniye içinde ikinci kez gelmesi yinelenen istek sayılır. Bu yüzden `/answer` isteklerinde
+  `questionId` gönderilir.
 
 **A4. Ses tarafı.** Değişmeden kalır:
 - Linden-1 konuşma tanıma,

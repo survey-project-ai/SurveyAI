@@ -24,11 +24,14 @@ import com.yourcompany.surveyai.call.domain.enums.CallJobStatus;
 import com.yourcompany.surveyai.call.domain.enums.CallProvider;
 import com.yourcompany.surveyai.call.infrastructure.provider.elevenlabs.ElevenLabsApiClient;
 import com.yourcompany.surveyai.call.infrastructure.provider.elevenlabs.ElevenLabsVoiceExecutionProvider;
+import com.yourcompany.surveyai.call.infrastructure.provider.livekit.LiveKitApiClient;
+import com.yourcompany.surveyai.call.infrastructure.provider.livekit.LiveKitVoiceExecutionProvider;
 import com.yourcompany.surveyai.call.infrastructure.provider.mock.MockVoiceExecutionProvider;
 import com.yourcompany.surveyai.call.repository.CallAttemptRepository;
 import com.yourcompany.surveyai.call.repository.CallJobRepository;
 import com.yourcompany.surveyai.common.domain.entity.Company;
 import com.yourcompany.surveyai.common.exception.NotFoundException;
+import com.yourcompany.surveyai.common.exception.ValidationException;
 import com.yourcompany.surveyai.operation.application.support.OperationAutoEntityLexiconService;
 import com.yourcompany.surveyai.response.application.service.SurveyResponseIngestionService;
 import com.yourcompany.surveyai.operation.domain.entity.Operation;
@@ -37,11 +40,16 @@ import com.yourcompany.surveyai.operation.domain.enums.OperationContactStatus;
 import com.yourcompany.surveyai.operation.repository.OperationContactRepository;
 import com.yourcompany.surveyai.survey.domain.entity.Survey;
 import jakarta.servlet.http.HttpServletRequest;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HexFormat;
 import java.util.Optional;
 import java.util.UUID;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -59,6 +67,7 @@ class ProviderWebhookIngestionServiceImplTest {
             return java.util.List.of();
         }
     };
+    private static final String LIVEKIT_WEBHOOK_SECRET = "livekit-webhook-secret";
     private ProviderWebhookIngestionServiceImpl ingestionService;
 
     @BeforeEach
@@ -69,6 +78,9 @@ class ProviderWebhookIngestionServiceImplTest {
         properties.getElevenlabs().setMode(VoiceProviderMode.MOCK);
         properties.getElevenlabs().setBaseUrl("https://api.elevenlabs.io");
         properties.getElevenlabs().setAgentId("agent-123");
+        properties.getLivekit().setEnabled(true);
+        properties.getLivekit().setMode(VoiceProviderMode.LIVE);
+        properties.getLivekit().setWebhookSecret(LIVEKIT_WEBHOOK_SECRET);
 
         ingestionService = createIngestionService(properties);
 
@@ -457,11 +469,78 @@ class ProviderWebhookIngestionServiceImplTest {
         verify(callJobDispatcher, never()).requestDispatch(any());
     }
 
+    @Test
+    void ingest_schedulesAnotherCallWhenTheLiveKitAgentFindsTheLineBusy() throws Exception {
+        CallAttempt attempt = buildAttempt();
+        attempt.setProvider(CallProvider.LIVEKIT);
+        // The agent can report before the dispatcher has stored the room name.
+        attempt.setProviderCallId(null);
+        attempt.setStatus(CallAttemptStatus.INITIATED);
+        when(callAttemptRepository.findByIdAndDeletedAtIsNull(attempt.getId())).thenReturn(Optional.of(attempt));
+        String body = """
+                {"event":"failed","room":"call-%s","callAttemptId":"%s","sipStatusCode":486,"sipStatus":"Busy Here"}
+                """.formatted(attempt.getId(), attempt.getId());
+
+        int applied = ingestionService.ingest(CallProvider.LIVEKIT, body, signedRequest(body, LIVEKIT_WEBHOOK_SECRET));
+
+        assertThat(applied).isEqualTo(1);
+        assertThat(attempt.getStatus()).isEqualTo(CallAttemptStatus.BUSY);
+        assertThat(attempt.getProviderCallId()).isEqualTo("call-" + attempt.getId());
+        assertThat(attempt.getCallJob().getStatus()).isEqualTo(CallJobStatus.RETRY);
+        assertThat(attempt.getOperationContact().getStatus()).isEqualTo(OperationContactStatus.RETRY);
+        verify(surveyResponseIngestionService, never()).ingest(any(), any());
+    }
+
+    @Test
+    void ingest_addsTheTranscriptWhenTheLiveKitCallEnds() throws Exception {
+        CallAttempt attempt = buildAttempt();
+        attempt.setProvider(CallProvider.LIVEKIT);
+        attempt.setProviderCallId("call-" + attempt.getId());
+        when(callAttemptRepository.findByProviderAndProviderCallIdAndDeletedAtIsNull(CallProvider.LIVEKIT, attempt.getProviderCallId()))
+                .thenReturn(Optional.of(attempt));
+        String body = """
+                {"event":"ended","room":"%s","durationSeconds":80,
+                 "transcript":[{"role":"agent","text":"Merhaba"},{"role":"user","text":"Alo"}]}
+                """.formatted(attempt.getProviderCallId());
+
+        int applied = ingestionService.ingest(CallProvider.LIVEKIT, body, signedRequest(body, LIVEKIT_WEBHOOK_SECRET));
+
+        assertThat(applied).isEqualTo(1);
+        assertThat(attempt.getStatus()).isEqualTo(CallAttemptStatus.COMPLETED);
+        assertThat(attempt.getDurationSeconds()).isEqualTo(80);
+        assertThat(attempt.getFailureReason()).isNull();
+        assertThat(attempt.getTranscriptStorageKey()).isEqualTo("inline://livekit/rooms/" + attempt.getProviderCallId());
+        assertThat(attempt.getCallJob().getStatus()).isEqualTo(CallJobStatus.COMPLETED);
+        verify(surveyResponseIngestionService).ingest(any(), any());
+    }
+
+    @Test
+    void ingest_rejectsALiveKitEventWithoutAValidSignature() throws Exception {
+        String body = "{\"event\":\"ended\",\"room\":\"call-1\"}";
+
+        assertThatThrownBy(() -> ingestionService.ingest(CallProvider.LIVEKIT, body, signedRequest(body, "wrong-secret")))
+                .isInstanceOf(ValidationException.class);
+        verify(callAttemptRepository, never()).save(any());
+    }
+
+    private HttpServletRequest signedRequest(String body, String secret) throws Exception {
+        long timestamp = Instant.now().getEpochSecond();
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        String signature = HexFormat.of().formatHex(mac.doFinal((timestamp + "." + body).getBytes(StandardCharsets.UTF_8)));
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getHeaderNames()).thenReturn(Collections.enumeration(java.util.List.of("x-surveyai-signature")));
+        when(request.getHeaders("x-surveyai-signature"))
+                .thenReturn(Collections.enumeration(java.util.List.of("t=" + timestamp + ",v1=" + signature)));
+        return request;
+    }
+
     private ProviderWebhookIngestionServiceImpl createIngestionService(VoiceExecutionProperties properties) {
         return new ProviderWebhookIngestionServiceImpl(
                 new CallProviderRegistry(java.util.List.of(
                         new MockVoiceExecutionProvider(new ObjectMapper()),
-                        new ElevenLabsVoiceExecutionProvider(new ObjectMapper(), mock(ElevenLabsApiClient.class), operationAutoEntityLexiconService)
+                        new ElevenLabsVoiceExecutionProvider(new ObjectMapper(), mock(ElevenLabsApiClient.class), operationAutoEntityLexiconService),
+                        new LiveKitVoiceExecutionProvider(new ObjectMapper(), mock(LiveKitApiClient.class), operationAutoEntityLexiconService)
                 )),
                 new VoiceProviderConfigurationResolver(properties),
                 callAttemptRepository,

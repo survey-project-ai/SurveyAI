@@ -50,6 +50,20 @@ public class VoiceProviderStartupDiagnostics implements ApplicationRunner {
             return;
         }
 
+        if (activeProvider == CallProvider.LIVEKIT) {
+            log.info(
+                    "LiveKit runtime config. url={} apiKeySuffix={} agentName={} sipTrunkIdPresent={} webhookSecretPresent={} toolApiSecretPresent={} toolApiSecretFingerprint={}",
+                    configuration.baseUrl(),
+                    redactSuffix(configuration.apiKey()),
+                    configuration.agentId(),
+                    hasText(configuration.phoneNumberId()),
+                    hasText(configuration.webhookSecret()),
+                    hasText(configuration.settings().get("tool-api-secret")),
+                    fingerprint(configuration.settings().get("tool-api-secret"))
+            );
+            log.info("The LiveKit voice agent posts call events to /api/v1/provider-webhooks/LIVEKIT and calls the interview tools at /api/v1/provider-tools/interviews/*.");
+        }
+
         if (activeProvider == CallProvider.ELEVENLABS) {
             String publicWebhookBaseUrl = configuration.settings().get("public-webhook-base-url");
             String toolApiSecret = configuration.settings().get("tool-api-secret");
