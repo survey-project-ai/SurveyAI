@@ -338,6 +338,19 @@ class CallInterviewOrchestrationServiceImplTest {
     }
 
     @Test
+    void stopRequest_endsTheCallWithAShortGoodbye() {
+        fixture.survey.setLanguageCode("tr");
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        InterviewOrchestrationResponse response = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Şu an meşgulüm, kapatıyorum", InterviewConversationSignal.STOP_REQUEST));
+
+        assertThat(response.endCall()).isTrue();
+        assertThat(response.surveyStatus()).isEqualTo(SurveyResponseStatus.ABANDONED);
+        assertThat(response.closingMessage()).isEqualTo("Anladım, teşekkür ederim. İyi günler dilerim.");
+    }
+
+    @Test
     void interviewTools_acceptLiveKitCallAttempts() {
         fixture.callAttempt.setProvider(CallProvider.LIVEKIT);
 
@@ -530,6 +543,39 @@ class CallInterviewOrchestrationServiceImplTest {
                 new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
 
         assertThat(response.prompt()).isEqualTo("How would you rate us? Please answer with one number between 1 and 5.");
+    }
+
+    @Test
+    void ratingQuestion_doesNotRepeatAScaleTheTitleAlreadyGives() {
+        fixture.survey.setLanguageCode("tr");
+        fixture.ratingQuestion.setTitle("Belediye hizmetlerinden ne kadar memnunsunuz? Bir ile beş arasında bir puan verir misiniz?");
+        fixture.ratingQuestion.setSettingsJson("{\"min\":1,\"max\":5}");
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
+                .thenReturn(List.of(fixture.ratingQuestion, fixture.openQuestion));
+        questionOptionsByQuestionId.put(fixture.ratingQuestion.getId(), List.of());
+
+        InterviewOrchestrationResponse response = service.startInterview(
+                new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        assertThat(response.prompt())
+                .isEqualTo("Belediye hizmetlerinden ne kadar memnunsunuz? Bir ile beş arasında bir puan verir misiniz?");
+    }
+
+    @Test
+    void numberQuestion_isAskedWithoutAnInstructionUntilAnAnswerIsUnclear() {
+        fixture.survey.setLanguageCode("tr");
+        SurveyQuestion ageQuestion = buildQuestion("age", 1, QuestionType.NUMBER, "Kaç yaşındasınız?");
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
+                .thenReturn(List.of(ageQuestion, fixture.openQuestion));
+        questionOptionsByQuestionId.put(ageQuestion.getId(), List.of());
+
+        InterviewOrchestrationResponse first = service.startInterview(
+                new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+        InterviewOrchestrationResponse retry = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Mavi gömlekli olan", InterviewConversationSignal.ANSWER));
+
+        assertThat(first.prompt()).isEqualTo("Kaç yaşındasınız?");
+        assertThat(retry.prompt()).contains("tek bir sayı").endsWith("Kaç yaşındasınız?");
     }
 
     @Test

@@ -332,7 +332,8 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             response.setCompletedAt(OffsetDateTime.now());
             updateCompletionPercent(response, context, flowState.eligibleQuestions());
             surveyResponseRepository.save(response);
-            return buildTerminalResponse(context, response, buildClosingPrompt(context.survey()), flowState);
+            // The callee is leaving ("meşgulüm, kapatıyorum"): a short goodbye, not "the survey is complete".
+            return buildTerminalResponse(context, response, buildConsentDeclinedClosingPrompt(context.survey()), flowState);
         }
 
         if (requiresOpeningGreeting(context.survey()) && !isOpeningGreetingReceived(response)) {
@@ -2635,21 +2636,26 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         if (question.getDescription() != null && !question.getDescription().isBlank()) {
             appendPromptSentence(builder, question.getDescription());
         }
-        if (question.getQuestionType() == QuestionType.RATING && ratingMin != null && ratingMax != null) {
+        // The scale is said once: a title such as "Bir ile beş arasında bir puan verir misiniz?" already gives it.
+        // A number question gets no instruction on the first ask; the retry after an unclear answer asks for a number.
+        if (question.getQuestionType() == QuestionType.RATING && ratingMin != null && ratingMax != null
+                && !mentionsScale(builder.toString(), ratingMin, ratingMax)) {
             if (turkish) {
                 appendPromptSentence(builder, "Lütfen " + ratingMin + " ile " + ratingMax + " arasında tek bir sayı söyleyin");
             } else {
                 appendPromptSentence(builder, "Please answer with one number between " + ratingMin + " and " + ratingMax);
             }
         }
-        if (question.getQuestionType() == QuestionType.NUMBER) {
-            if (turkish) {
-                appendPromptSentence(builder, "Lütfen tek bir sayı söyleyin");
-            } else {
-                appendPromptSentence(builder, "Please answer with one number");
-            }
-        }
         return normalizePromptPacing(builder.toString());
+    }
+
+    private boolean mentionsScale(String prompt, int ratingMin, int ratingMax) {
+        List<String> words = List.of(normalize(prompt).split(" "));
+        return mentionsNumber(words, ratingMin) && mentionsNumber(words, ratingMax);
+    }
+
+    private boolean mentionsNumber(List<String> words, int value) {
+        return words.stream().anyMatch(word -> Integer.valueOf(value).equals(SpokenNumberParser.parse(word)));
     }
 
     // Whether the choices are read out after the question. settingsJson "readOptions" (true/false) decides;
