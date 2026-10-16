@@ -24,7 +24,8 @@ HERE = Path(__file__).resolve().parent
 STATE_FILE = HERE / ".state.json"
 LOG_DIR = HERE / "logs"
 
-AGENT_NAME = "survey-prototype"
+# The name the worker registers under, which the backend dispatches to (its LIVEKIT_AGENT_NAME).
+AGENT_NAME = os.environ.get("LIVEKIT_AGENT_NAME", "survey-agent")
 CALLER_NUMBER = "+903229110347"
 SIP_ADDRESS = "sip.netgsm.com.tr"
 # Gökçe Deniz (a library voice; needs API credits), picked by the user from 8 voices reading the survey
@@ -41,7 +42,19 @@ AMBIENT_VOLUME = float(os.environ.get("PROTOTYPE_AMBIENT_VOLUME", "4.2"))
 # the recorded test calls of 5 callers; ElevenLabs Scribe v2 realtime, used before, got 13 ("51" -> "55",
 # "Hiçbiri" -> "Teşekkürler"). "scribe_v2_realtime" switches back.
 STT_MODEL = os.environ.get("PROTOTYPE_STT_MODEL", "speechmatics/linden-1")
-BACKEND_URL = "https://surveyai-backend-production.up.railway.app"
+# The SurveyAI backend: the interview engine and the call events of calls it placed.
+BACKEND_URL = os.environ.get("SURVEYAI_API_URL", "https://surveyai-backend-production.up.railway.app").rstrip("/")
+
+
+def backend_settings():
+    """The backend's address and the secrets it shares with the agent (the same variables the backend reads)."""
+    from backend import BackendSettings
+
+    tool_secret = os.environ.get("LIVEKIT_TOOL_API_SECRET", "")
+    webhook_secret = os.environ.get("LIVEKIT_WEBHOOK_SECRET", "")
+    if not tool_secret or not webhook_secret:
+        raise RuntimeError("LIVEKIT_TOOL_API_SECRET and LIVEKIT_WEBHOOK_SECRET are needed for calls the backend places")
+    return BackendSettings(BACKEND_URL, tool_secret, webhook_secret)
 
 
 def load_keys() -> dict[str, str]:

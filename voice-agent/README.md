@@ -1,8 +1,12 @@
-# Ses altyapısı prototipi (Aşama 0)
+# Ses ajanı
 
-`docs/voice-pipeline-prototype-plan.md` içindeki Aşama 0: LiveKit Cloud (AB) üzerinden Netgsm hattıyla
-arayan, sabit 3 soruluk bir anketi dil modeli kullanmadan yürüten ve her turun sürelerini kaydeden agent.
-Backend'e bağlı değildir; anket akışı `agent.py` içindeki basit kurallarla çalışır.
+LiveKit Cloud (AB) üzerinden Netgsm hattıyla arayan, cevapları dil modeli kullanmadan doğrudan seslendiren ve
+her turun sürelerini kaydeden ajan. İki tür arama yürütür:
+
+- **Backend'in başlattığı aramalar** (`docs/voice-phase1-plan.md`): görev bilgisinde `callAttemptId` vardır.
+  Ne söyleneceğine backend'deki görüşme motoru karar verir (`backend.py`). Ajan aramanın durumunu imzalı
+  olaylarla backend'e bildirir.
+- **`call.py` ile başlatılan deneme aramaları**: Aşama 0 prototipinin 3 soruluk anketi (`prototype_flow.py`).
 
 ## Kurulum
 
@@ -14,6 +18,10 @@ python -m venv .venv
 Anahtarlar repo dışındaki bir dosyadan okunur (`SURVEYAI_KEYS_FILE`, varsayılan `~/Desktop/elevenlabs-keys.env`):
 `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `NEW_ELEVENLABS_API_KEY`, `NETGSM_SIP_USERNAME`, `NETGSM_SIP_PASSWORD`.
 
+Backend'in başlattığı aramalar için ortam değişkenleri (backend'dekilerle aynı adlar ve değerler):
+`SURVEYAI_API_URL` (varsayılan canlı backend), `LIVEKIT_TOOL_API_SECRET`, `LIVEKIT_WEBHOOK_SECRET`,
+`LIVEKIT_AGENT_NAME` (varsayılan `survey-agent`; backend bu ada gönderir).
+
 ## Çalıştırma
 
 ```
@@ -21,12 +29,15 @@ Anahtarlar repo dışındaki bir dosyadan okunur (`SURVEYAI_KEYS_FILE`, varsayı
 .venv/Scripts/python setup_trunk.py        # Netgsm giden SIP hattını LiveKit'te bir kez tanımlar
 .venv/Scripts/python agent.py dev          # agent'ı başlatır (açık kalmalı)
 .venv/Scripts/python verify_watch.py       # biten aramaların cevaplarını kontrol eder (açık kalmalı)
-.venv/Scripts/python call.py +905xxxxxxxxx # numarayı arar
+.venv/Scripts/python call.py +905xxxxxxxxx # numarayı prototip anketiyle arar
+.venv/Scripts/python -m unittest test_backend  # backend akışının testleri
 ```
 
-Her arama `logs/` altına yazılır: turlar (`<oda>.jsonl`), soru cevapları (`<oda>.answers.jsonl`), iki tarafın
-sesi (`<oda>.agent.wav`, `<oda>.callee.wav`). `verify_watch.py` cevapları kayıttan iki modelle yeniden dinler ve
-her sorunun son cevabını `<oda>.final.json` dosyasına yazar (otomatik düzeltme ya da insan kontrolü gerekenler).
+Her arama `logs/` altına yazılır: turlar (`<oda>.jsonl`), iki tarafın sesi (`<oda>.agent.wav`,
+`<oda>.callee.wav`) ve prototip aramalarında soru cevapları (`<oda>.answers.jsonl`). `verify_watch.py` prototip
+aramalarının cevaplarını kayıttan iki modelle yeniden dinler ve her sorunun son cevabını `<oda>.final.json`
+dosyasına yazar (otomatik düzeltme ya da insan kontrolü gerekenler). Backend aramalarının kontrolü Aşama 1'in
+5. adımında (B7) gelecek.
 
 ## Notlar
 

@@ -1,17 +1,18 @@
-"""Phase 0 voice agent: places one outbound call through the Netgsm trunk and runs a fixed three-question
-survey without an LLM. The prompt for each turn is spoken directly, which is the point of the
-prototype: no second LLM pass per turn. Every turn's timings are written to logs/<room>.jsonl.
+"""Voice agent: places one outbound call through the Netgsm trunk and speaks each reply directly, without an
+LLM. Every turn's timings are written to logs/<room>.jsonl.
+
+A call the backend places (its job metadata carries a callAttemptId) runs the backend interview engine
+(backend.py) and reports its progress to the backend. A call placed with call.py runs the Phase 0
+prototype's own survey (prototype_flow.py).
 
 Run the worker:   .venv/Scripts/python agent.py dev
-Place a call:     .venv/Scripts/python call.py +905xxxxxxxxx
+Place a call:     .venv/Scripts/python call.py +905xxxxxxxxx   (prototype survey)
 """
 import asyncio
 import faulthandler
 import json
 import logging
-import re
 import time
-import unicodedata
 import wave
 
 import aiohttp
@@ -34,313 +35,20 @@ from livekit.agents import (
 from livekit.agents import inference
 from livekit.plugins import elevenlabs, silero
 
-from common import AGENT_NAME, AMBIENT_VOLUME, BACKEND_URL, LOG_DIR, STT_MODEL, TTS_MODEL, VOICE_ID, load_keys, read_state
+from backend import BackendInterview, InterviewClient
+from common import (AGENT_NAME, AMBIENT_VOLUME, BACKEND_URL, LOG_DIR, STT_MODEL, TTS_MODEL, VOICE_ID, backend_settings,
+                    load_keys, read_state)
 from gender import VoiceGenderDetector, load_model
 from leveler import VoiceLeveler
+from phrases import FILLERS, is_hesitation, normalize
+from prototype_flow import KEYTERMS, PrototypeInterview
 from tts_cache import TtsCache
 
 load_keys()
-logger = logging.getLogger("survey-prototype")
+logger = logging.getLogger("survey-agent")
 # A native crash (the worker once aborted with no log while a call ended) then at least prints every
 # thread's Python stack to the log.
 faulthandler.enable()
-
-OPENING = "Merhaba, ben Ayna Araştırma adına kısa bir anket için arıyorum. Size birkaç soru sorabilir miyim?"
-IDENTITY = "Ben Ayna Araştırma adına kısa bir anket için arıyorum."
-REASON = "Bu soruyu anket gereği tüm katılımcılara soruyoruz. Cevap vermek istemezseniz bunu da söyleyebilirsiniz."
-UNCLEAR = "Sizi net anlayamadım."
-HEARD = "Evet, sizi duyuyorum."
-CONSENT_QUESTION = "Size birkaç soru sorabilir miyim?"
-SILENCE = "Sizi duyamadım."
-CLOSING = "Vakit ayırdığınız için teşekkür ederim. Anketimiz burada sona erdi. İyi günler dilerim."
-DECLINED = "Anladım, teşekkür ederim. İyi günler dilerim."
-# (code, question, shorter form used when the question has to be asked again). Gender is not asked: it is
-# noted from the callee's voice over the whole call (gender.py).
-QUESTIONS = [
-    ("age", "Kaç yaşındasınız?", "Kaç yaşındasınız?"),
-    ("rating", "Belediye hizmetlerinden ne kadar memnunsunuz? Bir ile beş arasında bir puan verir misiniz?",
-     "Bir ile beş arasında kaç puan verirsiniz?"),
-    # The political question comes last.
-    ("candidate", "Cumhurbaşkanı adayı olarak kimi görmek istersiniz? Recep Tayyip Erdoğan, Ekrem İmamoğlu ya da "
-     "Mansur Yavaş?", "Recep Tayyip Erdoğan, Ekrem İmamoğlu ve Mansur Yavaş arasından kimi aday olarak görmek istersiniz?"),
-]
-# Any part of a name counts ("Tayyip", "İmamoğlu'nu"); for "Yavaş", an everyday word too, see
-# named_candidates. Listed in the order the question reads them out.
-CANDIDATES = {
-    "Recep Tayyip Erdoğan": ("recep", "tayyip", "erdogan", "rte"),
-    "Ekrem İmamoğlu": ("ekrem", "imamoglu", "imam oglu"),
-    "Mansur Yavaş": ("mansur",),
-}
-# Hints for speech recognition (Scribe realtime: up to 50 terms of up to 20 characters). It once wrote
-# "Hiçbiri" as "Bir, iki, üç."
-KEYTERMS = ["Recep Tayyip Erdoğan", "Erdoğan", "Ekrem İmamoğlu", "İmamoğlu", "Mansur Yavaş", "Hiçbiri",
-            "Hiçbirini", "Kararsızım"]
-# Question particle after each name, for "Mansur Yavaş mı, Ekrem İmamoğlu mu?"
-QUESTION_PARTICLE = {"Recep Tayyip Erdoğan": "mı", "Ekrem İmamoğlu": "mu", "Mansur Yavaş": "mı"}
-# "İkisi de": no choice between the names offered.
-NO_CHOICE = ("ikisi de", "ikisini de", "ikisi", "fark etmez", "farketmez", "karar veremedim", "secemiyorum",
-             "secemem", "bilmiyorum", "emin degilim")
-# "İkincisi", "sonuncusu": a choice by the order the names were read out.
-ORDINALS = {"birinci": 0, "birincisi": 0, "ilki": 0, "ikinci": 1, "ikincisi": 1, "ucuncu": 2, "ucuncusu": 2,
-            "sonuncu": 2, "sonuncusu": 2}
-# Replies to "X olarak not alıyorum, doğru mu?"
-CONFIRM_YES = ("evet", "dogru", "aynen", "tamam", "oyle", "evet dogru")
-CONFIRM_NO = ("hayir", "yanlis", "degil", "oyle degil", "yok")
-UNDECIDED = ("kararsizim", "kararsiz", "bilmiyorum", "bilmem", "emin degilim", "fikrim yok", "dusunmedim")
-NONE_OF_THEM = ("hicbiri", "hicbirini", "hicbirisi", "hicbire", "hicbirine", "hic biri", "hic birini", "kimseyi",
-                "hic kimse")  # Scribe wrote "Eee, hiçbiri" as "hiçbire"
-WITHHELD = ("soylemek istemiyorum", "soylemeyeyim", "soylemem", "cevap vermek istemiyorum", "gizli",
-            "kalsin", "sizi ilgilendirmez")
-# Words that are not an answer to "who", so a reply made only of them is not recorded as another name.
-NOT_A_NAME = {"evet", "hayir", "tamam", "peki", "olur", "alo", "efendim", "pardon", "ne", "nasil", "hm", "hmm",
-              "aday", "cumhurbaskani", "bilir", "misiniz", "mi",
-              # courtesy, once recognised in place of "Hiçbiri" and read back as a name
-              "tesekkurler", "tesekkur", "ederim", "sag", "olun", "sagolun", "rica"}
-# "Erdoğan'ı istemiyorum", "İmamoğlu olmasın": a name with one of these is not a choice.
-NEGATIONS = ("istemiyorum", "istemem", "olmasin", "degil", "asla")
-# Trimmed from both ends of another name before it is recorded and read back ("Bence Özgür Özel olsun").
-NAME_PADDING = {"olsun", "isterim", "derim", "diyorum", "valla", "vallahi", "bence", "tabii", "tabi", "ee", "eee",
-                "yani", "sey", "herhalde", "olabilir", "bey", "hanim", "hayir", "evet"}
-# Ending the survey. A bare "istemiyorum" only counts before the questions: during them it is usually
-# about the question ("söylemek istemiyorum") or a candidate ("Erdoğan'ı istemiyorum").
-STOP_SURVEY = ("rahatsiz etmeyin", "aramayin", "ilgilenmiyorum", "anket istemiyorum", "devam etmek istemiyorum",
-               # a callee who is leaving gets a goodbye, not the question again (one hung up after that)
-               "kapatiyorum", "kapatacagim", "kapatmam lazim", "mesgulum", "musait degilim", "simdi olmaz")
-# "Biraz önce de aramıştınız": the callee was already called; the agent apologises before going on.
-ALREADY_CALLED = ("aramistiniz", "aradiniz zaten", "zaten aradiniz", "daha once aradiniz", "cevap vermistim",
-                  "zaten cevap verdim")
-CALLED_AGAIN = "Kusura bakmayın, kısa bir kontrol için tekrar arıyoruz."
-AGE_RANGE = (15, 110)
-# The replies of a call that goes as planned (after the QUESTIONS they build on), synthesized while the phone
-# rings if they are not cached yet.
-def main_replies() -> list[str]:
-    return [OPENING, "Teşekkür ederim. " + QUESTIONS[0][1], *(question for _, question, _ in QUESTIONS[1:]), CLOSING]
-
-
-# Short sounds that arrive before the agent's reply has been played cannot answer the next question; the
-# recognizer also produced a phantom "Evet." from near-silence in the first test call.
-FILLERS = {"", "evet", "tamam", "hi", "hm", "hmm", "ee", "eee", "aha", "alo", "efendim", "he", "hi hi"}
-# "Eee", "hmm", "şey": the callee is thinking. Answering it cut in on a callee who was about to give a rating.
-HESITATION = re.compile(r"(e+|i+|m+|h+m+|a+h+|sey|yani)( (e+|i+|m+|h+m+|a+h+|sey|yani))*")
-# The callee checking whether the line works, usually because they did not hear the agent.
-PRESENCE_CHECKS = ("alo", "duyuyor musunuz", "orada misiniz", "sesim geliyor mu", "sesimi duyuyor musunuz")
-NUMBER_WORDS = {
-    "bir": 1, "iki": 2, "uc": 3, "dort": 4, "bes": 5, "alti": 6, "yedi": 7, "sekiz": 8, "dokuz": 9,
-    "on": 10, "yirmi": 20, "otuz": 30, "kirk": 40, "elli": 50, "altmis": 60, "yetmis": 70, "seksen": 80, "doksan": 90,
-}
-
-
-def normalize(text: str) -> str:
-    folded = text.lower().translate(str.maketrans("ıİşŞğĞüÜöÖçÇ", "iissgguuoocc"))
-    folded = unicodedata.normalize("NFD", folded)
-    folded = "".join(ch for ch in folded if unicodedata.category(ch) != "Mn")
-    return re.sub(r"[^a-z0-9 ]+", " ", folded).strip()
-
-
-def is_hesitation(text: str) -> bool:
-    return HESITATION.fullmatch(" ".join(normalize(text).split())) is not None
-
-
-def has_any(text: str, *phrases: str) -> bool:
-    padded = f" {text} "
-    return any(f" {phrase} " in padded for phrase in phrases)
-
-
-def spoken_number(text: str) -> int | None:
-    digits = re.search(r"\d+", text)
-    if digits:
-        return int(digits.group())
-    total, found = 0, False
-    # Speech recognition wrote "elli bir" as "belli bir" in a test call.
-    text = re.sub(r"\bbelli (?=(bir|iki|uc|dort|bes|alti|yedi|sekiz|dokuz)\b)", "elli ", text)
-    for token in text.split():
-        if token in NUMBER_WORDS:
-            total, found = total + NUMBER_WORDS[token], True
-    return total if found else None
-
-
-class SurveyFlow:
-    """A tiny stand-in for the backend interview engine; enough to drive realistic turns."""
-
-    def __init__(self) -> None:
-        self.step = "greeting"
-        self.questions = list(QUESTIONS)
-        self.question_index = 0
-        self.asked: set[str] = set()
-        self.answers: dict[str, str] = {}
-        # (question code, value) of an answer read back to the callee and waiting for "doğru mu?"
-        self.confirming: tuple[str, str] | None = None
-        # The callee's last reply to the current question when it gave no answer; read again together with
-        # what follows if the callee talked over the agent's reply.
-        self.unanswered: str | None = None
-        # Candidates the callee named together and was asked to choose between.
-        self.choosing: list[str] | None = None
-
-    def current_question(self, full: bool = False) -> str:
-        """The question in full the first time (or when asked to repeat it), the short form after that."""
-        code, question, short = self.questions[self.question_index]
-        if full or code not in self.asked:
-            self.asked.add(code)
-            return question
-        return short
-
-    def handle(self, raw: str, previous_reply_missed: bool = False) -> tuple[str, bool]:
-        """previous_reply_missed: the agent's last reply was cut off before the callee heard it."""
-        reply, end_call = self._handle(raw, previous_reply_missed)
-        if not end_call and has_any(normalize(raw), *ALREADY_CALLED):
-            reply = CALLED_AGAIN + " " + reply
-        return reply, end_call
-
-    def _handle(self, raw: str, previous_reply_missed: bool) -> tuple[str, bool]:
-        text = normalize(raw)
-        presence_check = has_any(text, *PRESENCE_CHECKS)
-        if self.step == "greeting":
-            self.step = "consent"
-            return OPENING, False
-        if has_any(text, *STOP_SURVEY) or (self.step == "consent" and has_any(text, "istemiyorum")):
-            self.step = "done"
-            return DECLINED, True
-        if has_any(text, "kimsiniz", "kim ariyor", "nereden ariyorsunuz", "siz kimsiniz"):
-            return IDENTITY + " " + (CONSENT_QUESTION if self.step == "consent" else self.current_question()), False
-        if self.step == "consent":
-            if has_any(text, "evet", "olur", "tabii", "tabi", "buyurun", "buyrun", "tamam", "sorabilirsiniz", "sorun degil", "dinliyorum"):
-                self.step = "questions"
-                return "Teşekkür ederim. " + self.current_question(), False
-            ask = OPENING if previous_reply_missed else CONSENT_QUESTION
-            if presence_check:
-                return HEARD + " " + ask, False
-            if previous_reply_missed:
-                return OPENING, False
-            return "Kısaca onayınızı rica edeceğim. " + CONSENT_QUESTION, False
-        code = self.questions[self.question_index][0]
-        if previous_reply_missed and self.unanswered:
-            # Speech recognition split "Mansur Yavaş veya Ekrem İmamoğlu. Ama tabii Ekrem hapisten çıkarsa." in
-            # two; the agent answered the first half and only the second was recorded. Read both together.
-            raw = self.unanswered + " " + raw
-            text = normalize(raw)
-        if self.confirming is not None:
-            confirm_code, value = self.confirming
-            self.confirming = None
-            if has_any(text, *CONFIRM_NO):
-                # "Hayır, hiçbiri" carries the right answer; a bare "Hayır" gets the question again.
-                answer = self.interpret(code, raw, text)
-                if answer is None:
-                    return "Peki. " + self.current_question(), False
-                return self._take(code, *answer)
-            if has_any(text, *CONFIRM_YES):
-                return self._take(confirm_code, value, False)
-            # Anything else is taken as a new answer to the question.
-        if has_any(text, "neden", "niye", "nicin", "belli degil mi", "ne gerek var"):
-            return REASON + " " + self.current_question(), False
-        if has_any(text, "tekrar", "anlamadim", "ne dediniz", "efendim", "pardon", "yavas konusur", "yavas konusun",
-                           "yavas konusabilir", "yavas soyler", "yavas soyleyin"):
-            return self.current_question(full=True), False
-        if code == "candidate" and has_any(text, *NEGATIONS) and not has_any(text, *UNDECIDED) and any(
-                has_any(text, *keys) for keys in CANDIDATES.values()):
-            return "Anladım. Peki " + self.current_question(), False
-        if code == "candidate":
-            named = [name for name in CANDIDATES if name in named_candidates(text)]
-            if len(named) > 1 and not has_any(text, *UNDECIDED):
-                # Two names: ask once which one, as an interviewer would; named together again, undecided.
-                if self.choosing is None:
-                    self.choosing = named
-                    self.unanswered = None
-                    choices = ", ".join(f"{name} {QUESTION_PARTICLE[name]}" for name in named)
-                    return f"Anladım. Peki hangisini daha çok tercih edersiniz, {choices}?", False
-                return self._take(code, "Kararsız (" + " / ".join(named) + ")", False)
-            if self.choosing and not named and has_any(text, *NO_CHOICE):
-                return self._take(code, "Kararsız (" + " / ".join(self.choosing) + ")", False)
-        answer = self.interpret(code, raw, text)
-        if answer is None:
-            self.unanswered = raw
-            if presence_check:
-                return HEARD + " " + self.current_question(), False
-            if previous_reply_missed:
-                return self.current_question(), False
-            return UNCLEAR + " " + self.current_question(), False
-        return self._take(code, *answer)
-
-    def _take(self, code: str, value: str, confirm: bool) -> tuple[str, bool]:
-        if confirm:
-            # A name not on the list may be misheard (once "Hiçbiri" came out as "Bir, iki, üç"), so the
-            # callee hears it back and can correct it before the call moves on.
-            self.confirming = (code, value)
-            return f"{value.removeprefix('Diğer: ')} olarak not alıyorum, doğru mu?", False
-        self.answers[code] = value
-        self.unanswered, self.choosing = None, None
-        self.question_index += 1
-        if self.question_index >= len(self.questions):
-            self.step = "done"
-            return CLOSING, True
-        return self.current_question(), False
-
-    @staticmethod
-    def interpret(code: str, raw: str, text: str) -> tuple[str, bool] | None:
-        """(value to record, whether to read it back for confirmation), or None when it is not an answer."""
-        if code == "age":
-            number = spoken_number(text)
-            # "Belli bir" once came out as 1; an impossible age gets the question again.
-            return (str(number), False) if number is not None and AGE_RANGE[0] <= number <= AGE_RANGE[1] else None
-        if code == "rating":
-            if has_any(text, *WITHHELD):
-                return "Cevap vermek istemiyor", False
-            if has_any(text, *UNDECIDED):
-                return "Bilmiyor", False
-            number = spoken_number(text)
-            return (str(number), False) if number is not None and 1 <= number <= 5 else None
-        if code == "candidate":
-            return candidate_answer(raw, text)
-        return None
-
-
-def named_candidates(text: str) -> set[str]:
-    named = {name for name, keys in CANDIDATES.items() if has_any(text, *keys)}
-    # "Yavaş" alone is a name unless it is about speaking slowly ("yavaş konuşun", "yavaş söyler misiniz").
-    if re.search(r"\byavas\b(?! (konus|soyle|sor|oku|anlat))", text):
-        named.add("Mansur Yavaş")
-    return named
-
-
-def candidate_answer(raw: str, text: str) -> tuple[str, bool] | None:
-    words = text.split()
-    named = named_candidates(text)
-    if has_any(text, *UNDECIDED):
-        # "Kararsızım ama muhtemelen İmamoğlu ya da Yavaş": undecided, leaning towards the names given.
-        # "Kararsızım ama Erdoğan değil" excludes a name rather than leaning towards it.
-        leaning = [] if has_any(text, *NEGATIONS) else [name for name in CANDIDATES if name in named]
-        return ("Kararsız (" + " / ".join(leaning) + ")" if leaning else "Kararsız"), False
-    if len(named) == 1:
-        return named.pop(), False
-    if len(named) > 1:
-        return None  # "Erdoğan değil, İmamoğlu": ask again rather than guess
-    picked = {ORDINALS[word] for word in words if word in ORDINALS}
-    if len(picked) == 1:
-        return list(CANDIDATES)[picked.pop()], False
-    if has_any(text, *WITHHELD):
-        return "Cevap vermek istemiyor", False
-    if has_any(text, *NONE_OF_THEM):
-        return "Hiçbiri", False
-    # Numbers are not a name. A bare "üç" might mean the third name, but the question is asked again
-    # rather than guessed.
-    if spoken_number(text) is not None:
-        return None
-    if 1 <= len(words) <= 5 and not set(words) <= NOT_A_NAME and not raw.rstrip().endswith("?"):
-        name = other_name(raw)
-        if name:
-            return f"Diğer: {name}", True  # someone not on the list, read back for confirmation
-    return None
-
-
-def other_name(raw: str) -> str:
-    """'Bence Özgür Özel'i olsun.' -> 'Özgür Özel'"""
-    words = raw.strip(" .,!?").replace(",", " ").split()
-    while words and normalize(words[0]) in NAME_PADDING:
-        words.pop(0)
-    while words and normalize(words[-1]) in NAME_PADDING:
-        words.pop()
-    if words and "'" in words[-1]:
-        words[-1] = words[-1].split("'")[0]  # case suffix: Özel'i, Davutoğlu'nu
-    return " ".join(words)
 
 
 class TurnRecorder:
@@ -357,6 +65,8 @@ class TurnRecorder:
         self.user_stopped_at: float | None = None
         self.pending: dict | None = None
         self.turns: list[dict] = []
+        # The conversation as said and heard, for the backend's call record.
+        self.transcript: list[dict] = []
 
     def user_state(self, new_state: str, at: float) -> None:
         if new_state == "listening":
@@ -383,7 +93,8 @@ class TurnRecorder:
         callee actually stopped speaking (not from when the pause was detected)."""
         role = getattr(item, "role", None)
         item_metrics = dict(getattr(item, "metrics", None) or {})
-        entry = {"role": role, "text": getattr(item, "text_content", None)}
+        text = getattr(item, "text_content", None)
+        entry = {"role": role, "text": text}
         if role == "user":
             self.last_user_metrics = item_metrics
             entry.update({k: round(v, 3) for k, v in item_metrics.items()
@@ -395,6 +106,8 @@ class TurnRecorder:
             if item_metrics.get("tts_node_ttfb") is not None:
                 entry["tts_ttfb"] = round(item_metrics["tts_node_ttfb"], 3)
             self.last_user_metrics = {}
+        if role in ("user", "assistant") and text:
+            self.transcript.append({"role": "agent" if role == "assistant" else "user", "text": text})
         with (self.path.parent / (self.path.stem + ".messages.jsonl")).open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
         logger.info("message %s", entry)
@@ -416,10 +129,9 @@ class TurnRecorder:
 
 
 class SurveyAgent(Agent):
-    def __init__(self, flow: SurveyFlow, recorder: TurnRecorder, http: aiohttp.ClientSession, hang_up,
-                 gender: VoiceGenderDetector) -> None:
-        super().__init__(instructions="Fixed-script survey prototype; replies come from SurveyFlow.")
-        self.flow, self.recorder, self.http, self.hang_up = flow, recorder, http, hang_up
+    def __init__(self, interview, recorder: TurnRecorder, hang_up, gender: VoiceGenderDetector) -> None:
+        super().__init__(instructions="Fixed-script survey; every reply comes from the interview.")
+        self.interview, self.recorder, self.hang_up = interview, recorder, hang_up
         self.gender = gender
         self.leveler = VoiceLeveler()
         self.tts_cache = TtsCache(VOICE_ID, TTS_MODEL)
@@ -431,10 +143,6 @@ class SurveyAgent(Agent):
         self.heard_sample_rate = 16000
         self.heard_started_at: float | None = None
         self.heard_peak = 0.0
-        # Every reply to a survey question, for the check after the call (verify_call.py). Kept apart from
-        # the turn log, which is written when the reply starts playing and so misses interrupted replies.
-        self.answer_turns: list[dict] = []
-        self.previous_heard_at: float | None = None
         self.last_voice_at: float | None = None  # wall time of the callee's last loud audio frame
         self.last_reply = None
 
@@ -502,64 +210,45 @@ class SurveyAgent(Agent):
         # Only a reply synthesized to the end is kept; an interrupted one stops at the yield above.
         self.tts_cache.put(reply, frames)
 
-    def save_answer_turns(self, room_name: str) -> None:
-        with (LOG_DIR / f"{room_name}.answers.jsonl").open("w", encoding="utf-8") as handle:
-            for entry in self.answer_turns:
-                handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
     def save_audio(self, room_name: str) -> None:
         write_wav(LOG_DIR / f"{room_name}.agent.wav", self.sent_audio, self.sent_sample_rate)
         write_wav(LOG_DIR / f"{room_name}.callee.wav", self.heard_audio, self.heard_sample_rate)
 
     async def on_user_turn_completed(self, turn_ctx, new_message) -> None:
         user_text = new_message.text_content or ""
-        if self.flow.step == "done":
+        if self.interview.step == "done":
             # The survey is over and the goodbye is playing; once the end of the callee's own sentence
             # ("...diyeceğim") arrived here and crashed the handler.
             logger.info("ignoring %r: the survey is over", user_text)
             raise StopResponse()
         if (self.last_reply is not None and not self.last_reply.done() and normalize(user_text) in FILLERS
-                and self.flow.confirming is None):
+                and not self.interview.takes_fillers()):
             logger.info("ignoring %r: the previous reply has not been played yet", user_text)
             raise StopResponse()
-        if self.flow.step != "greeting" and is_hesitation(user_text):
+        if self.interview.step != "greeting" and is_hesitation(user_text):
             logger.info("ignoring %r: the callee is thinking", user_text)
             raise StopResponse()
-        turn = self.recorder.start_turn(self.flow.step, user_text, self.last_voice_at)
+        turn = self.recorder.start_turn(self.interview.step, user_text, self.last_voice_at)
         turn["heard_at_s"] = self.heard_offset()
-        question = self.flow.questions[self.flow.question_index][0] if self.flow.step == "questions" else None
-        answers_before = dict(self.flow.answers)
         started = time.time()
-        # Stands in for the backend /answer round trip: same host, same network path.
-        backend_started = time.time()
-        try:
-            async with self.http.get(BACKEND_URL + "/api/health", timeout=aiohttp.ClientTimeout(total=5)) as response:
-                await response.read()
-        except Exception as error:  # the measurement must not break the call
-            logger.warning("backend probe failed: %s", error)
-        turn["backend_ms"] = round((time.time() - backend_started) * 1000)
         # Scores this turn's voice in the background; the gender is decided when the call ends.
         self.gender.end_turn()
         missed = self._last_reply_missed()
         if missed:
             turn["previous_reply_missed"] = True
-        reply, end_call = self.flow.handle(user_text, previous_reply_missed=missed)
-        if question is not None:
-            recorded = self.flow.answers.get(question)
-            self.answer_turns.append({
-                "question": question,
-                "heard_at_s": turn["heard_at_s"],
-                "previous_heard_at_s": self.previous_heard_at,
-                "text": user_text,
-                "recorded": recorded if recorded != answers_before.get(question) else None,
-            })
-        self.previous_heard_at = turn["heard_at_s"]
+        opening = self.interview.step == "greeting"
+        reply, end_call = await self.interview.reply(user_text, previous_reply_missed=missed,
+                                                     heard_at_s=turn["heard_at_s"])
         turn["handler_ms"] = round((time.time() - started) * 1000)
         turn["reply"] = reply
+        if not reply:
+            # Nothing to say yet (the engine waits for a greeting it can recognise).
+            self.recorder.pending = None
+            raise StopResponse()
         # The opening is said in full even if the callee says "Alo?" again over it, as a person would; in the
         # second test call a repeated "Alo" cancelled it before it started and the callee never heard it.
         # The goodbye too: the tail of the callee's last answer once cut it after "Vakit" and the line dropped.
-        speech = self.session.say(reply, allow_interruptions=reply != OPENING and not end_call)
+        speech = self.session.say(reply, allow_interruptions=not opening and not end_call)
         speech._reply_text = reply
         self.last_reply = speech
         if end_call:
@@ -609,6 +298,14 @@ def speech_recognizer():
     return inference.STT(model=STT_MODEL, language="tr")
 
 
+def sip_status(error: api.TwirpError) -> tuple[int | None, str | None]:
+    code = error.metadata.get("sip_status_code")
+    try:
+        return (int(code) if code else None), error.metadata.get("sip_status")
+    except ValueError:
+        return None, error.metadata.get("sip_status")
+
+
 def prewarm(proc: JobProcess) -> None:
     proc.userdata["vad"] = silero.VAD.load()
     proc.userdata["gender_model"] = load_model()
@@ -621,11 +318,11 @@ server = AgentServer(setup_fnc=prewarm, num_idle_processes=1, initialize_process
 @server.rtc_session(agent_name=AGENT_NAME)
 async def entrypoint(ctx: JobContext) -> None:
     metadata = json.loads(ctx.job.metadata or "{}")
-    phone = metadata["phone"]
-    trunk_id = read_state()["sip_trunk_id"]
+    placed_by_backend = "callAttemptId" in metadata
+    phone = metadata["phoneNumber"] if placed_by_backend else metadata["phone"]
+    trunk_id = metadata.get("sipTrunkId") or read_state()["sip_trunk_id"]
     await ctx.connect()
 
-    flow = SurveyFlow()
     recorder = TurnRecorder(ctx.room.name)
     gender = VoiceGenderDetector(ctx.proc.userdata["gender_model"])
     http = aiohttp.ClientSession()
@@ -656,6 +353,19 @@ async def entrypoint(ctx: JobContext) -> None:
             "interruption": {"min_duration": 0.6, "resume_false_interruption": True},
         },
     )
+
+    client = InterviewClient(http, backend_settings(), metadata, ctx.room.name) if placed_by_backend else None
+    if client is not None:
+        interview = BackendInterview(client, say=lambda text: session.say(text, allow_interruptions=False))
+    else:
+        interview = PrototypeInterview()
+    answered_at: float | None = None
+    reports: list[asyncio.Task] = []
+
+    def report(event: str, **fields) -> None:
+        """Sends a call event to the backend in the background, in order (calls the backend placed only)."""
+        if client is not None:
+            reports.append(asyncio.create_task(client.report(event, **fields)))
 
     async def hang_up(speech) -> None:
         await speech.wait_for_playout()
@@ -688,19 +398,31 @@ async def entrypoint(ctx: JobContext) -> None:
     def _item(event) -> None:
         recorder.message(event.item)
 
-    async def finish_call() -> None:
-        await http.close()
+    @session.on("close")
+    def _closed(event) -> None:
+        # The callee hung up (or the session failed): end the job, which ends the interview.
+        ctx.shutdown(reason=f"session closed: {event.reason}")
+
+    async def finish_call(reason: str) -> None:
         survey_agent.save_audio(ctx.room.name)
-        # verify_watch.py picks the call up from logs/ and checks the answers.
-        survey_agent.save_answer_turns(ctx.room.name)
+        if isinstance(interview, PrototypeInterview):
+            # verify_watch.py picks the call up from logs/ and checks the answers.
+            interview.save_answer_turns(LOG_DIR / f"{ctx.room.name}.answers.jsonl")
         decision = await gender.decide(timeout=2.0)
-        flow.answers["gender"] = f"{decision.label or 'belirsiz'} (sesten)"
-        logger.info("call finished: %d turns, answers=%s, gender=%s, scores=%s", len(recorder.turns), flow.answers,
-                    decision, [score.__dict__ for score in gender.scores])
+        logger.info("call finished (%s): %d turns, answers=%s, gender=%s, scores=%s", reason, len(recorder.turns),
+                    getattr(getattr(interview, "flow", None), "answers", "in the backend"), decision,
+                    [score.__dict__ for score in gender.scores])
+        if client is not None and answered_at is not None:
+            # The interview first, so the call's final event finds it decided; the room closes after this.
+            await interview.finish()
+            report("ended", durationSeconds=round(time.time() - answered_at), transcript=recorder.transcript,
+                   reason=reason)
+        await asyncio.gather(*reports, return_exceptions=True)
+        await http.close()
 
     ctx.add_shutdown_callback(finish_call)
 
-    survey_agent = SurveyAgent(flow, recorder, http, hang_up, gender)
+    survey_agent = SurveyAgent(interview, recorder, hang_up, gender)
     session_started = asyncio.create_task(session.start(agent=survey_agent, room=ctx.room))
 
     async def warm_backend() -> None:
@@ -714,7 +436,8 @@ async def entrypoint(ctx: JobContext) -> None:
     warm_up = asyncio.create_task(warm_backend())
     # While the phone rings: synthesize the replies of a normal call that are not cached yet.
     survey_agent.caching = asyncio.create_task(
-        synthesize_missing(session.tts, survey_agent.tts_cache, main_replies()))  # held so it is not collected
+        synthesize_missing(session.tts, survey_agent.tts_cache, interview.first_replies()))  # held so it is not collected
+    report("ringing")
     try:
         await ctx.api.sip.create_sip_participant(api.CreateSIPParticipantRequest(
             room_name=ctx.room.name,
@@ -724,10 +447,14 @@ async def entrypoint(ctx: JobContext) -> None:
             wait_until_answered=True,
         ))
     except api.TwirpError as error:
-        logger.error("call failed: %s sip_status=%s %s", error.message,
-                     error.metadata.get("sip_status_code"), error.metadata.get("sip_status"))
-        ctx.shutdown()
+        code, status = sip_status(error)
+        logger.error("call failed: %s sip_status=%s %s", error.message, code, status)
+        report("failed", sipStatusCode=code, sipStatus=status, reason=error.message)
+        ctx.shutdown(reason="call not answered")
         return
+    answered_at = time.time()
+    report("answered")
+    survey_agent.beginning = asyncio.create_task(interview.begin())  # held so it is not collected
     await session_started
     await warm_up
 
@@ -737,7 +464,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
     # The callee normally speaks first ("Alo"). If nobody does, say "Alo?" once.
     await asyncio.sleep(3)
-    if flow.step == "greeting" and not recorder.turns:
+    if interview.step == "greeting" and not recorder.turns:
         session.say("Alo?")
 
 

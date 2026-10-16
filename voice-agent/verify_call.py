@@ -43,7 +43,8 @@ from livekit import rtc  # noqa: E402
 from livekit.agents import inference  # noqa: E402
 from livekit.agents import stt as agents_stt  # noqa: E402
 
-from agent import SurveyFlow, normalize  # noqa: E402
+from phrases import normalize  # noqa: E402
+from prototype_flow import SurveyFlow  # noqa: E402
 
 # Linden-1 got every key answer of the recorded test calls right; Gemini is the second opinion.
 CHECK_MODELS = ["speechmatics/linden-1", "google/gemini-3.5-transcribe-live"]
