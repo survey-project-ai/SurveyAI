@@ -28,14 +28,19 @@ Backend'in başlattığı aramalar için ortam değişkenleri (backend'dekilerle
 
 ## Railway
 
-Backend ile aynı projede, Amsterdam bölgesinde ayrı bir servis. Kök dizin `/voice-agent`; derleme
-`Dockerfile` ve `railway.toml` ile yapılır. Cinsiyet modeli derleme sırasında imaja indirilir. Ajan
-`agent.py start` ile çalışır; LiveKit'e uzun süre ulaşamazsa normal çıkış yaptığı için yeniden başlatma
-politikası "her zaman"dır.
+Backend ile aynı projede ayrı bir servis: `SurveyAI-VoiceAgent`. Cinsiyet modeli derleme sırasında
+imaja indirilir. Ajan `agent.py start` ile çalışır.
+
+Railway yeni servislerde `railway.toml` kabul etmediği için ayarlar servisin kendisindedir:
+- kök dizin `/voice-agent`, `Dockerfile`;
+- izlenen yol `/voice-agent/**`; `feature/yusuf` dalından dağıtılır;
+- bölge europe-west4 (Amsterdam);
+- yeniden başlatma "her zaman": LiveKit'e uzun süre ulaşamayan ajan normal çıkış yapar;
+- yeniden dağıtımda eski ajan, süren aramalar bitsin diye 300 sn bekletilir.
 
 Ortam değişkenleri: `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `ELEVEN_API_KEY`,
 `LIVEKIT_AGENT_NAME=survey-agent`, `SURVEYAI_API_URL`, `LIVEKIT_TOOL_API_SECRET`, `LIVEKIT_WEBHOOK_SECRET`,
-`RAILWAY_DEPLOYMENT_DRAINING_SECONDS` (yeniden dağıtımda süren aramaların bitmesi için beklenen süre).
+`SURVEYAI_FORCE_IPV4=0`.
 
 `logs/` ve `cache/` konteynerin geçici diskinde durur: her dağıtımda sıfırlanır. Ses önbelleği ilk
 aramalarda yeniden dolar.
