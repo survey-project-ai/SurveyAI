@@ -1,20 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { usePageHeaderOverride } from "@/components/layout/PageHeaderContext";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import {
-  AnalyticsIcon,
-  ArrowRightIcon,
-  OperationIcon,
-  PlayIcon,
-  PlusIcon,
-  SurveyIcon,
-} from "@/components/ui/Icons";
+import { ArrowRightIcon, PlayIcon, PlusIcon } from "@/components/ui/Icons";
 import { useAuth } from "@/lib/auth";
 import { fetchCompanyOperations, fetchDashboardSummary } from "@/lib/operations";
 import { fetchCompanySurveys } from "@/lib/surveys";
@@ -24,12 +17,6 @@ import type { CallJob, DashboardSummary, Operation, OperationContact, Survey } f
 const ACTIVITY_ROW_LIMIT = 6;
 
 type ContactStatusTotals = Partial<Record<OperationContact["status"], number>>;
-
-type QuickLink = {
-  title: string;
-  href: string;
-  icon: ReactNode;
-};
 
 type DashboardTask = {
   id: string;
@@ -125,17 +112,6 @@ export default function DashboardPage() {
     () => buildDashboardActivityRows(operations, summary?.recentCallJobs ?? []),
     [operations, summary],
   );
-
-  const featuredQuickLinks: QuickLink[] = [
-    { title: "Anketler", href: "/surveys", icon: <SurveyIcon className="nav-icon" /> },
-    { title: "Yeni Operasyon", href: "/operations/new", icon: <PlayIcon className="nav-icon" /> },
-  ];
-
-  const compactQuickLinks: QuickLink[] = [
-    { title: "Anketler", href: "/surveys", icon: <SurveyIcon className="nav-icon" /> },
-    { title: "Operasyonlar", href: "/operations", icon: <OperationIcon className="nav-icon" /> },
-    { title: "Analitik", href: "/analytics", icon: <AnalyticsIcon className="nav-icon" /> },
-  ];
 
   return (
     <PageContainer hideBackRow>
@@ -373,31 +349,6 @@ export default function DashboardPage() {
               </div>
             )}
           </SectionCard>
-
-          <section className="panel-card ops-dashboard-shortcuts">
-            <div className="section-header">
-              <div className="section-copy">
-                <h2>Hızlı Geçiş</h2>
-                <p>Sık kullandığınız alanlara hızlı erişim.</p>
-              </div>
-            </div>
-            <div className="ops-dashboard-shortcuts-featured">
-              {featuredQuickLinks.map((item) => (
-                <Link key={item.href} href={item.href} className="ops-dashboard-shortcut-featured">
-                  {item.icon}
-                  <span>{item.title}</span>
-                </Link>
-              ))}
-            </div>
-            <div className="ops-dashboard-shortcuts-compact">
-              {compactQuickLinks.map((item) => (
-                <Link key={item.href} href={item.href} className="ops-dashboard-shortcut-compact">
-                  {item.icon}
-                  <span>{item.title}</span>
-                </Link>
-              ))}
-            </div>
-          </section>
         </div>
 
         <div className="ops-dashboard-reference-side">

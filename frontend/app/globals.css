@@ -10173,49 +10173,6 @@ body::after {
   font-size: 0.84rem;
 }
 
-.ops-dashboard-shortcuts {
-  display: grid;
-  gap: 16px;
-}
-
-.ops-dashboard-shortcuts-featured {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.ops-dashboard-shortcut-featured,
-.ops-dashboard-shortcut-compact {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid #e6ece9;
-  background: #fbfcfc;
-  color: #1e2a27;
-}
-
-.ops-dashboard-shortcut-featured {
-  min-height: 56px;
-  padding: 0 18px;
-  border-radius: 12px;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.ops-dashboard-shortcuts-compact {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.ops-dashboard-shortcut-compact {
-  justify-content: center;
-  padding: 14px 12px;
-  border-radius: 12px;
-  font-size: 0.92rem;
-  font-weight: 500;
-}
-
 .ops-dashboard-activity-list {
   display: grid;
 }
@@ -10289,9 +10246,7 @@ body::after {
   }
 
   .ops-dashboard-primary-actions,
-  .ops-dashboard-reference-grid,
-  .ops-dashboard-shortcuts-featured,
-  .ops-dashboard-shortcuts-compact {
+  .ops-dashboard-reference-grid {
     grid-template-columns: 1fr;
   }
 
@@ -10324,10 +10279,6 @@ body::after {
 
   .ops-dashboard-welcome-copy h1 {
     font-size: 1.8rem;
-  }
-
-  .ops-dashboard-shortcuts-compact {
-    grid-template-columns: 1fr 1fr;
   }
 
   .ops-dashboard-result-bars {
