@@ -72,6 +72,12 @@ class TurnRecorder:
         if new_state == "listening":
             self.user_stopped_at = at
 
+    def heard(self, user_text: str) -> None:
+        # The callee's turns never reach "conversation_item_added": the agent stops LiveKit's own reply
+        # (StopResponse) and speaks its own, so they are written here as they arrive.
+        if user_text.strip():
+            self.transcript.append({"role": "user", "text": user_text.strip()})
+
     def start_turn(self, step: str, user_text: str, speech_end_at: float | None) -> dict:
         self.pending = {"step": step, "user_text": user_text, "user_stopped_at": self.user_stopped_at,
                         "speech_end_at": speech_end_at}
@@ -106,8 +112,8 @@ class TurnRecorder:
             if item_metrics.get("tts_node_ttfb") is not None:
                 entry["tts_ttfb"] = round(item_metrics["tts_node_ttfb"], 3)
             self.last_user_metrics = {}
-        if role in ("user", "assistant") and text:
-            self.transcript.append({"role": "agent" if role == "assistant" else "user", "text": text})
+        if role == "assistant" and text:
+            self.transcript.append({"role": "agent", "text": text})
         with (self.path.parent / (self.path.stem + ".messages.jsonl")).open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
         logger.info("message %s", entry)
@@ -216,6 +222,7 @@ class SurveyAgent(Agent):
 
     async def on_user_turn_completed(self, turn_ctx, new_message) -> None:
         user_text = new_message.text_content or ""
+        self.recorder.heard(user_text)
         if self.interview.step == "done":
             # The survey is over and the goodbye is playing; once the end of the callee's own sentence
             # ("...diyeceğim") arrived here and crashed the handler.
