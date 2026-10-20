@@ -20,7 +20,25 @@ Anahtarlar repo dışındaki bir dosyadan okunur (`SURVEYAI_KEYS_FILE`, varsayı
 
 Backend'in başlattığı aramalar için ortam değişkenleri (backend'dekilerle aynı adlar ve değerler):
 `SURVEYAI_API_URL` (varsayılan canlı backend), `LIVEKIT_TOOL_API_SECRET`, `LIVEKIT_WEBHOOK_SECRET`,
-`LIVEKIT_AGENT_NAME` (varsayılan `survey-agent`; backend bu ada gönderir).
+`LIVEKIT_AGENT_NAME`. Ajan bu adla kaydolur, backend de aramayı bu ada gönderir:
+- Railway'deki ajan: `survey-agent` (backend'in varsayılanı).
+- Değişken verilmeden başlatılan ajan: `survey-agent-dev`. Geliştirme makinesindeki ajan böylece canlı
+  ajanın aramalarını almaz. Yerel backend'le denemede backend'e de `LIVEKIT_AGENT_NAME=survey-agent-dev`
+  verilir.
+
+## Railway
+
+Backend ile aynı projede, Amsterdam bölgesinde ayrı bir servis. Kök dizin `/voice-agent`; derleme
+`Dockerfile` ve `railway.toml` ile yapılır. Cinsiyet modeli derleme sırasında imaja indirilir. Ajan
+`agent.py start` ile çalışır; LiveKit'e uzun süre ulaşamazsa normal çıkış yaptığı için yeniden başlatma
+politikası "her zaman"dır.
+
+Ortam değişkenleri: `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `ELEVEN_API_KEY`,
+`LIVEKIT_AGENT_NAME=survey-agent`, `SURVEYAI_API_URL`, `LIVEKIT_TOOL_API_SECRET`, `LIVEKIT_WEBHOOK_SECRET`,
+`RAILWAY_DEPLOYMENT_DRAINING_SECONDS` (yeniden dağıtımda süren aramaların bitmesi için beklenen süre).
+
+`logs/` ve `cache/` konteynerin geçici diskinde durur: her dağıtımda sıfırlanır. Ses önbelleği ilk
+aramalarda yeniden dolar.
 
 ## Çalıştırma
 

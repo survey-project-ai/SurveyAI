@@ -1,7 +1,9 @@
-"""Shared settings for the voice pipeline prototype (Phase 0 of docs/voice-pipeline-prototype-plan.md).
+"""Shared settings for the voice agent.
 
-Secrets are read from a local env file outside the repository (SURVEYAI_KEYS_FILE, default
-~/Desktop/elevenlabs-keys.env) and are never printed.
+Secrets come from environment variables (LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, ELEVEN_API_KEY,
+LIVEKIT_TOOL_API_SECRET, LIVEKIT_WEBHOOK_SECRET). On the development machine they may come from a local env
+file outside the repository instead (SURVEYAI_KEYS_FILE, default ~/Desktop/elevenlabs-keys.env). They are
+never printed.
 """
 import json
 import os
@@ -9,8 +11,8 @@ import socket
 from pathlib import Path
 
 # On the development machine the IPv6 DNS servers do not answer, so every IPv4+IPv6 lookup waits about
-# 12 seconds (IPv4-only lookups take 0.1 s). The prototype resolves IPv4 only; a server in the EU does
-# not need this.
+# 12 seconds (IPv4-only lookups take 0.1 s), and names are resolved IPv4 only there. Not on Railway, whose
+# private network is IPv6; SURVEYAI_FORCE_IPV4 (1/0) overrides.
 _getaddrinfo = socket.getaddrinfo
 
 
@@ -18,14 +20,17 @@ def _ipv4_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
     return _getaddrinfo(host, port, socket.AF_INET if family == socket.AF_UNSPEC else family, type, proto, flags)
 
 
-socket.getaddrinfo = _ipv4_getaddrinfo
+if os.environ.get("SURVEYAI_FORCE_IPV4", "0" if "RAILWAY_ENVIRONMENT" in os.environ else "1") == "1":
+    socket.getaddrinfo = _ipv4_getaddrinfo
 
 HERE = Path(__file__).resolve().parent
 STATE_FILE = HERE / ".state.json"
 LOG_DIR = HERE / "logs"
 
-# The name the worker registers under, which the backend dispatches to (its LIVEKIT_AGENT_NAME).
-AGENT_NAME = os.environ.get("LIVEKIT_AGENT_NAME", "survey-agent")
+# The name the worker registers under, which the backend dispatches to (its LIVEKIT_AGENT_NAME). The
+# deployed agent is "survey-agent"; a worker started without the variable registers as the development
+# agent, so it never takes calls meant for the deployed one.
+AGENT_NAME = os.environ.get("LIVEKIT_AGENT_NAME", "survey-agent-dev")
 CALLER_NUMBER = "+903229110347"
 SIP_ADDRESS = "sip.netgsm.com.tr"
 # Gökçe Deniz (a library voice; needs API credits), picked by the user from 8 voices reading the survey
@@ -58,18 +63,21 @@ def backend_settings():
 
 
 def load_keys() -> dict[str, str]:
+    """The local keys file's values, also put into the environment where it does not set them already.
+    Without the file (on Railway) the environment alone is used."""
     path = Path(os.environ.get("SURVEYAI_KEYS_FILE", Path.home() / "Desktop" / "elevenlabs-keys.env"))
     values: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8-sig").splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            name, value = line.split("=", 1)
-            values[name.strip()] = value.strip().strip('"').strip("'")
+    if path.exists():
+        for line in path.read_text(encoding="utf-8-sig").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                name, value = line.split("=", 1)
+                values[name.strip()] = value.strip().strip('"').strip("'")
     # The LiveKit SDK and the ElevenLabs plugin read these environment variables.
-    os.environ.setdefault("LIVEKIT_URL", values["LIVEKIT_URL"])
-    os.environ.setdefault("LIVEKIT_API_KEY", values["LIVEKIT_API_KEY"])
-    os.environ.setdefault("LIVEKIT_API_SECRET", values["LIVEKIT_API_SECRET"])
-    os.environ.setdefault("ELEVEN_API_KEY", values["NEW_ELEVENLABS_API_KEY"])
+    for variable, key in (("LIVEKIT_URL", "LIVEKIT_URL"), ("LIVEKIT_API_KEY", "LIVEKIT_API_KEY"),
+                          ("LIVEKIT_API_SECRET", "LIVEKIT_API_SECRET"), ("ELEVEN_API_KEY", "NEW_ELEVENLABS_API_KEY")):
+        if key in values:
+            os.environ.setdefault(variable, values[key])
     return values
 
 
