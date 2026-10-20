@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { usePageHeaderOverride } from "@/components/layout/PageHeaderContext";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ActionsMenu, type ActionsMenuItem } from "@/components/ui/ActionsMenu";
 import { DataTable } from "@/components/ui/DataTable";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -21,7 +22,8 @@ import {
 import { fetchCompanyOperations } from "@/lib/operations";
 import { fetchSurveyBuilderSurvey } from "@/lib/survey-builder-api";
 import { questionTypeLabels } from "@/lib/survey-builder";
-import { fetchCompanySurveys, importGoogleForm } from "@/lib/surveys";
+import { useNotifications } from "@/lib/notifications";
+import { deleteSurvey, fetchCompanySurveys, importGoogleForm } from "@/lib/surveys";
 import type { Operation, Survey, SurveyQuestionType, TableColumn } from "@/lib/types";
 
 type SurveyTab = "Aktif" | "Taslak" | "Arşivlenmiş" | "Tümü";
@@ -58,6 +60,7 @@ export default function SurveysPage() {
   const [activeTab, setActiveTab] = useState<SurveyTab>("Aktif");
   const [surveyPage, setSurveyPage] = useState(0);
   const [expandedSurveyId, setExpandedSurveyId] = useState<string | null>(null);
+  const { notify } = useNotifications();
   const [portfolioView, setPortfolioView] = useState<PortfolioView>("portfolio");
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -354,6 +357,20 @@ export default function SurveysPage() {
     setExpandedSurveyId(null);
   }
 
+  const handleDeleteSurvey = useCallback(async (survey: SurveyRow) => {
+    if (!window.confirm(`"${survey.name}" anketini silmek istediğinize emin misiniz? Bu işlem geri alınmaz.`)) {
+      return;
+    }
+
+    try {
+      await deleteSurvey(survey.id);
+      setSurveys((current) => current.filter((item) => item.id !== survey.id));
+      notify("success", `${survey.name} silindi`);
+    } catch (error) {
+      notify("error", "Anket silinemedi", error instanceof Error ? error.message : undefined);
+    }
+  }, [notify]);
+
   const columns = useMemo<TableColumn<SurveyRow>[]>(
     () => [
       {
@@ -457,49 +474,44 @@ export default function SurveysPage() {
       {
         key: "action",
         label: "Aksiyon",
-        render: (survey) => (
-          <div className="ops-table-action-group">
-            <button
-              type="button"
-              className="button-secondary compact-button"
-              disabled={survey.linkedOperations.length === 0}
-              onClick={() =>
-                setExpandedSurveyId((current) =>
-                  current === survey.id ? null : survey.id,
-                )
-              }
-            >
-              {survey.linkedOperations.length === 0
-                ? "Operasyon Yok"
-                : "Operasyonlara Git"}
-            </button>
-            <Link
-              href={`/surveys/${survey.id}`}
-              className="button-secondary compact-button"
-            >
-              Detaya Git
-            </Link>
-            {survey.status === "Draft" ? (
-              <Link
-                href={`/surveys/${survey.id}/edit`}
-                className="button-secondary compact-button"
-              >
-                Düzenle
+        render: (survey) => {
+          // The API deletes only drafts that no operation uses (and that have no responses).
+          const deleteBlocker = survey.status !== "Draft"
+            ? "Yalnızca taslak anketler silinebilir."
+            : survey.linkedOperations.length > 0
+              ? "Operasyonda kullanılan anketler silinemez."
+              : null;
+          const items: ActionsMenuItem[] = [
+            ...(survey.linkedOperations.length > 0
+              ? [{
+                  label: expandedSurveyId === survey.id ? "Operasyonları gizle" : "Operasyonları göster",
+                  onSelect: () => setExpandedSurveyId((current) => (current === survey.id ? null : survey.id)),
+                }]
+              : []),
+            ...(survey.status === "Draft"
+              ? [{ label: "Düzenle", onSelect: () => router.push(`/surveys/${survey.id}/edit`) }]
+              : []),
+            {
+              label: "Anketi sil",
+              tone: "danger",
+              disabled: deleteBlocker !== null,
+              hint: deleteBlocker ?? undefined,
+              onSelect: () => void handleDeleteSurvey(survey),
+            },
+          ];
+
+          return (
+            <div className="ops-table-action-group is-inline">
+              <Link href={`/surveys/${survey.id}`} className="button-secondary compact-button">
+                Aç
               </Link>
-            ) : null}
-            <button
-              type="button"
-              className="button-secondary compact-button survey-delete-button"
-              disabled
-              title="Anket silme akışı bu ekranda henüz desteklenmiyor"
-            >
-              Anketi Sil
-            </button>
-          </div>
-        ),
+              <ActionsMenu items={items} label={`${survey.name} için işlemler`} />
+            </div>
+          );
+        },
       },
     ],
-    [],
+    [expandedSurveyId, handleDeleteSurvey, router],
   );
 
   const analyticsRows = useMemo<SurveyAnalyticsRow[]>(

@@ -8853,23 +8853,23 @@ body::after {
   border-width: 1px;
 }
 
-.operation-header-more {
-  position: relative;
+.actions-menu {
+  display: inline-flex;
 }
 
-.operation-header-more-button {
+.actions-menu-button {
   min-width: 36px;
   justify-content: center;
   font-size: 1.1rem;
   line-height: 1;
 }
 
-.operation-header-more-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 30;
-  min-width: 180px;
+/* Placed with inline fixed coordinates by ActionsMenu. */
+.actions-menu-list {
+  z-index: 60;
+  display: grid;
+  min-width: 200px;
+  max-width: 280px;
   padding: 6px;
   border: 1px solid var(--ops-border);
   border-radius: 12px;
@@ -8877,7 +8877,9 @@ body::after {
   box-shadow: 0 14px 32px rgba(16, 24, 40, 0.16);
 }
 
-.operation-header-more-item {
+.actions-menu-item {
+  display: grid;
+  gap: 2px;
   width: 100%;
   padding: 8px 10px;
   border: 0;
@@ -8888,17 +8890,27 @@ body::after {
   cursor: pointer;
 }
 
-.operation-header-more-item.is-danger {
+.actions-menu-item:hover:not(:disabled) {
+  background: #eef5f3;
+}
+
+.actions-menu-item.is-danger {
   color: #b42318;
 }
 
-.operation-header-more-item.is-danger:hover:not(:disabled) {
+.actions-menu-item.is-danger:hover:not(:disabled) {
   background: #fdf0ee;
 }
 
-.operation-header-more-item:disabled {
+.actions-menu-item:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.actions-menu-item small {
+  color: var(--ops-text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.35;
 }
 
 .survey-header-button .nav-icon {
@@ -9576,6 +9588,11 @@ body::after {
 .ops-table-action-group {
   justify-items: flex-start;
   gap: 8px;
+}
+
+.ops-table-action-group.is-inline {
+  display: flex;
+  align-items: center;
 }
 
 .table-title {
@@ -11710,19 +11727,6 @@ body::after {
 .surveys-page-tight .ops-table-action-group .button-secondary:last-child:hover {
   background: #e5eef8;
   color: #274965;
-}
-
-.surveys-page-tight .ops-table-action-group .survey-delete-button {
-  border-color: #efd6d8;
-  background: #fcf1f2;
-  color: #a06a70;
-}
-
-.surveys-page-tight .ops-table-action-group .survey-delete-button:disabled {
-  border-color: #efd6d8;
-  background: #fcf1f2;
-  color: #a06a70;
-  opacity: 1;
 }
 
 .surveys-page-tight .ops-table-action-group .button-secondary:disabled {

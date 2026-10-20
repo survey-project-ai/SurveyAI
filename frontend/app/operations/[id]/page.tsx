@@ -12,6 +12,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import { KpiCard } from "@/components/ui/KpiCard";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { EyeIcon, PauseIcon, PlayIcon } from "@/components/ui/Icons";
+import { ActionsMenu } from "@/components/ui/ActionsMenu";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   ACCEPTED_OPERATION_CONTACT_FILE_TYPES,
@@ -162,8 +163,6 @@ export default function OperationDetailPage() {
   const operationId = params.id;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const hasInitializedTabRef = useRef(false);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
-  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [operation, setOperation] = useState<Operation | null>(null);
   const [contactSummary, setContactSummary] = useState<OperationContactSummary | null>(null);
   const [analytics, setAnalytics] = useState<OperationAnalytics | null>(null);
@@ -542,30 +541,6 @@ export default function OperationDetailPage() {
     }
   }, [operation, operationId, primaryAction.disabled, primaryAction.intent, refreshAfterMutation]);
 
-  useEffect(() => {
-    if (!isMoreMenuOpen) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent) {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
-        setIsMoreMenuOpen(false);
-      }
-    }
-    function handleKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.key === "Escape") {
-        setIsMoreMenuOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isMoreMenuOpen]);
-
   const handleDeleteOperation = useCallback(async () => {
     if (!operationId || !operation || isDeleting) {
       return;
@@ -670,41 +645,23 @@ export default function OperationDetailPage() {
             {headerPlaybackState.actionLabel}
           </button>
         ) : null}
-        <div className="operation-header-more" ref={moreMenuRef}>
-          <button
-            type="button"
-            className="button-secondary compact-button operation-header-more-button"
-            aria-label="Diğer işlemler"
-            aria-haspopup="menu"
-            aria-expanded={isMoreMenuOpen}
-            onClick={() => setIsMoreMenuOpen((open) => !open)}
-          >
-            ⋯
-          </button>
-          {isMoreMenuOpen ? (
-            <div className="operation-header-more-menu" role="menu">
-              <button
-                type="button"
-                role="menuitem"
-                className="operation-header-more-item is-danger"
-                disabled={isDeleting}
-                onClick={() => {
-                  setIsMoreMenuOpen(false);
-                  void handleDeleteOperation();
-                }}
-              >
-                {isDeleting ? "Siliniyor..." : "Operasyonu sil"}
-              </button>
-            </div>
-          ) : null}
-        </div>
+        <ActionsMenu
+          items={[
+            {
+              label: isDeleting ? "Siliniyor..." : "Operasyonu sil",
+              tone: "danger",
+              disabled: isDeleting,
+              onSelect: () => void handleDeleteOperation(),
+            },
+          ]}
+        />
         {/* Why the action is unavailable; when it is available the hint stays in its tooltip. */}
         {!operationIsTerminal && headerPlaybackState.actionDisabled && headerPlaybackState.actionHint ? (
           <span className="survey-header-action-note">{headerPlaybackState.actionHint}</span>
         ) : null}
       </div>
     </div>
-  ) : null, [attemptedContactCount, contactCount, failedContactCount, handleDeleteOperation, handlePrimaryHeaderAction, headerPlaybackState, isDeleting, isMoreMenuOpen, operation, operationIsTerminal, statusConfig.badge.label, successfulContactCount]);
+  ) : null, [attemptedContactCount, contactCount, failedContactCount, handleDeleteOperation, handlePrimaryHeaderAction, headerPlaybackState, isDeleting, operation, operationIsTerminal, statusConfig.badge.label, successfulContactCount]);
 
   usePageHeaderOverride({ ...pageHeader, action: headerAction });
 

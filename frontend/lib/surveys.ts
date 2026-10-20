@@ -52,6 +52,19 @@ export async function fetchCompanySurveys(
   return data.map(mapSurveyDtoToSurvey);
 }
 
+// Only a draft survey that no operation uses and that has no responses can be deleted; the API says why not.
+export async function deleteSurvey(surveyId: string, companyId?: string): Promise<void> {
+  const resolvedCompanyId = requireCompanyId(companyId);
+  const response = await apiFetch(`${API_BASE_URL}/api/v1/companies/${resolvedCompanyId}/surveys/${surveyId}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response, "Anket silme"));
+  }
+}
+
 export async function importGoogleForm(
   request: ImportGoogleFormRequest,
   companyId?: string,
