@@ -34,6 +34,15 @@ class BackendError(Exception):
     pass
 
 
+def dial_failure_event(sip_status_code: int | None, message: str | None) -> str:
+    """The call event for a dial that did not connect. When nobody picks up, LiveKit gives up after its
+    30-second ringing window with "sip request timed out" and no SIP status: an unanswered call, which
+    the backend calls again later. With a SIP status, the backend reads the reason from it."""
+    if sip_status_code is None and "timed out" in (message or "").lower():
+        return "no_answer"
+    return "failed"
+
+
 @dataclass(frozen=True)
 class BackendSettings:
     url: str

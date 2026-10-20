@@ -35,7 +35,7 @@ from livekit.agents import (
 from livekit.agents import inference
 from livekit.plugins import elevenlabs, silero
 
-from backend import BackendInterview, InterviewClient
+from backend import BackendInterview, InterviewClient, dial_failure_event
 from common import (AGENT_NAME, AMBIENT_VOLUME, BACKEND_URL, LOG_DIR, STT_MODEL, TTS_MODEL, VOICE_ID, backend_settings,
                     load_keys, read_state)
 from gender import VoiceGenderDetector, load_model
@@ -456,7 +456,7 @@ async def entrypoint(ctx: JobContext) -> None:
     except api.TwirpError as error:
         code, status = sip_status(error)
         logger.error("call failed: %s sip_status=%s %s", error.message, code, status)
-        report("failed", sipStatusCode=code, sipStatus=status, reason=error.message)
+        report(dial_failure_event(code, error.message), sipStatusCode=code, sipStatus=status, reason=error.message)
         ctx.shutdown(reason="call not answered")
         return
     answered_at = time.time()

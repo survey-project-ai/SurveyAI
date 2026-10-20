@@ -1,7 +1,7 @@
 """Tests for the agent's side of a call the backend placed. Run: .venv/Scripts/python -m unittest test_backend"""
 import unittest
 
-from backend import PLEASE_WAIT, TECHNICAL_GOODBYE, BackendError, BackendInterview
+from backend import PLEASE_WAIT, TECHNICAL_GOODBYE, BackendError, BackendInterview, dial_failure_event
 from phrases import CALLED_AGAIN, HEARD, is_line_check, signal_for
 
 
@@ -23,6 +23,16 @@ class SignalTest(unittest.TestCase):
         self.assertTrue(is_line_check("Alo, beni duyuyor musunuz?"))
         self.assertFalse(is_line_check("Alo, elli bir."))
         self.assertFalse(is_line_check(""))
+
+
+class DialFailureTest(unittest.TestCase):
+    def test_a_dial_nobody_answered_is_reported_as_unanswered(self):
+        # The second test call: the phone rang for LiveKit's 30-second window and nobody picked up.
+        self.assertEqual(dial_failure_event(None, "sip request timed out"), "no_answer")
+
+    def test_other_dial_failures_leave_the_reason_to_the_sip_status(self):
+        self.assertEqual(dial_failure_event(486, "Busy Here"), "failed")
+        self.assertEqual(dial_failure_event(None, "trunk not found"), "failed")
 
 
 class FakeClient:
