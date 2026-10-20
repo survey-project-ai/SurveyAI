@@ -41,7 +41,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [mobileNavState, setMobileNavState] = useState<{ pathname: string; open: boolean }>({ pathname, open: false });
   const [userMenuState, setUserMenuState] = useState<{ pathname: string; open: boolean }>({ pathname, open: false });
   const { language, setLanguage } = useLanguage();
-  const { status, currentUser, logout } = useAuth();
+  const { status, sessionExpired, currentUser, logout } = useAuth();
   const { t } = useTranslations();
   const pageHeaderOverride = useResolvedPageHeader();
   const isPageScrolled = useSyncExternalStore(subscribeToScroll, () => window.scrollY > 0, () => false);
@@ -85,9 +85,19 @@ function AppShellFrame({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (status === "unauthenticated" && !isAuthRoute) {
-      router.replace("/login");
+      // Come back to this page after signing in, and say why when the session ran out mid-use.
+      const params = new URLSearchParams();
+      if (sessionExpired) {
+        params.set("expired", "1");
+      }
+      const currentPage = `${window.location.pathname}${window.location.search}`;
+      if (currentPage !== "/") {
+        params.set("next", currentPage);
+      }
+      const query = params.toString();
+      router.replace(query ? `/login?${query}` : "/login");
     }
-  }, [isAuthRoute, router, status]);
+  }, [isAuthRoute, router, sessionExpired, status]);
 
   if (isAuthRoute) {
     return <>{children}</>;

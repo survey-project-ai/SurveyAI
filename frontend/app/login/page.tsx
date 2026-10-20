@@ -1,12 +1,26 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+
+function subscribeToNothing(): () => void {
+  return () => {};
+}
+
+// Only a path inside the app, so a crafted link cannot send the user elsewhere after signing in.
+function resolveNextPage(search: string): string {
+  const next = new URLSearchParams(search).get("next");
+  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/login") ? next : "/";
+}
 
 export default function LoginPage() {
   const router = useRouter();
   const { status, login } = useAuth();
+  // Read from the URL on the client only; the prerendered page has no query.
+  const search = useSyncExternalStore(subscribeToNothing, () => window.location.search, () => "");
+  const sessionExpired = new URLSearchParams(search).get("expired") === "1";
+  const nextPage = resolveNextPage(search);
   const [email, setEmail] = useState("owner@acme-research.test");
   const [password, setPassword] = useState("change-me-123");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -14,9 +28,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      router.replace("/");
+      router.replace(nextPage);
     }
-  }, [router, status]);
+  }, [nextPage, router, status]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,7 +42,7 @@ export default function LoginPage() {
         email: email.trim(),
         password,
       });
-      router.replace("/");
+      router.replace(nextPage);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Şu anda oturum açılamıyor.");
       setIsSubmitting(false);
@@ -76,6 +90,13 @@ export default function LoginPage() {
                 disabled={isSubmitting || status === "loading"}
               />
             </label>
+
+            {sessionExpired && !errorMessage ? (
+              <div className="operation-inline-message is-accent compact">
+                <strong>Oturumunuz sona erdi</strong>
+                <span>Devam etmek için yeniden giriş yapın; kaldığınız sayfaya döneceksiniz.</span>
+              </div>
+            ) : null}
 
             {errorMessage ? (
               <div className="operation-inline-message is-danger compact">

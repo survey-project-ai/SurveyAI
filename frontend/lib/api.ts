@@ -4,12 +4,21 @@ const internalApiBaseUrl = process.env.INTERNAL_API_BASE_URL ?? publicApiBaseUrl
 
 export const API_BASE_URL = typeof window === "undefined" ? internalApiBaseUrl : publicApiBaseUrl;
 
+// Raised when an API call answers 401: the session expired or was revoked while the page was open.
+export const SESSION_EXPIRED_EVENT = "surveyai:session-expired";
+
 export async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
-  return fetch(input, {
+  const response = await fetch(input, {
     ...init,
     credentials: "include",
     cache: "no-store",
   });
+
+  if (response.status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  }
+
+  return response;
 }
 
 function inferPublicApiBaseUrl(): string {

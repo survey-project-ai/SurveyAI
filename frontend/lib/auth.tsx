@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { API_BASE_URL } from "@/lib/api";
+import { API_BASE_URL, SESSION_EXPIRED_EVENT } from "@/lib/api";
 
 type ApiErrorResponse = {
   code?: string;
@@ -38,6 +38,8 @@ type LoginPayload = {
 
 type AuthContextValue = {
   status: "loading" | "authenticated" | "unauthenticated";
+  // True when the session ended while the app was open (an API call answered 401), not after a logout.
+  sessionExpired: boolean;
   currentUser: AuthenticatedUser | null;
   login: (payload: LoginPayload) => Promise<AuthenticatedUser>;
   logout: () => Promise<void>;
@@ -52,8 +54,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthContextValue["status"]>("loading");
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null);
 
+  const [sessionExpired, setSessionExpired] = useState(false);
+
   useEffect(() => {
     void refreshSession();
+  }, []);
+
+  useEffect(() => {
+    function handleSessionExpired() {
+      authSnapshot = null;
+      setCurrentUser(null);
+      setSessionExpired(true);
+      setStatus("unauthenticated");
+    }
+
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
   }, []);
 
   async function refreshSession() {
@@ -90,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const user = (await response.json()) as AuthenticatedUser;
     authSnapshot = user;
     setCurrentUser(user);
+    setSessionExpired(false);
     setStatus("authenticated");
     return user;
   }
@@ -111,11 +128,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(() => ({
     status,
+    sessionExpired,
     currentUser,
     login,
     logout,
     refreshSession,
-  }), [currentUser, status]);
+  }), [currentUser, sessionExpired, status]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
