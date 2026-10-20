@@ -1154,7 +1154,7 @@ public class SurveyFileImportServiceImpl implements SurveyFileImportService {
 
     private void ensureCompanyExists(UUID companyId) {
         if (!companyRepository.existsById(companyId)) {
-            throw new NotFoundException("Company not found: " + companyId);
+            throw new NotFoundException("Şirket bulunamadı: " + companyId);
         }
     }
 

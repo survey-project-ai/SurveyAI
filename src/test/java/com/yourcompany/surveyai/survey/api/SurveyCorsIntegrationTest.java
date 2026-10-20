@@ -260,7 +260,7 @@ class SurveyCorsIntegrationTest {
                                 """.formatted(userId)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.message").value("Invalid company ID"));
+                .andExpect(jsonPath("$.message").value("Geçersiz şirket kimliği."));
     }
 
     private static AppUser authenticatedUser(UUID companyId, UUID userId) {

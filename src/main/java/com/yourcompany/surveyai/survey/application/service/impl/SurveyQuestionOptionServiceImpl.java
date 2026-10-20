@@ -109,7 +109,7 @@ public class SurveyQuestionOptionServiceImpl implements SurveyQuestionOptionServ
         ensureChoiceQuestion(option.getSurveyQuestion());
 
         if (surveyAnswerRepository.existsBySelectedOption_IdAndDeletedAtIsNull(optionId)) {
-            throw new ValidationException("Option cannot be deleted because answers already reference it");
+            throw new ValidationException("Bu seçeneği kullanan cevaplar olduğu için seçenek silinemez.");
         }
 
         surveyQuestionOptionRepository.delete(option);
@@ -151,7 +151,7 @@ public class SurveyQuestionOptionServiceImpl implements SurveyQuestionOptionServ
     private SurveyQuestion getQuestion(UUID companyId, UUID surveyId, UUID questionId) {
         ensureSurveyExists(companyId, surveyId);
         return surveyQuestionRepository.findByIdAndSurvey_IdAndCompany_IdAndDeletedAtIsNull(questionId, surveyId, companyId)
-                .orElseThrow(() -> new NotFoundException("Survey question not found: " + questionId));
+                .orElseThrow(() -> new NotFoundException("Anket sorusu bulunamadı: " + questionId));
     }
 
     private SurveyQuestionOption getOption(UUID companyId, UUID surveyId, UUID questionId, UUID optionId) {
@@ -163,38 +163,38 @@ public class SurveyQuestionOptionServiceImpl implements SurveyQuestionOptionServ
                         surveyId,
                         companyId
                 )
-                .orElseThrow(() -> new NotFoundException("Survey question option not found: " + optionId));
+                .orElseThrow(() -> new NotFoundException("Soru seçeneği bulunamadı: " + optionId));
     }
 
     private Survey ensureSurveyExists(UUID companyId, UUID surveyId) {
         if (!companyRepository.existsById(companyId)) {
-            throw new NotFoundException("Company not found: " + companyId);
+            throw new NotFoundException("Şirket bulunamadı: " + companyId);
         }
 
         return surveyRepository.findByIdAndCompany_IdAndDeletedAtIsNull(surveyId, companyId)
-                .orElseThrow(() -> new NotFoundException("Survey not found for company: " + surveyId));
+                .orElseThrow(() -> new NotFoundException("Bu şirkette anket bulunamadı: " + surveyId));
     }
 
     private void ensureDraftSurvey(Survey survey) {
         if (survey.getStatus() != SurveyStatus.DRAFT) {
-            throw new ValidationException("Survey question options can only be modified while the survey is in draft");
+            throw new ValidationException("Soru seçenekleri yalnızca anket taslak durumundayken değiştirilebilir.");
         }
     }
 
     private void ensureChoiceQuestion(SurveyQuestion question) {
         QuestionType type = question.getQuestionType();
         if (type != QuestionType.SINGLE_CHOICE && type != QuestionType.MULTI_CHOICE) {
-            throw new ValidationException("Question options are only supported for choice-based questions");
+            throw new ValidationException("Seçenekler yalnızca seçimli sorularda kullanılabilir.");
         }
     }
 
     private void ensureOptionCodeAvailable(UUID questionId, String optionCode, UUID currentOptionId) {
         surveyQuestionOptionRepository.findBySurveyQuestion_IdAndOptionCodeAndDeletedAtIsNull(
                 questionId,
-                requireTrimmed(optionCode, "Option code is required")
+                requireTrimmed(optionCode, "Seçenek kodu zorunludur.")
         ).ifPresent(existing -> {
             if (!existing.getId().equals(currentOptionId)) {
-                throw new ValidationException("Option code already exists for this question");
+                throw new ValidationException("Bu soruda aynı seçenek kodu zaten var.");
             }
         });
     }
@@ -203,24 +203,24 @@ public class SurveyQuestionOptionServiceImpl implements SurveyQuestionOptionServ
         surveyQuestionOptionRepository.findBySurveyQuestion_IdAndOptionOrderAndDeletedAtIsNull(questionId, optionOrder)
                 .ifPresent(existing -> {
                     if (!existing.getId().equals(currentOptionId)) {
-                        throw new ValidationException("Option order already exists for this question");
+                        throw new ValidationException("Bu soruda aynı seçenek sırası zaten var.");
                     }
                 });
     }
 
     private void applyOptionFields(SurveyQuestionOption option, CreateSurveyQuestionOptionRequest request) {
         option.setOptionOrder(request.getOptionOrder());
-        option.setOptionCode(requireTrimmed(request.getOptionCode(), "Option code is required"));
-        option.setLabel(requireTrimmed(request.getLabel(), "Option label is required"));
-        option.setValue(requireTrimmed(request.getValue(), "Option value is required"));
+        option.setOptionCode(requireTrimmed(request.getOptionCode(), "Seçenek kodu zorunludur."));
+        option.setLabel(requireTrimmed(request.getLabel(), "Seçenek etiketi zorunludur."));
+        option.setValue(requireTrimmed(request.getValue(), "Seçenek değeri zorunludur."));
         option.setActive(request.isActive());
     }
 
     private void applyOptionFields(SurveyQuestionOption option, UpdateSurveyQuestionOptionRequest request) {
         option.setOptionOrder(request.getOptionOrder());
-        option.setOptionCode(requireTrimmed(request.getOptionCode(), "Option code is required"));
-        option.setLabel(requireTrimmed(request.getLabel(), "Option label is required"));
-        option.setValue(requireTrimmed(request.getValue(), "Option value is required"));
+        option.setOptionCode(requireTrimmed(request.getOptionCode(), "Seçenek kodu zorunludur."));
+        option.setLabel(requireTrimmed(request.getLabel(), "Seçenek etiketi zorunludur."));
+        option.setValue(requireTrimmed(request.getValue(), "Seçenek değeri zorunludur."));
         option.setActive(request.isActive());
     }
 

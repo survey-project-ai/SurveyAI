@@ -22,7 +22,7 @@ public class CallProviderRegistry {
     public VoiceExecutionProvider getRequiredProvider(CallProvider provider) {
         VoiceExecutionProvider resolved = providers.get(provider);
         if (resolved == null) {
-            throw new NotFoundException("Voice execution provider is not registered: " + provider);
+            throw new NotFoundException("Sesli arama sağlayıcısı tanımlı değil: " + provider);
         }
         return resolved;
     }

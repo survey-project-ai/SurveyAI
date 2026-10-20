@@ -111,7 +111,7 @@ public class SurveyQuestionServiceImpl implements SurveyQuestionService {
         ensureDraftSurvey(question.getSurvey());
 
         if (surveyAnswerRepository.existsBySurveyQuestion_IdAndDeletedAtIsNull(questionId)) {
-            throw new ValidationException("Question cannot be deleted because answers already exist");
+            throw new ValidationException("Bu soruya verilmiş cevaplar olduğu için soru silinemez.");
         }
 
         for (SurveyQuestionOption option : surveyQuestionOptionRepository
@@ -157,33 +157,33 @@ public class SurveyQuestionServiceImpl implements SurveyQuestionService {
 
     private Survey ensureSurveyExists(UUID companyId, UUID surveyId) {
         if (!companyRepository.existsById(companyId)) {
-            throw new NotFoundException("Company not found: " + companyId);
+            throw new NotFoundException("Şirket bulunamadı: " + companyId);
         }
 
         return surveyRepository.findByIdAndCompany_IdAndDeletedAtIsNull(surveyId, companyId)
-                .orElseThrow(() -> new NotFoundException("Survey not found for company: " + surveyId));
+                .orElseThrow(() -> new NotFoundException("Bu şirkette anket bulunamadı: " + surveyId));
     }
 
     private SurveyQuestion getQuestion(UUID companyId, UUID surveyId, UUID questionId) {
         ensureSurveyExists(companyId, surveyId);
         return surveyQuestionRepository.findByIdAndSurvey_IdAndCompany_IdAndDeletedAtIsNull(questionId, surveyId, companyId)
-                .orElseThrow(() -> new NotFoundException("Survey question not found: " + questionId));
+                .orElseThrow(() -> new NotFoundException("Anket sorusu bulunamadı: " + questionId));
     }
 
     private void ensureDraftSurvey(Survey survey) {
         if (survey.getStatus() != SurveyStatus.DRAFT) {
-            throw new ValidationException("Survey questions can only be modified while the survey is in draft");
+            throw new ValidationException("Anket soruları yalnızca anket taslak durumundayken değiştirilebilir.");
         }
     }
 
     private void ensureQuestionCodeAvailable(UUID surveyId, String code, UUID currentQuestionId) {
         surveyQuestionRepository.findBySurvey_IdAndCodeAndDeletedAtIsNull(
                 surveyId,
-                requireTrimmed(code, "Question code is required")
+                requireTrimmed(code, "Soru kodu zorunludur.")
         )
                 .ifPresent(existing -> {
                     if (!existing.getId().equals(currentQuestionId)) {
-                        throw new ValidationException("Question code already exists in this survey");
+                        throw new ValidationException("Bu ankette aynı soru kodu zaten var.");
                     }
                 });
     }
@@ -192,7 +192,7 @@ public class SurveyQuestionServiceImpl implements SurveyQuestionService {
         surveyQuestionRepository.findBySurvey_IdAndQuestionOrderAndDeletedAtIsNull(surveyId, questionOrder)
                 .ifPresent(existing -> {
                     if (!existing.getId().equals(currentQuestionId)) {
-                        throw new ValidationException("Question order already exists in this survey");
+                        throw new ValidationException("Bu ankette aynı soru sırası zaten var.");
                     }
                 });
     }
@@ -206,15 +206,15 @@ public class SurveyQuestionServiceImpl implements SurveyQuestionService {
                 .findAllBySurveyQuestion_IdAndDeletedAtIsNullOrderByOptionOrderAsc(question.getId())
                 .isEmpty();
         if (hasOptions) {
-            throw new ValidationException("Delete question options before changing the question to a non-choice type");
+            throw new ValidationException("Soruyu seçimli olmayan bir tipe çevirmeden önce seçeneklerini silin.");
         }
     }
 
     private void applyQuestionFields(SurveyQuestion question, CreateSurveyQuestionRequest request) {
-        question.setCode(requireTrimmed(request.getCode(), "Question code is required"));
+        question.setCode(requireTrimmed(request.getCode(), "Soru kodu zorunludur."));
         question.setQuestionOrder(request.getQuestionOrder());
         question.setQuestionType(request.getQuestionType());
-        question.setTitle(requireTrimmed(request.getTitle(), "Question title is required"));
+        question.setTitle(requireTrimmed(request.getTitle(), "Soru başlığı zorunludur."));
         question.setDescription(trimToNull(request.getDescription()));
         question.setRequired(request.isRequired());
         question.setRetryPrompt(trimToNull(request.getRetryPrompt()));
@@ -225,10 +225,10 @@ public class SurveyQuestionServiceImpl implements SurveyQuestionService {
     }
 
     private void applyQuestionFields(SurveyQuestion question, UpdateSurveyQuestionRequest request) {
-        question.setCode(requireTrimmed(request.getCode(), "Question code is required"));
+        question.setCode(requireTrimmed(request.getCode(), "Soru kodu zorunludur."));
         question.setQuestionOrder(request.getQuestionOrder());
         question.setQuestionType(request.getQuestionType());
-        question.setTitle(requireTrimmed(request.getTitle(), "Question title is required"));
+        question.setTitle(requireTrimmed(request.getTitle(), "Soru başlığı zorunludur."));
         question.setDescription(trimToNull(request.getDescription()));
         question.setRequired(request.isRequired());
         question.setRetryPrompt(trimToNull(request.getRetryPrompt()));
@@ -290,7 +290,7 @@ public class SurveyQuestionServiceImpl implements SurveyQuestionService {
         try {
             objectMapper.readTree(trimmed);
         } catch (JsonProcessingException ex) {
-            throw new ValidationException(fieldName + " must be valid JSON");
+            throw new ValidationException(fieldName + " alanı geçerli bir JSON olmalıdır.");
         }
     }
 

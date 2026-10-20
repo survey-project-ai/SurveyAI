@@ -88,7 +88,7 @@ public class OperationContactServiceImpl implements OperationContactService {
             appendStartedOperationJobs(operation, savedContacts);
             return savedContacts.stream().map(this::toDto).toList();
         } catch (DataIntegrityViolationException ex) {
-            throw new ValidationException("This operation already has a contact with the same normalized phone number.");
+            throw new ValidationException("Bu operasyonda aynı telefon numarasına sahip bir kişi zaten var.");
         }
     }
 
@@ -212,7 +212,7 @@ public class OperationContactServiceImpl implements OperationContactService {
 
     private Operation getOperation(UUID companyId, UUID operationId) {
         return operationRepository.findByIdAndCompany_IdAndDeletedAtIsNull(operationId, companyId)
-                .orElseThrow(() -> new NotFoundException("Operation not found for company: " + operationId));
+                .orElseThrow(() -> new NotFoundException("Bu şirkette operasyon bulunamadı: " + operationId));
     }
 
     private Set<String> ensureNoDuplicatePhoneNumbers(List<OperationContactInput> contacts) {
@@ -233,7 +233,7 @@ public class OperationContactServiceImpl implements OperationContactService {
             validatePhoneNumber(normalizedPhoneNumber);
 
             if (!seenPhoneNumbers.add(normalizedPhoneNumber)) {
-                throw new ValidationException("Duplicate phone number in upload payload: " + normalizedPhoneNumber);
+                throw new ValidationException("Yüklenen listede aynı telefon numarası birden fazla kez geçiyor: " + normalizedPhoneNumber);
             }
         }
 
@@ -257,7 +257,7 @@ public class OperationContactServiceImpl implements OperationContactService {
 
         if (!existingContacts.isEmpty()) {
             throw new ValidationException(
-                    "Phone number already exists in this operation: " + existingContacts.get(0).getPhoneNumber()
+                    "Bu telefon numarası operasyonda zaten kayıtlı: " + existingContacts.get(0).getPhoneNumber()
             );
         }
     }
@@ -319,7 +319,7 @@ public class OperationContactServiceImpl implements OperationContactService {
 
     private void validatePhoneNumber(String phoneNumber) {
         if (!PhoneNumberNormalizer.isValid(phoneNumber)) {
-            throw new ValidationException("Invalid phone number format. Use a normalized number like 905551112233");
+            throw new ValidationException("Geçersiz telefon numarası biçimi. 905551112233 gibi ülke kodlu bir numara kullanın.");
         }
     }
 

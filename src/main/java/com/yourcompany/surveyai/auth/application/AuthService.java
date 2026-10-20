@@ -42,10 +42,10 @@ public class AuthService {
         AppUser user = appUserRepository.findAllByEmailIgnoreCaseAndDeletedAtIsNull(request.getEmail().trim()).stream()
                 .filter(candidate -> candidate.getStatus() == AppUserStatus.ACTIVE)
                 .min(Comparator.comparing(candidate -> candidate.getCompany().getCreatedAt()))
-                .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
+                .orElseThrow(() -> new UnauthorizedException("E-posta veya şifre hatalı."));
 
         if (!passwordHashService.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new UnauthorizedException("Invalid email or password");
+            throw new UnauthorizedException("E-posta veya şifre hatalı.");
         }
 
         String rawSessionToken = UUID.randomUUID() + "." + UUID.randomUUID();
@@ -64,7 +64,7 @@ public class AuthService {
 
     public AuthenticatedUserResponse getCurrentUser(AppUser user) {
         AppUser hydratedUser = appUserRepository.findByIdAndDeletedAtIsNull(user.getId())
-                .orElseThrow(() -> new UnauthorizedException("Authentication is required"));
+                .orElseThrow(() -> new UnauthorizedException("Oturum açmanız gerekiyor."));
         return toAuthenticatedUserResponse(hydratedUser);
     }
 

@@ -257,12 +257,12 @@ public class CallJobServiceImpl implements CallJobService {
         SurveyResponse surveyResponse = resolvePrimarySurveyResponse(attempts, responsesByAttemptId);
 
         if (surveyResponse == null) {
-            throw new ValidationException("Call job has no survey response to edit");
+            throw new ValidationException("Bu çağrı işinin düzenlenecek bir anket yanıtı yok.");
         }
 
         List<SurveyQuestion> questions = loadSurveyQuestions(callJob);
         if (questions.isEmpty()) {
-            throw new ValidationException("Survey has no questions to edit");
+            throw new ValidationException("Ankette düzenlenecek soru yok.");
         }
 
         Map<UUID, SurveyQuestion> questionsById = questions.stream()
@@ -279,12 +279,12 @@ public class CallJobServiceImpl implements CallJobService {
 
         for (UpdateCallJobSurveyResponseAnswerRequest answerRequest : request.getAnswers()) {
             if (answerRequest == null || answerRequest.getQuestionId() == null) {
-                throw new ValidationException("Each edited answer must reference a survey question");
+                throw new ValidationException("Düzenlenen her cevap bir anket sorusuna bağlı olmalıdır.");
             }
 
             SurveyQuestion question = questionsById.get(answerRequest.getQuestionId());
             if (question == null) {
-                throw new ValidationException("Question does not belong to the call job survey: " + answerRequest.getQuestionId());
+                throw new ValidationException("Soru bu çağrı işinin anketine ait değil: " + answerRequest.getQuestionId());
             }
 
             List<SurveyQuestionOption> questionOptions = optionsByQuestionId.getOrDefault(question.getId(), List.of());
@@ -316,12 +316,12 @@ public class CallJobServiceImpl implements CallJobService {
 
     private void ensureOperationExists(UUID companyId, UUID operationId) {
         operationRepository.findByIdAndCompany_IdAndDeletedAtIsNull(operationId, companyId)
-                .orElseThrow(() -> new NotFoundException("Operation not found for company: " + operationId));
+                .orElseThrow(() -> new NotFoundException("Bu şirkette operasyon bulunamadı: " + operationId));
     }
 
     private CallJob getCallJob(UUID companyId, UUID operationId, UUID callJobId) {
         return callJobRepository.findByIdAndOperation_IdAndCompany_IdAndDeletedAtIsNull(callJobId, operationId, companyId)
-                .orElseThrow(() -> new NotFoundException("Call job not found for operation: " + callJobId));
+                .orElseThrow(() -> new NotFoundException("Bu operasyonda çağrı işi bulunamadı: " + callJobId));
     }
 
     private Specification<CallJob> buildSpecification(
@@ -928,7 +928,7 @@ public class CallJobServiceImpl implements CallJobService {
                     .filter(option -> Objects.equals(option.getId(), request.getSelectedOptionId()))
                     .findFirst()
                     .map(List::of)
-                    .orElseThrow(() -> new ValidationException("Selected option does not belong to question: " + question.getId()));
+                    .orElseThrow(() -> new ValidationException("Seçilen seçenek bu soruya ait değil: " + question.getId()));
         }
 
         if (question.getQuestionType() == QuestionType.MULTI_CHOICE) {
@@ -944,7 +944,7 @@ public class CallJobServiceImpl implements CallJobService {
                     .filter(option -> selectedOptionIds.contains(option.getId()))
                     .toList();
             if (matchedOptions.size() != selectedOptionIds.size()) {
-                throw new ValidationException("One or more selected options do not belong to question: " + question.getId());
+                throw new ValidationException("Seçilen seçeneklerden en az biri bu soruya ait değil: " + question.getId());
             }
             return matchedOptions;
         }
@@ -1162,13 +1162,13 @@ public class CallJobServiceImpl implements CallJobService {
 
     private void validateRetryEligibility(CallJob callJob, CallAttempt latestAttempt) {
         if (latestAttempt != null && ACTIVE_ATTEMPT_STATUSES.contains(latestAttempt.getStatus())) {
-            throw new ValidationException("Call job already has an active execution attempt");
+            throw new ValidationException("Bu çağrı işi için zaten devam eden bir arama denemesi var.");
         }
     }
 
     private void validateRedialEligibility(CallJob callJob, CallAttempt latestAttempt) {
         if (!isRedialable(callJob, latestAttempt)) {
-            throw new ValidationException("Call job cannot be redialed while it has an active execution attempt");
+            throw new ValidationException("Devam eden bir arama denemesi varken yeniden arama yapılamaz.");
         }
     }
 

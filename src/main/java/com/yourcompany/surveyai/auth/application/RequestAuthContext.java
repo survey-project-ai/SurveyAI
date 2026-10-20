@@ -24,7 +24,7 @@ public class RequestAuthContext {
         if (value instanceof AppUser user) {
             return user;
         }
-        throw new UnauthorizedException("Authentication is required");
+        throw new UnauthorizedException("Oturum açmanız gerekiyor.");
     }
 
     public UUID requireCompanyId() {

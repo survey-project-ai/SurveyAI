@@ -57,7 +57,7 @@ public class PasswordHashService {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return HexFormatHolder.formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException ex) {
-            throw new ValidationException("Unable to hash auth session token");
+            throw new ValidationException("Oturum anahtarı işlenemedi.");
         }
     }
 
@@ -67,7 +67,7 @@ public class PasswordHashService {
             KeySpec spec = new PBEKeySpec(password, salt, iterations, keyLength);
             return factory.generateSecret(spec).getEncoded();
         } catch (Exception ex) {
-            throw new ValidationException("Unable to hash password");
+            throw new ValidationException("Şifre işlenemedi.");
         }
     }
 

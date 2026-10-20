@@ -77,7 +77,7 @@ public class SurveyServiceImpl implements SurveyService {
         validateRequest(request);
 
         Company company = companyRepository.findById(companyId)
-                .orElseThrow(() -> new NotFoundException("Company not found: " + companyId));
+                .orElseThrow(() -> new NotFoundException("Şirket bulunamadı: " + companyId));
 
         AppUser createdBy = resolveUserForCompany(companyId, request.getCreatedByUserId());
 
@@ -112,13 +112,13 @@ public class SurveyServiceImpl implements SurveyService {
         Survey survey = getSurveyOrThrow(companyId, surveyId);
 
         if (survey.getStatus() != SurveyStatus.DRAFT) {
-            throw new ValidationException("Only draft surveys can be deleted");
+            throw new ValidationException("Yalnızca taslak anketler silinebilir.");
         }
         if (operationRepository.existsBySurvey_IdAndDeletedAtIsNull(surveyId)) {
-            throw new ValidationException("Survey cannot be deleted because operations already reference it");
+            throw new ValidationException("Bu anketi kullanan operasyonlar olduğu için anket silinemez.");
         }
         if (surveyResponseRepository.existsBySurvey_IdAndDeletedAtIsNull(surveyId)) {
-            throw new ValidationException("Survey cannot be deleted because responses already exist");
+            throw new ValidationException("Bu ankete verilmiş yanıtlar olduğu için anket silinemez.");
         }
 
         OffsetDateTime deletedAt = OffsetDateTime.now();
@@ -166,13 +166,13 @@ public class SurveyServiceImpl implements SurveyService {
 
     private void ensureCompanyExists(UUID companyId) {
         if (!companyRepository.existsById(companyId)) {
-            throw new NotFoundException("Company not found: " + companyId);
+            throw new NotFoundException("Şirket bulunamadı: " + companyId);
         }
     }
 
     private Survey getSurveyOrThrow(UUID companyId, UUID surveyId) {
         return surveyRepository.findByIdAndCompany_IdAndDeletedAtIsNull(surveyId, companyId)
-                .orElseThrow(() -> new NotFoundException("Survey not found for company: " + surveyId));
+                .orElseThrow(() -> new NotFoundException("Bu şirkette anket bulunamadı: " + surveyId));
     }
 
     private AppUser resolveUserForCompany(UUID companyId, UUID userId) {
@@ -183,14 +183,14 @@ public class SurveyServiceImpl implements SurveyService {
 
         return appUserRepository.findById(userId)
                 .filter(user -> user.getCompany().getId().equals(companyId))
-                .orElseThrow(() -> new ValidationException("Created by user does not belong to company"));
+                .orElseThrow(() -> new ValidationException("Oluşturan kullanıcı bu şirkete ait değil."));
     }
 
     private void applyCreateFields(Survey survey, CreateSurveyRequest request) {
-        survey.setName(requireTrimmed(request.getName(), "Survey name is required"));
+        survey.setName(requireTrimmed(request.getName(), "Anket adı zorunludur."));
         survey.setDescription(trimToNull(request.getDescription()));
         survey.setStatus(SurveyStatus.DRAFT);
-        survey.setLanguageCode(requireTrimmed(request.getLanguageCode(), "Language code is required"));
+        survey.setLanguageCode(requireTrimmed(request.getLanguageCode(), "Dil kodu zorunludur."));
         survey.setIntroPrompt(trimToNull(request.getIntroPrompt()));
         survey.setClosingPrompt(trimToNull(request.getClosingPrompt()));
         survey.setMaxRetryPerQuestion(request.getMaxRetryPerQuestion() != null ? request.getMaxRetryPerQuestion() : 2);
@@ -201,9 +201,9 @@ public class SurveyServiceImpl implements SurveyService {
     }
 
     private void applyUpdateFields(Survey survey, UpdateSurveyRequest request) {
-        survey.setName(requireTrimmed(request.getName(), "Survey name is required"));
+        survey.setName(requireTrimmed(request.getName(), "Anket adı zorunludur."));
         survey.setDescription(trimToNull(request.getDescription()));
-        survey.setLanguageCode(requireTrimmed(request.getLanguageCode(), "Language code is required"));
+        survey.setLanguageCode(requireTrimmed(request.getLanguageCode(), "Dil kodu zorunludur."));
         survey.setIntroPrompt(trimToNull(request.getIntroPrompt()));
         survey.setClosingPrompt(trimToNull(request.getClosingPrompt()));
         survey.setMaxRetryPerQuestion(request.getMaxRetryPerQuestion());
@@ -219,12 +219,12 @@ public class SurveyServiceImpl implements SurveyService {
         SurveyStatus requestedStatus = request.getStatus();
 
         if (currentStatus == SurveyStatus.ARCHIVED) {
-            throw new ValidationException("Archived surveys cannot be modified");
+            throw new ValidationException("Arşivlenmiş anketler değiştirilemez.");
         }
 
         if (currentStatus == SurveyStatus.PUBLISHED) {
             if (requestedStatus != SurveyStatus.ARCHIVED) {
-                throw new ValidationException("Published surveys can only transition to archived");
+                throw new ValidationException("Yayınlanmış bir anket yalnızca arşivlenebilir.");
             }
             if (!trimmedEquals(survey.getName(), request.getName())
                     || !trimmedEquals(survey.getDescription(), request.getDescription())
@@ -236,7 +236,7 @@ public class SurveyServiceImpl implements SurveyService {
                     || !trimmedEquals(survey.getSourceExternalId(), request.getSourceExternalId())
                     || !trimmedEquals(survey.getSourceFileName(), request.getSourceFileName())
                     || !trimmedEquals(survey.getSourcePayloadJson(), request.getSourcePayloadJson())) {
-                throw new ValidationException("Published surveys cannot change content or retry settings");
+                throw new ValidationException("Yayınlanmış bir anketin içeriği ve tekrar deneme ayarları değiştirilemez.");
             }
         }
     }
@@ -246,7 +246,7 @@ public class SurveyServiceImpl implements SurveyService {
                 survey.getId()
         );
         if (questions.isEmpty()) {
-            throw new ValidationException("Survey must contain at least one question before publishing");
+            throw new ValidationException("Anket yayınlanmadan önce en az bir soru içermeli.");
         }
 
         for (SurveyQuestion question : questions) {
@@ -258,7 +258,7 @@ public class SurveyServiceImpl implements SurveyService {
                         .count();
                 if (activeOptionCount < 2) {
                     throw new ValidationException(
-                            "Choice questions must have at least two active options before publishing"
+                            "Anket yayınlanmadan önce seçimli sorularda en az iki aktif seçenek bulunmalı."
                     );
                 }
             }

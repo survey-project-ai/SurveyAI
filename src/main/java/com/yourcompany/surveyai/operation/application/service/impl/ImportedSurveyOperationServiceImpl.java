@@ -126,9 +126,9 @@ public class ImportedSurveyOperationServiceImpl implements ImportedSurveyOperati
     @Override
     @Transactional
     public ImportedSurveyOperationResponseDto importCompletedSurvey(UUID companyId, UUID surveyId, MultipartFile file, String operationName) {
-        Company company = companyRepository.findById(companyId).orElseThrow(() -> new NotFoundException("Company not found: " + companyId));
+        Company company = companyRepository.findById(companyId).orElseThrow(() -> new NotFoundException("Şirket bulunamadı: " + companyId));
         Survey survey = surveyRepository.findByIdAndCompany_IdAndDeletedAtIsNull(surveyId, companyId)
-                .orElseThrow(() -> new NotFoundException("Survey not found for company: " + surveyId));
+                .orElseThrow(() -> new NotFoundException("Bu şirkette anket bulunamadı: " + surveyId));
         if (survey.getStatus() == SurveyStatus.ARCHIVED) {
             throw new ValidationException("Arşivlenmiş ankete veri eklenemez.");
         }

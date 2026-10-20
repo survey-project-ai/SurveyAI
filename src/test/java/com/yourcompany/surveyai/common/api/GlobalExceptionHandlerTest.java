@@ -42,7 +42,7 @@ class GlobalExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().message()).isEqualTo("Missing required request parameter: companyId");
+        assertThat(response.getBody().message()).isEqualTo("Eksik parametre: companyId");
     }
 
     @Test
@@ -60,7 +60,7 @@ class GlobalExceptionHandlerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().message()).isEqualTo("Invalid value for parameter: operationId");
+        assertThat(response.getBody().message()).isEqualTo("Geçersiz parametre değeri: operationId");
     }
 
     @Test
@@ -73,6 +73,6 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().code()).isEqualTo("PAYLOAD_TOO_LARGE");
-        assertThat(response.getBody().message()).isEqualTo("Uploaded file is too large. Maximum allowed upload size is 25 MB.");
+        assertThat(response.getBody().message()).isEqualTo("Yüklenen dosya çok büyük. En fazla 25 MB yüklenebilir.");
     }
 }

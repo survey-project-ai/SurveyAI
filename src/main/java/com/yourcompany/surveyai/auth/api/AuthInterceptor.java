@@ -39,7 +39,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
 
         AppUser user = authService.resolveAuthenticatedUser(authCookieService.extractSessionToken(request))
-                .orElseThrow(() -> new UnauthorizedException("Authentication is required"));
+                .orElseThrow(() -> new UnauthorizedException("Oturum açmanız gerekiyor."));
 
         enforceCompanyScope(request, user);
         request.setAttribute(RequestAuthContext.REQUEST_USER_ATTRIBUTE, user);
@@ -51,14 +51,14 @@ public class AuthInterceptor implements HandlerInterceptor {
         String companyIdParam = request.getParameter("companyId");
 
         if (companyIdParam != null && !authenticatedCompanyId.equals(parseCompanyId(companyIdParam))) {
-            throw new CompanyIsolationException("Requested company does not match authenticated company");
+            throw new CompanyIsolationException("Bu şirketin verilerine erişim yetkiniz yok.");
         }
 
         // Check the {companyId} value Spring MVC binds to the controller. Matching the raw request URI
         // misses variants of the same segment such as ";x" path parameters or percent-encoded characters.
         String pathCompanyId = resolveCompanyIdUriVariable(request);
         if (pathCompanyId != null && !authenticatedCompanyId.equals(parseCompanyId(pathCompanyId))) {
-            throw new CompanyIsolationException("Requested company does not match authenticated company");
+            throw new CompanyIsolationException("Bu şirketin verilerine erişim yetkiniz yok.");
         }
     }
 
@@ -74,7 +74,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         try {
             return UUID.fromString(rawCompanyId);
         } catch (IllegalArgumentException ex) {
-            throw new ValidationException("Invalid company ID");
+            throw new ValidationException("Geçersiz şirket kimliği.");
         }
     }
 }

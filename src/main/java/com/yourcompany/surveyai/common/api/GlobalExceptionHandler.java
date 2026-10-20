@@ -72,7 +72,7 @@ public class GlobalExceptionHandler {
         return build(
                 HttpStatus.BAD_REQUEST,
                 "VALIDATION_ERROR",
-                "Request validation failed",
+                "İstek doğrulanamadı",
                 details,
                 request.getRequestURI()
         );
@@ -83,7 +83,7 @@ public class GlobalExceptionHandler {
             HttpMessageNotReadableException ex,
             HttpServletRequest request
     ) {
-        String message = "Request body could not be parsed";
+        String message = "İstek gövdesi okunamadı.";
         Throwable cause = ex.getMostSpecificCause();
         if (cause != null && cause.getMessage() != null && !cause.getMessage().isBlank()) {
             message = cause.getMessage();
@@ -106,7 +106,7 @@ public class GlobalExceptionHandler {
         return build(
                 HttpStatus.BAD_REQUEST,
                 "VALIDATION_ERROR",
-                "Missing required request parameter: " + ex.getParameterName(),
+                "Eksik parametre: " + ex.getParameterName(),
                 List.of(),
                 request.getRequestURI()
         );
@@ -120,7 +120,7 @@ public class GlobalExceptionHandler {
         return build(
                 HttpStatus.BAD_REQUEST,
                 "VALIDATION_ERROR",
-                "Invalid value for parameter: " + ex.getName(),
+                "Geçersiz parametre değeri: " + ex.getName(),
                 List.of(),
                 request.getRequestURI()
         );
@@ -134,7 +134,7 @@ public class GlobalExceptionHandler {
         return build(
                 HttpStatus.PAYLOAD_TOO_LARGE,
                 "PAYLOAD_TOO_LARGE",
-                "Uploaded file is too large. Maximum allowed upload size is 25 MB.",
+                "Yüklenen dosya çok büyük. En fazla 25 MB yüklenebilir.",
                 List.of(),
                 request.getRequestURI()
         );
@@ -147,7 +147,7 @@ public class GlobalExceptionHandler {
         return build(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "INTERNAL_SERVER_ERROR",
-                "An unexpected error occurred",
+                "Beklenmeyen bir hata oluştu",
                 buildUnexpectedDetails(ex),
                 request.getRequestURI()
         );

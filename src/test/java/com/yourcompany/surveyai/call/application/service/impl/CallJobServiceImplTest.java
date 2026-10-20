@@ -453,7 +453,7 @@ class CallJobServiceImplTest {
                 fixture.callJob.getId()
         ))
                 .isInstanceOf(ValidationException.class)
-                .hasMessage("Call job already has an active execution attempt");
+                .hasMessage("Bu çağrı işi için zaten devam eden bir arama denemesi var.");
 
         verify(callJobDispatcher, never()).requestDispatch(any());
     }

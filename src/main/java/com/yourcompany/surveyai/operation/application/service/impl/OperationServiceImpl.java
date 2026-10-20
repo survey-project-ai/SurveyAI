@@ -265,13 +265,13 @@ public class OperationServiceImpl implements OperationService {
         validateRequest(request);
 
         Company company = companyRepository.findById(companyId)
-                .orElseThrow(() -> new NotFoundException("Company not found: " + companyId));
+                .orElseThrow(() -> new NotFoundException("Şirket bulunamadı: " + companyId));
 
         Survey survey = surveyRepository.findByIdAndCompany_IdAndDeletedAtIsNull(request.getSurveyId(), companyId)
-                .orElseThrow(() -> new NotFoundException("Survey not found for company: " + request.getSurveyId()));
+                .orElseThrow(() -> new NotFoundException("Bu şirkette anket bulunamadı: " + request.getSurveyId()));
 
         if (survey.getStatus() != SurveyStatus.PUBLISHED) {
-            throw new ValidationException("Operation can only be created from a published survey");
+            throw new ValidationException("Operasyon yalnızca yayınlanmış bir anketten oluşturulabilir.");
         }
 
         AppUser createdBy = resolveUserForCompany(companyId, request.getCreatedByUserId());
@@ -639,7 +639,7 @@ public class OperationServiceImpl implements OperationService {
 
     private void ensureCompanyExists(UUID companyId) {
         if (!companyRepository.existsById(companyId)) {
-            throw new NotFoundException("Company not found: " + companyId);
+            throw new NotFoundException("Şirket bulunamadı: " + companyId);
         }
     }
 
@@ -651,12 +651,12 @@ public class OperationServiceImpl implements OperationService {
 
         return appUserRepository.findById(userId)
                 .filter(user -> user.getCompany().getId().equals(companyId))
-                .orElseThrow(() -> new ValidationException("Created by user does not belong to company"));
+                .orElseThrow(() -> new ValidationException("Oluşturan kullanıcı bu şirkete ait değil."));
     }
 
     private Operation getOperation(UUID companyId, UUID operationId) {
         return operationRepository.findByIdAndCompany_IdAndDeletedAtIsNull(operationId, companyId)
-                .orElseThrow(() -> new NotFoundException("Operation not found for company: " + operationId));
+                .orElseThrow(() -> new NotFoundException("Bu şirkette operasyon bulunamadı: " + operationId));
     }
 
     private String buildOperationSourcePayload(Survey survey, String operationName) {
