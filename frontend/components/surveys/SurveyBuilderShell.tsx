@@ -16,6 +16,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
 import { applyQuestionRuleForm, parseQuestionRuleForm } from "@/lib/survey-question-rules";
 import { saveSurveyBuilderSurvey, type BuilderSaveAction } from "@/lib/survey-builder-api";
+import { useUnsavedChangesGuard } from "@/lib/unsaved-changes";
 import { buildDependentQuestion, createQuestion, getQuestionTypeLabels, isChoiceQuestion, isMatrixQuestion } from "@/lib/survey-builder";
 import type { SurveyBuilderQuestion, SurveyBuilderSurvey, SurveyQuestionType } from "@/lib/types";
 
@@ -62,12 +63,17 @@ export function SurveyBuilderShell({
   const { language } = useLanguage();
   const questionTypeLabels = getQuestionTypeLabels(language);
   const [survey, setSurvey] = useState<SurveyBuilderSurvey>(initialSurvey);
+  // The survey as last loaded or saved; any difference from it is an unsaved change.
+  const [savedSurvey, setSavedSurvey] = useState<SurveyBuilderSurvey>(initialSurvey);
   const [activeAction, setActiveAction] = useState<BuilderSaveAction | null>(null);
   const [isCreatingDraftCopy, setIsCreatingDraftCopy] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [feedbackTone, setFeedbackTone] = useState<"success" | "error" | null>(null);
   const isPublished = survey.status === "Live";
   const isReadOnly = readOnly || isPublished;
+  const savedSnapshot = useMemo(() => JSON.stringify(savedSurvey), [savedSurvey]);
+  const currentSnapshot = useMemo(() => JSON.stringify(survey), [survey]);
+  useUnsavedChangesGuard(!isReadOnly && currentSnapshot !== savedSnapshot);
 
   const questionStats = useMemo(() => buildQuestionStats(survey), [survey]);
 
@@ -258,6 +264,7 @@ export function SurveyBuilderShell({
     try {
       const result = await saveSurveyBuilderSurvey(survey, action);
       setSurvey(result.survey);
+      setSavedSurvey(result.survey);
       setFeedbackMessage(resolvePersistMessage(action, result.survey.status, language));
       setFeedbackTone("success");
     } catch (error) {

@@ -8,6 +8,7 @@ import { getNavigationItems } from "@/components/layout/navigation";
 import { PageHeaderProvider, useResolvedPageHeader } from "@/components/layout/PageHeaderContext";
 import { ArrowLeftIcon, ArrowRightIcon, BellIcon, CollapseIcon, MenuIcon } from "@/components/ui/Icons";
 import { useAuth } from "@/lib/auth";
+import { confirmLeavingUnsavedChanges } from "@/lib/unsaved-changes";
 import { useNotifications } from "@/lib/notifications";
 import { useLanguage, useTranslations } from "@/lib/i18n/LanguageContext";
 import { enabledLanguages, type Language } from "@/lib/i18n";
@@ -114,6 +115,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   }
 
   const handleGoBack = () => {
+    if (!confirmLeavingUnsavedChanges()) {
+      return;
+    }
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
       return;

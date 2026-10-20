@@ -10,6 +10,7 @@ import { SectionCard } from "@/components/ui/SectionCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { fetchOperationById, fetchOperationCallJobDetail, redialOperationCallJob, updateOperationCallJobSurveyResponse } from "@/lib/operations";
 import { CallJobAttempt, CallJobDetail, CallJobSurveyResponseAnswer, Operation } from "@/lib/types";
+import { useUnsavedChangesGuard } from "@/lib/unsaved-changes";
 
 type SurveyAnswerDraft = {
   questionId: string;
@@ -103,6 +104,9 @@ export default function OperationJobDetailPage() {
     setInitialAnswerSignature(serializeAnswerDrafts(nextDrafts));
   }
 
+  const hasUnsavedAnswerChanges = serializeAnswerDrafts(answerDrafts) !== initialAnswerSignature;
+  useUnsavedChangesGuard(hasUnsavedAnswerChanges);
+
   if (isMissing) {
     notFound();
   }
@@ -175,7 +179,6 @@ export default function OperationJobDetailPage() {
     : detail?.partialResponseDataExists
       ? "Transcript veya kısıtlı veri mevcut, ama bağlı bir survey_response seçilemiyor."
       : "Bu iş için henüz survey_response kaydı yok.";
-  const hasUnsavedAnswerChanges = serializeAnswerDrafts(answerDrafts) !== initialAnswerSignature;
 
   return (
     <PageContainer>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { CallJobDetail, CallJobSurveyResponseAnswer } from "@/lib/types";
+import { useUnsavedChangesGuard } from "@/lib/unsaved-changes";
 
 type SurveyAnswerDraft = {
   questionId: string;
@@ -52,6 +53,7 @@ export function CallJobSurveyResponseEditor({
   }
 
   const hasUnsavedAnswerChanges = serializeAnswerDrafts(answerDrafts) !== initialAnswerSignature;
+  useUnsavedChangesGuard(hasUnsavedAnswerChanges);
   const responseStatus = detail.surveyResponse?.status ?? (detail.partialResponseDataExists ? "Kısmi veri var" : "Yanıt yok");
   const responseDetail = detail.surveyResponse
     ? detail.surveyResponse.usableResponse

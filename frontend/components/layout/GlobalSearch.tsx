@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type Keyboa
 import { useRouter } from "next/navigation";
 import { SearchIcon } from "@/components/ui/Icons";
 import { OPERATION_STATUS_BADGE_CONFIG } from "@/lib/operation-detail";
+import { confirmLeavingUnsavedChanges } from "@/lib/unsaved-changes";
 import { fetchCompanyOperations } from "@/lib/operations";
 import { fetchCompanySurveys } from "@/lib/surveys";
 import type { NavItem, Survey } from "@/lib/types";
@@ -160,6 +161,9 @@ export function GlobalSearch({ collapsed, navigationItems }: { collapsed: boolea
   }
 
   function openResult(item: SearchItem) {
+    if (!confirmLeavingUnsavedChanges()) {
+      return;
+    }
     setQuery("");
     setIsOpen(false);
     // The search input still has focus here (mouse down on a result does not move it).

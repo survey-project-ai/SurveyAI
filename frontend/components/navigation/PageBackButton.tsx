@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeftIcon } from "@/components/ui/Icons";
+import { confirmLeavingUnsavedChanges } from "@/lib/unsaved-changes";
 
 type FallbackTarget = {
   href: string;
@@ -59,6 +60,9 @@ export function PageBackButton() {
   const fallbackTarget = resolveFallbackTarget(pathname);
 
   function handleBack() {
+    if (!confirmLeavingUnsavedChanges()) {
+      return;
+    }
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
       return;
