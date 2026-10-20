@@ -179,20 +179,23 @@ export function OperationAnalyticsSection({
       summary,
     })),
   ].sort((left, right) => left.order - right.order);
-  // Rebuild the editable sample-response drafts whenever analytics data
-  // changes. Adjusted during render instead of in an effect.
+  // Drafts hold only the answers someone changed; the editor shows the loaded answer otherwise. When analytics
+  // reloads (every 30s on a live operation), drop the drafts the loaded data now matches and keep the rest, so
+  // an answer being edited is not overwritten. Adjusted during render instead of in an effect.
   const [prevAnalytics, setPrevAnalytics] = useState(analytics);
   if (prevAnalytics !== analytics) {
     setPrevAnalytics(analytics);
-    const nextDrafts: Record<string, string> = {};
+    const loadedValues = new Map<string, string>();
 
     for (const summary of analytics?.questionSummaries ?? []) {
       for (const sample of summary.rawResponses) {
-        nextDrafts[buildSampleResponseKey(summary.questionId, sample.callJobId)] = sample.responseText ?? "";
+        loadedValues.set(buildSampleResponseKey(summary.questionId, sample.callJobId), sample.responseText ?? "");
       }
     }
 
-    setSampleResponseDrafts(nextDrafts);
+    setSampleResponseDrafts((current) =>
+      Object.fromEntries(Object.entries(current).filter(([key, value]) => loadedValues.get(key) !== value)),
+    );
   }
 
   const setChartCopyRef = (key: string) => (node: HTMLElement | null) => {
