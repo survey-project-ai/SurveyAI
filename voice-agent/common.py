@@ -20,7 +20,8 @@ def _ipv4_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
     return _getaddrinfo(host, port, socket.AF_INET if family == socket.AF_UNSPEC else family, type, proto, flags)
 
 
-if os.environ.get("SURVEYAI_FORCE_IPV4", "0" if "RAILWAY_ENVIRONMENT" in os.environ else "1") == "1":
+_ON_RAILWAY = any(name in os.environ for name in ("RAILWAY_ENVIRONMENT_ID", "RAILWAY_ENVIRONMENT_NAME", "RAILWAY_ENVIRONMENT"))
+if os.environ.get("SURVEYAI_FORCE_IPV4", "0" if _ON_RAILWAY else "1") == "1":
     socket.getaddrinfo = _ipv4_getaddrinfo
 
 HERE = Path(__file__).resolve().parent

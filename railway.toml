@@ -1,11 +1,12 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
+# Anchored to the repository root: voice-agent/ has its own Dockerfile and railway.toml.
 watchPatterns = [
-  "src/**",
-  "pom.xml",
-  "Dockerfile",
-  "railway.toml"
+  "/src/**",
+  "/pom.xml",
+  "/Dockerfile",
+  "/railway.toml"
 ]
 
 [deploy]
