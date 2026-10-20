@@ -3582,6 +3582,12 @@ img {
   flex-shrink: 0;
 }
 
+@media (max-width: 720px) {
+  .operation-contact-status-inline {
+    flex-wrap: wrap;
+  }
+}
+
 .operation-contact-status-card.is-empty {
   border-style: dashed;
 }
@@ -8510,6 +8516,43 @@ body::after {
   margin-left: 0;
 }
 
+/* Below 1080px the three columns (title | tabs | actions) no longer fit: stack them, let the tabs scroll
+   sideways and the actions wrap, so the primary action stays on screen on a phone. */
+@media (max-width: 1080px) {
+  .topbar.is-operations-topbar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .topbar.is-operations-topbar .topbar-context,
+  .topbar.is-operations-topbar .topbar-center-slot,
+  .topbar.is-operations-topbar .topbar-actions {
+    justify-self: stretch;
+    min-width: 0;
+  }
+
+  .topbar.is-operations-topbar .topbar-center-slot .operation-header-nav {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .topbar.is-operations-topbar .operation-header-tabs {
+    justify-content: flex-start;
+  }
+
+  .topbar.is-operations-topbar .operation-header-tab {
+    flex: 0 0 auto;
+  }
+
+  .topbar.is-operations-topbar .survey-header-action-cluster,
+  .topbar.is-operations-topbar .survey-header-action-buttons {
+    justify-content: flex-start;
+  }
+}
+
 .operation-header-nav {
   display: flex;
   align-items: center;
@@ -9466,6 +9509,8 @@ body::after {
 
 .ops-table-shell {
   display: grid;
+  /* A wide table must not widen the shell (and the page); it scrolls inside .data-table-wrap instead. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 
@@ -9478,7 +9523,9 @@ body::after {
   border-radius: 16px;
   border: 1px solid var(--ops-border);
   background: var(--ops-surface);
-  overflow: hidden;
+  /* Columns that do not fit (on a phone) scroll sideways instead of being cut off. */
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .data-table {
@@ -12339,6 +12386,25 @@ body::after {
 .ops-control-page-tight .ops-control-summary-grid {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
+}
+
+/* The five-column strip above is more specific than the general breakpoints, so it needs its own. */
+@media (max-width: 1320px) {
+  .ops-control-page-tight .ops-control-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .ops-control-page-tight .ops-control-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1080px) {
+  .ops-control-page-tight .data-table-wrap {
+    overflow-x: auto;
+  }
 }
 
 .ops-control-page-tight .survey-summary-kpi {
