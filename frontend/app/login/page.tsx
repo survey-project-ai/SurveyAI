@@ -4,6 +4,11 @@ import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 
+// The seeded owner account is filled in and shown only in `next dev`; a deployed build never shows it.
+const isLocalPreview = process.env.NODE_ENV === "development";
+const LOCAL_PREVIEW_EMAIL = "owner@acme-research.test";
+const LOCAL_PREVIEW_PASSWORD = "change-me-123";
+
 function subscribeToNothing(): () => void {
   return () => {};
 }
@@ -21,8 +26,8 @@ export default function LoginPage() {
   const search = useSyncExternalStore(subscribeToNothing, () => window.location.search, () => "");
   const sessionExpired = new URLSearchParams(search).get("expired") === "1";
   const nextPage = resolveNextPage(search);
-  const [email, setEmail] = useState("owner@acme-research.test");
-  const [password, setPassword] = useState("change-me-123");
+  const [email, setEmail] = useState(isLocalPreview ? LOCAL_PREVIEW_EMAIL : "");
+  const [password, setPassword] = useState(isLocalPreview ? LOCAL_PREVIEW_PASSWORD : "");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -56,14 +61,14 @@ export default function LoginPage() {
           <div className="auth-system-meta">
             <span className="eyebrow">Erişim</span>
             <div className="auth-system-badges">
-              <span className="chip">Yerel oturum</span>
+              {isLocalPreview ? <span className="chip">Yerel oturum</span> : null}
               <span className="chip">Şirket bağlamlı</span>
             </div>
           </div>
 
           <div className="section-copy">
             <h2>Oturum aç</h2>
-            <p>Çalışma alanını açmak için test hesabı ile kimlik doğrulayın.</p>
+            <p>Çalışma alanını açmak için hesabınızla giriş yapın.</p>
           </div>
 
           <form className="auth-form" onSubmit={handleSubmit}>
@@ -74,7 +79,7 @@ export default function LoginPage() {
                 autoComplete="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="owner@acme-research.test"
+                placeholder="ornek@sirket.com"
                 disabled={isSubmitting || status === "loading"}
               />
             </label>
@@ -86,7 +91,7 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="change-me-123"
+                placeholder="Şifreniz"
                 disabled={isSubmitting || status === "loading"}
               />
             </label>
@@ -110,10 +115,14 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="auth-helper auth-helper-minimal">
-            <strong>Yerel önizleme hesabı</strong>
-            <p>owner@acme-research.test / change-me-123</p>
-          </div>
+          {isLocalPreview ? (
+            <div className="auth-helper auth-helper-minimal">
+              <strong>Yerel önizleme hesabı</strong>
+              <p>
+                {LOCAL_PREVIEW_EMAIL} / {LOCAL_PREVIEW_PASSWORD}
+              </p>
+            </div>
+          ) : null}
         </section>
       </section>
     </main>
