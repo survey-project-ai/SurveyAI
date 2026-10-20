@@ -431,6 +431,20 @@ async def entrypoint(ctx: JobContext) -> None:
     def _item(event) -> None:
         recorder.message(event.item)
 
+    @ctx.room.on("participant_connected")
+    def _line_joined(participant) -> None:
+        sip = {key: value for key, value in participant.attributes.items() if key.startswith("sip.")}
+        if sip:
+            logger.info("line %s: %s", participant.identity, sip)
+
+    @ctx.room.on("participant_attributes_changed")
+    def _line_status(changed: dict, participant) -> None:
+        # The phone line's progress (dialing, ringing, active, hangup): whether a dial nobody answered
+        # rang at all. One number timed out four times without a SIP status.
+        sip = {key: value for key, value in changed.items() if key.startswith("sip.")}
+        if sip:
+            logger.info("line %s: %s", participant.identity, sip)
+
     @session.on("close")
     def _closed(event) -> None:
         # The callee hung up (or the session failed): end the job, which ends the interview.
