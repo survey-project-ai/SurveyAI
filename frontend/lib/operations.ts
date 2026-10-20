@@ -1,13 +1,7 @@
-import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { API_BASE_URL, apiFetch, readApiError } from "@/lib/api";
 import { requireCompanyId, requireCurrentUserId } from "@/lib/auth";
 import { fetchCompanySurveys } from "@/lib/surveys";
 import { CallJob, CallJobAttempt, CallJobDetail, CallJobSurveyResponse, CallJobSurveyResponseAnswer, CallJobSurveyResponseAnswerOption, DashboardSummary, Operation, OperationAnalytics, OperationAnalyticsAudienceBreakdown, OperationAnalyticsBreakdownItem, OperationAnalyticsInsightItem, OperationAnalyticsQuestionGroupRow, OperationAnalyticsQuestionGroupSeries, OperationAnalyticsQuestionGroupSummary, OperationAnalyticsQuestionSummary, OperationAnalyticsSampleResponse, OperationAnalyticsTrendPoint, OperationContact } from "@/lib/types";
-
-type ApiErrorResponse = {
-  code?: string;
-  message?: string;
-  details?: string[];
-};
 
 type SurveyReference = {
   id: string;
@@ -393,7 +387,7 @@ export async function fetchOperationCallJobDetail(
   const response = await fetchJson<CallJobDetailApiResponse>(
     `${API_BASE_URL}/api/v1/operations/${operationId}/jobs/${callJobId}?companyId=${resolvedCompanyId}`,
     init,
-    "call job detail",
+    "Çağrı işi",
   );
 
   return mapCallJobDetailDto(response);
@@ -410,7 +404,7 @@ export async function retryOperationCallJob(
     {
       method: "POST",
     },
-    "call job retry",
+    "Tekrar deneme",
   );
 
   return mapCallJobDetailDto(response);
@@ -427,7 +421,7 @@ export async function redialOperationCallJob(
     {
       method: "POST",
     },
-    "call job redial",
+    "Yeniden arama",
   );
 
   return mapCallJobDetailDto(response);
@@ -453,7 +447,7 @@ export async function updateOperationCallJobSurveyResponse(
       method: "PATCH",
       body: JSON.stringify({ answers }),
     },
-    "call job survey response update",
+    "Cevap güncelleme",
   );
 
   return mapCallJobDetailDto(response);
@@ -465,7 +459,7 @@ export async function fetchCompanyOperations(
 ): Promise<Operation[]> {
   const resolvedCompanyId = requireCompanyId(companyId);
   const [operationsResponse, surveys] = await Promise.all([
-    fetchJson<OperationApiResponse[]>(`${API_BASE_URL}/api/v1/operations?companyId=${resolvedCompanyId}`, init, "operations"),
+    fetchJson<OperationApiResponse[]>(`${API_BASE_URL}/api/v1/operations?companyId=${resolvedCompanyId}`, init, "Operasyonlar"),
     fetchCompanySurveys(resolvedCompanyId, init),
   ]);
 
@@ -479,7 +473,7 @@ export async function fetchOperationById(
 ): Promise<Operation> {
   const resolvedCompanyId = requireCompanyId(companyId);
   const [operationResponse, surveys] = await Promise.all([
-    fetchJson<OperationApiResponse>(`${API_BASE_URL}/api/v1/operations/${operationId}?companyId=${resolvedCompanyId}`, init, "operation"),
+    fetchJson<OperationApiResponse>(`${API_BASE_URL}/api/v1/operations/${operationId}?companyId=${resolvedCompanyId}`, init, "Operasyon"),
     fetchCompanySurveys(resolvedCompanyId, init),
   ]);
 
@@ -495,7 +489,7 @@ export async function fetchOperationAnalytics(
   const response = await fetchJson<OperationAnalyticsApiResponse>(
     `${API_BASE_URL}/api/v1/operations/${operationId}/analytics?companyId=${resolvedCompanyId}`,
     init,
-    "operation analytics",
+    "Operasyon analitiği",
   );
 
   const respondedContacts =
@@ -639,7 +633,7 @@ export async function startOperation(
   const [operationResponse, surveys] = await Promise.all([
     fetchJson<OperationApiResponse>(`${API_BASE_URL}/api/v1/operations/${operationId}/start?companyId=${resolvedCompanyId}`, {
       method: "POST",
-    }, "operation start"),
+    }, "Operasyonu başlatma"),
     fetchCompanySurveys(resolvedCompanyId),
   ]);
 
@@ -654,7 +648,7 @@ export async function pauseOperation(
   const [operationResponse, surveys] = await Promise.all([
     fetchJson<OperationApiResponse>(`${API_BASE_URL}/api/v1/operations/${operationId}/pause?companyId=${resolvedCompanyId}`, {
       method: "POST",
-    }, "operation pause"),
+    }, "Operasyonu duraklatma"),
     fetchCompanySurveys(resolvedCompanyId),
   ]);
 
@@ -669,7 +663,7 @@ export async function resumeOperation(
   const [operationResponse, surveys] = await Promise.all([
     fetchJson<OperationApiResponse>(`${API_BASE_URL}/api/v1/operations/${operationId}/resume?companyId=${resolvedCompanyId}`, {
       method: "POST",
-    }, "operation resume"),
+    }, "Operasyonu devam ettirme"),
     fetchCompanySurveys(resolvedCompanyId),
   ]);
 
@@ -683,7 +677,7 @@ export async function deleteOperation(
   const resolvedCompanyId = requireCompanyId(companyId);
   await fetchJson<void>(`${API_BASE_URL}/api/v1/operations/${operationId}?companyId=${resolvedCompanyId}`, {
     method: "DELETE",
-  }, "operation delete");
+  }, "Operasyon silme");
 }
 
 export async function fetchOperationContacts(
@@ -695,7 +689,7 @@ export async function fetchOperationContacts(
   const response = await fetchJson<OperationContactApiResponse[]>(
     `${API_BASE_URL}/api/v1/operations/${operationId}/contacts?companyId=${resolvedCompanyId}`,
     init,
-    "operation contacts",
+    "Kişiler",
   );
 
   return response.map(mapOperationContactDtoToContact);
@@ -730,7 +724,7 @@ export async function fetchOperationContactsPage(
   const response = await fetchJson<OperationContactPageApiResponse>(
     `${API_BASE_URL}/api/v1/operations/${operationId}/contacts/list?${searchParams.toString()}`,
     options?.init,
-    "operation contacts page",
+    "Kişi listesi",
   );
 
   return {
@@ -777,7 +771,7 @@ export async function fetchOperationCallJobsPage(
   const response = await fetchJson<CallJobPageApiResponse>(
     `${API_BASE_URL}/api/v1/operations/${operationId}/jobs?${searchParams.toString()}`,
     options?.init,
-    "call jobs page",
+    "Çağrı listesi",
   );
 
   return {
@@ -794,7 +788,7 @@ export async function fetchDashboardSummary(companyId?: string, init?: RequestIn
   const response = await fetchJson<DashboardSummaryApiResponse>(
     `${API_BASE_URL}/api/v1/dashboard/summary?companyId=${resolvedCompanyId}`,
     init,
-    "dashboard summary",
+    "Ana sayfa özeti",
   );
   const { totals } = response;
 
@@ -829,7 +823,7 @@ export async function fetchOperationContactSummary(
   const response = await fetchJson<OperationContactSummaryApiResponse>(
     `${API_BASE_URL}/api/v1/operations/${operationId}/contacts/summary?companyId=${companyId}&latestLimit=${latestLimit}`,
     options?.init,
-    "operation contact summary",
+    "Kişi özeti",
   );
 
   return {
@@ -854,7 +848,7 @@ export async function exportOperationContacts(
   });
 
   if (!response.ok) {
-    throw new Error(await readApiError(response, "operation contacts export"));
+    throw new Error(await readApiError(response, "Kişi dışa aktarma"));
   }
 
   const blob = await response.blob();
@@ -881,7 +875,7 @@ export async function createOperation(
       ...request,
       createdByUserId: requireCurrentUserId(request.createdByUserId),
     }),
-  }, "operation");
+  }, "Operasyon");
 }
 
 const CONTACT_UPLOAD_BATCH_SIZE = 200;
@@ -947,7 +941,7 @@ export async function createOperationContacts(
       method: "POST",
       body: JSON.stringify(request),
     },
-    "operation contacts",
+    "Kişiler",
   );
 
   return response.map(mapOperationContactDtoToContact);
@@ -987,18 +981,6 @@ async function fetchJson<T>(
   }
 
   return (await response.json()) as T;
-}
-
-async function readApiError(response: Response, resourceName: string): Promise<string> {
-  try {
-    const payload = (await response.json()) as ApiErrorResponse;
-    const details = payload.details?.filter(Boolean) ?? [];
-    const fallback = `${resourceName} yüklenemedi (${response.status})`;
-    const message = payload.message?.trim() || fallback;
-    return details.length > 0 ? `${message}: ${details.join(" ")}` : message;
-  } catch {
-    return `${resourceName} yüklenemedi (${response.status})`;
-  }
 }
 
 function mapAnalyticsBreakdown(item: OperationAnalyticsBreakdownItemApiResponse): OperationAnalyticsBreakdownItem {

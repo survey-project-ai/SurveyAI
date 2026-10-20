@@ -1,13 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { API_BASE_URL, SESSION_EXPIRED_EVENT } from "@/lib/api";
-
-type ApiErrorResponse = {
-  code?: string;
-  message?: string;
-  details?: string[];
-};
+import { API_BASE_URL, SESSION_EXPIRED_EVENT, readApiError, sendRequest } from "@/lib/api";
 
 export type AuthenticatedUser = {
   companyId: string;
@@ -88,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function login(payload: LoginPayload) {
-    const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+    const response = await sendRequest(`${API_BASE_URL}/api/v1/auth/login`, {
       method: "POST",
       credentials: "include",
       headers: {
@@ -100,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     if (!response.ok) {
-      throw new Error(await readApiError(response, "login"));
+      throw new Error(await readApiError(response, "Giriş"));
     }
 
     const user = (await response.json()) as AuthenticatedUser;
@@ -152,7 +146,7 @@ export function requireCompanyId(companyId?: string): string {
   const resolvedCompanyId = companyId ?? authSnapshot?.companyId;
 
   if (!resolvedCompanyId) {
-    throw new Error("Authenticated company context is not available yet.");
+    throw new Error("Şirket bilgisi henüz yüklenmedi. Sayfayı yenileyip tekrar deneyin.");
   }
 
   return resolvedCompanyId;
@@ -162,7 +156,7 @@ export function requireCurrentUserId(userId?: string | null): string {
   const resolvedUserId = userId ?? authSnapshot?.user.id;
 
   if (!resolvedUserId) {
-    throw new Error("Authenticated user context is not available yet.");
+    throw new Error("Kullanıcı bilgisi henüz yüklenmedi. Sayfayı yenileyip tekrar deneyin.");
   }
 
   return resolvedUserId;
@@ -179,20 +173,8 @@ async function fetchCurrentUser(): Promise<AuthenticatedUser> {
   });
 
   if (!response.ok) {
-    throw new Error(await readApiError(response, "current user"));
+    throw new Error(await readApiError(response, "Oturum"));
   }
 
   return (await response.json()) as AuthenticatedUser;
-}
-
-async function readApiError(response: Response, resourceName: string): Promise<string> {
-  try {
-    const payload = (await response.json()) as ApiErrorResponse;
-    const details = payload.details?.filter(Boolean) ?? [];
-    const fallback = `Failed to load ${resourceName} (${response.status})`;
-    const message = payload.message?.trim() || fallback;
-    return details.length > 0 ? `${message}: ${details.join(" ")}` : message;
-  } catch {
-    return `Failed to load ${resourceName} (${response.status})`;
-  }
 }

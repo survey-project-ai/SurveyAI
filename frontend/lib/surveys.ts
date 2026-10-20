@@ -1,4 +1,4 @@
-import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { API_BASE_URL, apiFetch, readApiError } from "@/lib/api";
 import { requireCompanyId } from "@/lib/auth";
 import { Survey } from "@/lib/types";
 
@@ -45,7 +45,7 @@ export async function fetchCompanySurveys(
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to load surveys (${response.status})`);
+    throw new Error(await readApiError(response, "Anketler"));
   }
 
   const data = (await response.json()) as SurveyApiResponse[];
@@ -118,13 +118,3 @@ function formatUpdatedAt(value: string): string {
   }).format(date);
 }
 
-async function readApiError(response: Response): Promise<string> {
-  try {
-    const payload = (await response.json()) as { message?: string; details?: string[] };
-    const message = payload.message?.trim() || `Request failed (${response.status})`;
-    const details = payload.details?.filter(Boolean) ?? [];
-    return details.length > 0 ? `${message}: ${details.join(" ")}` : message;
-  } catch {
-    return `Request failed (${response.status})`;
-  }
-}

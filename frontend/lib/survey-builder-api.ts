@@ -1,16 +1,10 @@
-import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { API_BASE_URL, apiFetch, readApiError } from "@/lib/api";
 import { requireCompanyId, requireCurrentUserId } from "@/lib/auth";
 import type { SurveyBuilderQuestion, SurveyBuilderSurvey, SurveyQuestionOption, SurveyQuestionType } from "@/lib/types";
 import { isMatrixQuestion } from "@/lib/survey-builder";
 
 type SurveyStatusDto = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 type QuestionTypeDto = "SINGLE_CHOICE" | "MULTI_CHOICE" | "OPEN_ENDED" | "RATING" | "NUMBER";
-
-type ApiErrorResponse = {
-  code?: string;
-  message?: string;
-  details?: string[];
-};
 
 type SurveyApiResponse = {
   id: string;
@@ -1014,23 +1008,4 @@ async function fetchJson<T>(input: string, init: RequestInit): Promise<T> {
 
   return (await response.json()) as T;
 }
-
-async function readApiError(response: Response): Promise<string> {
-  try {
-    const payload = (await response.json()) as ApiErrorResponse;
-    const details = payload.details?.filter(Boolean) ?? [];
-    const message = payload.message?.trim() || `Request failed (${response.status})`;
-    return details.length > 0 ? `${message}: ${details.join(" ")}` : message;
-  } catch {
-    return `Request failed (${response.status})`;
-  }
-}
-
-
-
-
-
-
-
-
 
