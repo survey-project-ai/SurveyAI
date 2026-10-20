@@ -34,17 +34,9 @@ export const tr = {
         title: "Operasyonlar",
         subtitle: "Lansman hazırlığını, aktif tempoyu ve çok kanallı yürütmeyi izleyin.",
       },
-      contacts: {
-        title: "Kişiler",
-        subtitle: "Kişi dosyalarını doğrulanmış, segmentlenmiş ve operasyon atamasına hazır tutun.",
-      },
       analytics: {
         title: "Analitik",
         subtitle: "Portföy genelinde tamamlanma, yanıt artışı ve teslimat performansını inceleyin.",
-      },
-      callingOps: {
-        title: "Arama Operasyonları",
-        subtitle: "Kuyruk hacmini, arama işleri hazırlığını ve koordinatör dikkat noktalarını izleyin.",
       },
       surveyCreate: {
         title: "Yeni Anket",
@@ -71,9 +63,7 @@ export const tr = {
       dashboard: { label: "Panel", description: "Operasyon özeti" },
       surveys: { label: "Anketler", description: "Taslaklar ve canlı çalışmalar" },
       operations: { label: "Operasyonlar", description: "Lansman ve tempo" },
-      contacts: { label: "Kişiler", description: "Yüklemeler ve doğrulama" },
       analytics: { label: "Analitik", description: "Performans ve trendler" },
-      callingOps: { label: "Arama Operasyonları", description: "Kuyruklar ve arama işleri" },
     },
     common: {
       viewAll: "Tümünü gör",
@@ -293,48 +283,6 @@ export const tr = {
       ],
     },
   },
-  contacts: {
-    hero: {
-      eyebrow: "Kişiler",
-      title: "CRM gibi değil, ürün kalitesinde hissettiren kitle zekâsı.",
-      description:
-        "Bu kişiler sayfası; daha sonra segmentasyon ve zenginleştirmeye genişleyebilecek tekrar kullanılabilir tablolar, durum işaretleyicileri ve kart bölümleriyle bilinçli olarak şık bir analitik yüzey olarak kurgulandı.",
-      addContacts: "Kişi ekle",
-      createSegment: "Segment oluştur",
-      chips: ["Segmente hazır örnek veri", "Duyarlı tablo kabuğu", "Durum duyarlı kitle kartları"],
-    },
-    table: {
-      title: "Kitle listesi",
-      description: "Mobil ve masaüstü kullanımına uygun temiz ve okunabilir tablo.",
-      columns: {
-        contact: "Kişi",
-        region: "Bölge",
-        score: "Uyum puanı",
-        lastTouch: "Son temas",
-        status: "Durum",
-      },
-      filters: {
-        all: "Tüm kişiler",
-        active: "Aktif",
-        paused: "Duraklatıldı",
-        completed: "Tamamlandı",
-      },
-      meta: "4 örnek kişi / premium kitle çalışma alanı temeli",
-    },
-    extras: {
-      trendTitle: "Kitle kalite trendi",
-      trendDescription: "Büyüme ve kalite puanlaması için yer tutucu görselleştirme.",
-      trendChartTitle: "Uyum puanı sağlığı",
-      trendChartSubtitle: "Örnek segment kalite ilerleyişi",
-      insightsTitle: "Segment içgörüleri",
-      insightsDescription: "Zenginleştirme ve yönlendirme mantığı için geleceğe hazır panel.",
-      insights: [
-        "Kuzey Amerika kurumsal liderlerinde etkileşim olasılığı en yüksek seviyede.",
-        "Son duraklamalar, onboarding aşamasındaki iletişime odaklanıyor.",
-        "Yüksek puanlı profiller CS ve büyüme operasyonları fonksiyonlarında yoğunlaşıyor.",
-      ],
-    },
-  },
   analytics: {
     hero: {
       eyebrow: "Analitik",
@@ -355,37 +303,6 @@ export const tr = {
         ["Tamamlanma oranı yumuşadı", "Mobil destekli oturumlar haftalık hedefin altında.", "Paused"],
         ["Kurumsal operasyon artışı", "CX Activation Spring 2026 taban çizginin üzerinde performans gösteriyor.", "Active"],
         ["Kişi kalite riski", "Doğrulama hataları arama işleri hazırlığını etkiliyor.", "Pending"],
-      ],
-    },
-  },
-  callingOps: {
-    hero: {
-      eyebrow: "Arama Operasyonları",
-      title: "Kuyruk ve iş hazırlığı",
-      description:
-        "Bu yer tutucu, arama operasyonlarını gezinmede görünür tutar ve koordinatörler için kuyruk sağlığı ile iş üretimi takibi için net bir giriş noktası sunar.",
-      uploadContacts: "Kişileri yükle",
-      reviewOperations: "Operasyonları incele",
-    },
-    queue: {
-      title: "Kuyruk İzleme",
-      description: "Yaklaşan arama iş akışları için operasyonel yer tutucular.",
-      items: [
-        {
-          title: "EMEA takip kuyruğu",
-          detail: "186 kişi arama işi oluşturulmasını bekliyor.",
-          owner: "Koordinatör ekibi",
-        },
-        {
-          title: "Kuzey Amerika geri aramaları",
-          detail: "Kalite güvence tamamlandı ve sonraki çağrı paketi için hazır.",
-          owner: "Arama KG",
-        },
-        {
-          title: "Perakende toparlama partisi 08",
-          detail: "Başarısız paketleme sonrası yeniden deneme gerekiyor.",
-          owner: "Operasyon otomasyonu",
-        },
       ],
     },
   },

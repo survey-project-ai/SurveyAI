@@ -34,17 +34,9 @@ export const en = {
         title: "Operations",
         subtitle: "Monitor launch readiness, active pacing, and cross-channel execution.",
       },
-      contacts: {
-        title: "Contacts",
-        subtitle: "Keep contact files validated, segmented, and ready for operation assignment.",
-      },
       analytics: {
         title: "Analytics",
         subtitle: "Review completions, response lift, and delivery performance across the portfolio.",
-      },
-      callingOps: {
-        title: "Calling Ops",
-        subtitle: "Watch queue volume, call job readiness, and coordinator attention points.",
       },
       surveyCreate: {
         title: "New Survey",
@@ -71,9 +63,7 @@ export const en = {
       dashboard: { label: "Dashboard", description: "Operations overview" },
       surveys: { label: "Surveys", description: "Drafts and live studies" },
       operations: { label: "Operations", description: "Launch and pacing" },
-      contacts: { label: "Contacts", description: "Uploads and validation" },
       analytics: { label: "Analytics", description: "Performance and trends" },
-      callingOps: { label: "Calling Ops", description: "Queues and call jobs" },
     },
     common: {
       viewAll: "View all",
@@ -258,48 +248,6 @@ export const en = {
       ],
     },
   },
-  contacts: {
-    hero: {
-      eyebrow: "Contacts",
-      title: "Audience intelligence designed to feel product-grade, not CRM-generic.",
-      description:
-        "This contacts page is intentionally framed as a sleek analytics surface with reusable tables, status markers, and card sections that will scale into segmentation and enrichment later.",
-      addContacts: "Add Contacts",
-      createSegment: "Create Segment",
-      chips: ["Segment-ready mock data", "Responsive table shell", "Status-aware audience cards"],
-    },
-    table: {
-      title: "Audience roster",
-      description: "Clean, readable table tuned for mobile and desktop usage alike.",
-      columns: {
-        contact: "Contact",
-        region: "Region",
-        score: "Fit score",
-        lastTouch: "Last touch",
-        status: "Status",
-      },
-      filters: {
-        all: "All contacts",
-        active: "Active",
-        paused: "Paused",
-        completed: "Completed",
-      },
-      meta: "4 mock contacts / premium audience workspace foundation",
-    },
-    extras: {
-      trendTitle: "Audience quality trend",
-      trendDescription: "Placeholder visualization for growth and quality scoring.",
-      trendChartTitle: "Fit score health",
-      trendChartSubtitle: "Sample segment quality progression",
-      insightsTitle: "Segment insights",
-      insightsDescription: "Future-ready panel for enrichment and routing logic.",
-      insights: [
-        "North America enterprise leaders show the highest engagement probability.",
-        "Recent pauses are clustered around onboarding-stage outreach.",
-        "High-scoring profiles are concentrated in CS and growth operations functions.",
-      ],
-    },
-  },
   analytics: {
     hero: {
       eyebrow: "Analytics",
@@ -320,37 +268,6 @@ export const en = {
         ["Completion rate softened", "Mobile-assisted sessions are below weekly target.", "Paused"],
         ["Enterprise operation lift", "CX Activation Spring 2026 is outperforming baseline.", "Active"],
         ["Contact quality risk", "Validation failures are skewing call-job readiness.", "Pending"],
-      ],
-    },
-  },
-  callingOps: {
-    hero: {
-      eyebrow: "Calling Ops",
-      title: "Queue and job readiness",
-      description:
-        "This placeholder keeps calling operations visible in navigation and gives coordinators a clear landing point for queue health and job-generation follow-up.",
-      uploadContacts: "Upload Contacts",
-      reviewOperations: "Review Operations",
-    },
-    queue: {
-      title: "Queue Watch",
-      description: "Operational placeholders for upcoming calling workflows.",
-      items: [
-        {
-          title: "EMEA follow-up queue",
-          detail: "186 contacts waiting for call-job generation.",
-          owner: "Coordinator team",
-        },
-        {
-          title: "North America callbacks",
-          detail: "QA complete and ready for the next dialer batch.",
-          owner: "Call QA",
-        },
-        {
-          title: "Retail recovery batch 08",
-          detail: "Retry required after failed job packaging.",
-          owner: "Ops automation",
-        },
       ],
     },
   },

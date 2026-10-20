@@ -10,7 +10,6 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   AnalyticsIcon,
   ArrowRightIcon,
-  ContactIcon,
   OperationIcon,
   PlayIcon,
   PlusIcon,
@@ -135,8 +134,6 @@ export default function DashboardPage() {
   const compactQuickLinks: QuickLink[] = [
     { title: "Anketler", href: "/surveys", icon: <SurveyIcon className="nav-icon" /> },
     { title: "Operasyonlar", href: "/operations", icon: <OperationIcon className="nav-icon" /> },
-    { title: "Kişiler", href: "/contacts", icon: <ContactIcon className="nav-icon" /> },
-    { title: "Arama Operasyonları", href: "/calling-ops", icon: <PlayIcon className="nav-icon" /> },
     { title: "Analitik", href: "/analytics", icon: <AnalyticsIcon className="nav-icon" /> },
   ];
 

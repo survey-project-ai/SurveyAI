@@ -16,9 +16,7 @@ const pageMetaKeys: Record<string, string> = {
   "/": "shell.pageMeta.dashboard",
   "/surveys": "shell.pageMeta.surveys",
   "/operations": "shell.pageMeta.operations",
-  "/contacts": "shell.pageMeta.contacts",
   "/analytics": "shell.pageMeta.analytics",
-  "/calling-ops": "shell.pageMeta.callingOps",
 };
 
 function subscribeToScroll(onChange: () => void): () => void {

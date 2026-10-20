@@ -35,21 +35,7 @@ function resolveFallbackTarget(pathname: string): FallbackTarget {
     };
   }
 
-  if (pathname.startsWith("/contacts")) {
-    return {
-      href: "/",
-      label: "Panele dön",
-    };
-  }
-
   if (pathname.startsWith("/analytics")) {
-    return {
-      href: "/",
-      label: "Panele dön",
-    };
-  }
-
-  if (pathname.startsWith("/calling-ops")) {
     return {
       href: "/",
       label: "Panele dön",
