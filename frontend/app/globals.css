@@ -9595,6 +9595,12 @@ body::after {
   align-items: center;
 }
 
+/* Wraps the results tab, which has no section of its own to carry the tab panel role. */
+.operation-tabpanel {
+  display: grid;
+  min-width: 0;
+}
+
 .table-title {
   color: var(--ops-text);
   font-weight: 700;

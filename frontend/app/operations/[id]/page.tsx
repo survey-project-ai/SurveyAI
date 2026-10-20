@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { notFound, useParams, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { useNotifications } from "@/lib/notifications";
 import { usePolling } from "@/lib/usePolling";
 import { OperationAnalyticsSection } from "@/components/operations/OperationAnalyticsSection";
@@ -44,6 +44,14 @@ import {
 import { CallJob, Operation, OperationAnalytics, TableColumn } from "@/lib/types";
 
 type OperationWorkspaceTab = "analysis" | "firstLook" | "details" | "jobs";
+
+// Setup and status first, then the calls and their results; İlk bakış is the keyword lexicon preview.
+const OPERATION_TABS: Array<{ key: OperationWorkspaceTab; label: string }> = [
+  { key: "details", label: "Operasyon Detay" },
+  { key: "jobs", label: "Çağrılar" },
+  { key: "analysis", label: "Sonuçlar" },
+  { key: "firstLook", label: "İlk bakış" },
+];
 
 type OperationFirstLookQuestionSuggestion = {
   questionId?: string;
@@ -426,45 +434,47 @@ export default function OperationDetailPage() {
     ));
   }, []);
 
+  // Arrow keys, Home and End move between the tabs and open the one they land on (WAI-ARIA tabs pattern).
+  const handleTabKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>) => {
+    const index = OPERATION_TABS.findIndex((tab) => tab.key === activeTab);
+    const nextIndex =
+      event.key === "ArrowRight" ? (index + 1) % OPERATION_TABS.length
+        : event.key === "ArrowLeft" ? (index - 1 + OPERATION_TABS.length) % OPERATION_TABS.length
+          : event.key === "Home" ? 0
+            : event.key === "End" ? OPERATION_TABS.length - 1
+              : -1;
+    if (nextIndex === -1) {
+      return;
+    }
+    event.preventDefault();
+    const nextKey = OPERATION_TABS[nextIndex].key;
+    setActiveTab(nextKey);
+    document.getElementById(`operation-tab-${nextKey}`)?.focus();
+  }, [activeTab]);
+
   const headerTabs = useMemo(() => (
     <div className="operation-header-nav">
       <div className="operation-header-tabs" role="tablist" aria-label="Operasyon sekmeleri">
-        {/* Setup and status first, then the calls and their results; İlk bakış is the keyword lexicon preview. */}
-        <button
-          type="button"
-          className={["operation-header-tab", activeTab === "details" ? "is-active" : ""].filter(Boolean).join(" ")}
-          onClick={() => setActiveTab("details")}
-          aria-pressed={activeTab === "details"}
-        >
-          Operasyon Detay
-        </button>
-        <button
-          type="button"
-          className={["operation-header-tab", activeTab === "jobs" ? "is-active" : ""].filter(Boolean).join(" ")}
-          onClick={() => setActiveTab("jobs")}
-          aria-pressed={activeTab === "jobs"}
-        >
-          Çağrılar
-        </button>
-        <button
-          type="button"
-          className={["operation-header-tab", activeTab === "analysis" ? "is-active" : ""].filter(Boolean).join(" ")}
-          onClick={() => setActiveTab("analysis")}
-          aria-pressed={activeTab === "analysis"}
-        >
-          Sonuçlar
-        </button>
-        <button
-          type="button"
-          className={["operation-header-tab", activeTab === "firstLook" ? "is-active" : ""].filter(Boolean).join(" ")}
-          onClick={() => setActiveTab("firstLook")}
-          aria-pressed={activeTab === "firstLook"}
-        >
-          İlk bakış
-        </button>
+        {OPERATION_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            id={`operation-tab-${tab.key}`}
+            aria-selected={activeTab === tab.key}
+            aria-controls="operation-tabpanel"
+            // Only the active tab is in the Tab order; the arrow keys move between tabs.
+            tabIndex={activeTab === tab.key ? 0 : -1}
+            className={["operation-header-tab", activeTab === tab.key ? "is-active" : ""].filter(Boolean).join(" ")}
+            onClick={() => setActiveTab(tab.key)}
+            onKeyDown={handleTabKeyDown}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
     </div>
-  ), [activeTab]);
+  ), [activeTab, handleTabKeyDown]);
 
   const openImportPicker = useCallback(() => {
     fileInputRef.current?.click();
@@ -791,6 +801,13 @@ export default function OperationDetailPage() {
     notFound();
   }
 
+  // Whichever tab is open renders its content root with these.
+  const tabPanelProps = {
+    role: "tabpanel",
+    id: "operation-tabpanel",
+    "aria-labelledby": `operation-tab-${activeTab}`,
+  } as const;
+
   return (
     <PageContainer hideBackRow>
       <div className="survey-detail-shell survey-detail-compact operation-detail-tight">
@@ -832,7 +849,7 @@ export default function OperationDetailPage() {
         ) : null}
 
         {activeTab === "analysis" ? (
-          <>
+          <div {...tabPanelProps} className="operation-tabpanel">
             <OperationAnalyticsSection
               operation={operation}
               analytics={analytics}
@@ -841,10 +858,9 @@ export default function OperationDetailPage() {
               view="overview"
               onSaveSampleResponse={handleSaveInlineSampleResponse}
             />
-
-          </>
+          </div>
         ) : activeTab === "firstLook" ? (
-          <section className="panel-card operation-detail-content-stack">
+          <section {...tabPanelProps} className="panel-card operation-detail-content-stack">
             <div className="operation-detail-summary-strip">
               <div className="operation-detail-summary-copy">
                 <div className="operation-detail-hero-meta">
@@ -949,7 +965,7 @@ export default function OperationDetailPage() {
             )}
           </section>
         ) : activeTab === "jobs" ? (
-          <section className="panel-card operation-detail-content-stack operation-jobs-panel">
+          <section {...tabPanelProps} className="panel-card operation-detail-content-stack operation-jobs-panel">
             <div className="operation-list-toolbar operation-list-toolbar-compact">
               <label className="search-field operation-list-search">
                 <input
@@ -1065,7 +1081,7 @@ export default function OperationDetailPage() {
             )}
           </section>
         ) : (
-          <section className="panel-card operation-detail-content-stack">
+          <section {...tabPanelProps} className="panel-card operation-detail-content-stack">
             <div className="operation-detail-summary-strip">
               <div className="operation-detail-summary-copy">
                 <div className="operation-detail-hero-meta">
