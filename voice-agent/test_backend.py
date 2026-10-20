@@ -2,7 +2,7 @@
 import unittest
 
 from backend import PLEASE_WAIT, TECHNICAL_GOODBYE, BackendError, BackendInterview, dial_failure_event
-from phrases import CALLED_AGAIN, HEARD, is_line_check, signal_for
+from phrases import CALLED_AGAIN, HEARD, is_line_check, may_continue_number, signal_for
 
 
 class SignalTest(unittest.TestCase):
@@ -17,6 +17,15 @@ class SignalTest(unittest.TestCase):
         self.assertEqual(signal_for("Neden olmasın, sorun."), "ANSWER")
         self.assertEqual(signal_for("Erdoğan tekrar seçilsin, bence o kazanır, öyle düşünüyorum."), "ANSWER")
         self.assertEqual(signal_for("Elli bir."), "ANSWER")
+
+    def test_numbers_that_may_go_on(self):
+        # "On dokuz" came as "On." and "Dokuz." in a test call.
+        self.assertTrue(may_continue_number("On."))
+        self.assertTrue(may_continue_number("Kırk"))
+        self.assertTrue(may_continue_number("20"))
+        self.assertFalse(may_continue_number("On dokuz."))
+        self.assertFalse(may_continue_number("27 yaşındayım."))
+        self.assertFalse(may_continue_number("Beş."))
 
     def test_line_checks(self):
         self.assertTrue(is_line_check("Alo? Alo."))

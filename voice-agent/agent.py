@@ -40,12 +40,15 @@ from common import (AGENT_NAME, AMBIENT_VOLUME, BACKEND_URL, LOG_DIR, STT_MODEL,
                     load_keys, read_state)
 from gender import VoiceGenderDetector, load_model
 from leveler import VoiceLeveler
-from phrases import FILLERS, is_hesitation, normalize
+from phrases import FILLERS, is_hesitation, may_continue_number, normalize
 from prototype_flow import KEYTERMS, PrototypeInterview
 from tts_cache import TtsCache
 
 load_keys()
 logger = logging.getLogger("survey-agent")
+# How long a turn ending in "on", "yirmi"... waits for the rest of the number. The second half of the
+# split "On dokuz" arrived 0.7 s after the first.
+NUMBER_CONTINUATION_WAIT = 1.0
 # A native crash (the worker once aborted with no log while a call ended) then at least prints every
 # thread's Python stack to the log.
 faulthandler.enable()
@@ -151,6 +154,9 @@ class SurveyAgent(Agent):
         self.heard_peak = 0.0
         self.last_voice_at: float | None = None  # wall time of the callee's last loud audio frame
         self.last_reply = None
+        # A turn ending in a number that may go on ("On."), waiting briefly for the rest ("Dokuz.").
+        self.held_text: str | None = None
+        self.held_release: asyncio.Task | None = None
 
     async def stt_node(self, audio, model_settings):
         # The callee's audio also goes to the gender detector and the recording.
@@ -223,6 +229,11 @@ class SurveyAgent(Agent):
     async def on_user_turn_completed(self, turn_ctx, new_message) -> None:
         user_text = new_message.text_content or ""
         self.recorder.heard(user_text)
+        if self.held_text is not None:
+            # The rest of a number held back below: "On." + "Dokuz." -> "On. Dokuz."
+            self.held_release.cancel()
+            user_text = f"{self.held_text} {user_text}"
+            self.held_text = self.held_release = None
         if self.interview.step == "done":
             # The survey is over and the goodbye is playing; once the end of the callee's own sentence
             # ("...diyeceğim") arrived here and crashed the handler.
@@ -235,6 +246,22 @@ class SurveyAgent(Agent):
         if self.interview.step != "greeting" and is_hesitation(user_text):
             logger.info("ignoring %r: the callee is thinking", user_text)
             raise StopResponse()
+        if self.interview.step != "greeting" and may_continue_number(user_text):
+            # Speech recognition once gave "On dokuz" as two turns; "on" was then recorded as the age.
+            self.held_text = user_text
+            self.held_release = asyncio.create_task(self._release_held())
+            logger.info("holding %r: the number may go on", user_text)
+            raise StopResponse()
+        await self._respond(user_text)
+        raise StopResponse()
+
+    async def _release_held(self) -> None:
+        """Answers a held number once no more of it has arrived."""
+        await asyncio.sleep(NUMBER_CONTINUATION_WAIT)
+        text, self.held_text, self.held_release = self.held_text, None, None
+        await self._respond(text)
+
+    async def _respond(self, user_text: str) -> None:
         turn = self.recorder.start_turn(self.interview.step, user_text, self.last_voice_at)
         turn["heard_at_s"] = self.heard_offset()
         started = time.time()
@@ -251,7 +278,7 @@ class SurveyAgent(Agent):
         if not reply:
             # Nothing to say yet (the engine waits for a greeting it can recognise).
             self.recorder.pending = None
-            raise StopResponse()
+            return
         # The opening is said in full even if the callee says "Alo?" again over it, as a person would; in the
         # second test call a repeated "Alo" cancelled it before it started and the callee never heard it.
         # The goodbye too: the tail of the callee's last answer once cut it after "Vakit" and the line dropped.
@@ -260,7 +287,6 @@ class SurveyAgent(Agent):
         self.last_reply = speech
         if end_call:
             asyncio.create_task(self.hang_up(speech))
-        raise StopResponse()
 
 
 async def iter_frames(frames):

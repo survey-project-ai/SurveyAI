@@ -30,6 +30,9 @@ FILLERS = {"", "evet", "tamam", "hi", "hm", "hmm", "ee", "eee", "aha", "alo", "e
 HESITATION = re.compile(r"(e+|i+|m+|h+m+|a+h+|sey|yani)( (e+|i+|m+|h+m+|a+h+|sey|yani))*")
 # The callee checking whether the line works, usually because they did not hear the agent.
 PRESENCE_CHECKS = ("alo", "duyuyor musunuz", "orada misiniz", "sesim geliyor mu", "sesimi duyuyor musunuz")
+# Numbers a longer number starts with ("on" dokuz, "yüz" yirmi), as words or digits.
+NUMBER_PREFIXES = {"on", "yirmi", "otuz", "kirk", "elli", "altmis", "yetmis", "seksen", "doksan", "yuz",
+                   "10", "20", "30", "40", "50", "60", "70", "80", "90", "100"}
 # A turn made only of these is a line check, not an answer: "Alo? Alo, beni duyuyor musunuz?"
 _LINE_CHECK = re.compile(r"((alo|beni|sesimi|duyuyor musunuz|orada misiniz|sesim geliyor mu) ?)+")
 
@@ -54,6 +57,13 @@ def is_line_check(text: str) -> bool:
     """True for a turn that only checks whether the line works."""
     words = " ".join(normalize(text).split())
     return bool(words) and _LINE_CHECK.fullmatch(words + " ") is not None
+
+
+def may_continue_number(text: str) -> bool:
+    """True when a turn ends in a number a longer one starts with: "On." may be the start of "on dokuz".
+    Speech recognition gave "On dokuz" as two turns in a test call, and "on" was recorded as the age."""
+    words = normalize(text).split()
+    return bool(words) and words[-1] in NUMBER_PREFIXES
 
 
 def signal_for(text: str) -> str:
