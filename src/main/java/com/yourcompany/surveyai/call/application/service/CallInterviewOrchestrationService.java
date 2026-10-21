@@ -3,7 +3,9 @@ package com.yourcompany.surveyai.call.application.service;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewAnswerRequest;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewFinishRequest;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewSessionRequest;
+import com.yourcompany.surveyai.call.application.dto.request.InterviewVerificationRequest;
 import com.yourcompany.surveyai.call.application.dto.response.InterviewOrchestrationResponse;
+import com.yourcompany.surveyai.call.application.dto.response.InterviewVerificationResponse;
 import com.yourcompany.surveyai.call.domain.enums.CallProvider;
 import java.util.List;
 
@@ -22,4 +24,7 @@ public interface CallInterviewOrchestrationService {
     InterviewOrchestrationResponse recoverFailedAnswer(InterviewAnswerRequest request);
 
     InterviewOrchestrationResponse finishInterview(InterviewFinishRequest request);
+
+    // Records the post-call check of the answers, and corrects an answer both checks heard differently.
+    InterviewVerificationResponse recordVerification(InterviewVerificationRequest request);
 }

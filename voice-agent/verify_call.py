@@ -21,7 +21,11 @@ Each question then gets its final answer in logs/<room>.final.json:
 With skip logic a corrected answer may mean the callee was asked the wrong follow-up questions, so such
 questions should always go to a person; this survey has none.
 
-agent.py starts this when a call ends; it can also be run by hand: python verify_call.py <room>
+For a call the backend placed (logs/<room>.checks.json), the clips' transcripts go to the backend
+(/api/v1/provider-tools/interviews/verification), which reads them with the interview engine's rules and
+applies the same decisions to the stored answers; its results are written to logs/<room>.final.json.
+
+verify_watch.py starts this when a call ends; it can also be run by hand: python verify_call.py <room>
 Writes logs/<room>.verified.json (every reply) and logs/<room>.final.json (every question).
 """
 from __future__ import annotations
@@ -36,7 +40,7 @@ import wave
 import aiohttp
 import numpy as np
 
-from common import LOG_DIR, load_keys
+from common import LOG_DIR, backend_settings, load_keys
 
 load_keys()
 from livekit import rtc  # noqa: E402
@@ -150,7 +154,39 @@ def final_answers(room: str, results: list[dict]) -> dict[str, dict]:
     return final
 
 
+async def check_backend_call(room: str) -> None:
+    started = time.time()
+    calls = json.loads((LOG_DIR / f"{room}.checks.json").read_text(encoding="utf-8"))
+    audio = load_callee(room)
+    checks = []
+    async with aiohttp.ClientSession() as http:
+        for turn in calls["turns"]:
+            clip = answer_clip(audio, turn["heard_at_s"], turn.get("previous_heard_at_s"))
+            # No transcripts when the recording holds no speech for the answer; the backend then asks a person.
+            transcripts = {} if clip is None else {model: await transcribe(http, model, clip) for model in CHECK_MODELS}
+            checks.append({"questionId": turn["questionId"], "liveText": turn["text"], "transcripts": transcripts})
+        (LOG_DIR / f"{room}.verified.json").write_text(json.dumps(checks, ensure_ascii=False, indent=1), encoding="utf-8")
+        settings = backend_settings()
+        async with http.post(f"{settings.url}/api/v1/provider-tools/interviews/verification",
+                             json={"callAttemptId": calls["callAttemptId"], "checks": checks},
+                             headers={"X-SurveyAI-Tool-Secret": settings.tool_secret},
+                             timeout=aiohttp.ClientTimeout(total=30)) as response:
+            if response.status >= 300:
+                raise RuntimeError(f"backend rejected the check: HTTP {response.status} {(await response.text())[:300]}")
+            results = (await response.json())["results"]
+    (LOG_DIR / f"{room}.final.json").write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
+    for check, result in zip(checks, results):
+        heard = "; ".join(f"{model.split('/')[0]}: {text!r}" for model, text in check["transcripts"].items())
+        print(f"{result['status']:11} {result['questionCode']:12} call: {check['liveText']!r} -> {result['recorded']!r}"
+              f"{'  suggested: ' + repr(result['suggested']) if result.get('suggested') else ''}"
+              f"{'  (' + result['reason'] + ')' if result.get('reason') else ''}  [{heard}]")
+    print(f"checked {len(results)} answers in {time.time() - started:.1f}s")
+
+
 async def main(room: str) -> None:
+    if (LOG_DIR / f"{room}.checks.json").exists():
+        await check_backend_call(room)
+        return
     started = time.time()
     audio = load_callee(room)
     turns = [json.loads(line) for line in (LOG_DIR / f"{room}.answers.jsonl").read_text(encoding="utf-8").splitlines()]

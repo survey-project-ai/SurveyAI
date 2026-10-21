@@ -6,13 +6,16 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewAnswerRequest;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewConversationSignal;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewFinishRequest;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewInferredAnswer;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewSessionRequest;
+import com.yourcompany.surveyai.call.application.dto.request.InterviewVerificationRequest;
 import com.yourcompany.surveyai.call.application.dto.response.InterviewOrchestrationResponse;
+import com.yourcompany.surveyai.call.application.dto.response.InterviewVerificationResponse;
 import com.yourcompany.surveyai.call.domain.entity.CallAttempt;
 import com.yourcompany.surveyai.call.domain.entity.CallJob;
 import com.yourcompany.surveyai.call.domain.enums.CallAttemptStatus;
@@ -419,6 +422,98 @@ class CallInterviewOrchestrationServiceImplTest {
                 Map.of("gender", new InterviewInferredAnswer("kadın", 0.9))));
 
         assertThat(fixture.contact.getGender()).isEqualTo("Erkek");
+    }
+
+    @Test
+    void verification_confirmsAnAnswerBothChecksHeardTheSame() throws Exception {
+        SurveyAnswer rating = answerRating("Dört.");
+
+        InterviewVerificationResponse.Result result = verifyRating("Dört.", "dört");
+
+        assertThat(result.status()).isEqualTo("verified");
+        assertThat(rating.getAnswerNumber()).isEqualByComparingTo("4");
+        assertThat(new ObjectMapper().readTree(rating.getAnswerJson()).path("verification").path("status").asText())
+                .isEqualTo("verified");
+    }
+
+    @Test
+    void verification_correctsAnAnswerBothChecksHeardDifferentlyAndKeepsTheCallsValue() throws Exception {
+        // The call heard "beş" where the callee said "dört".
+        SurveyAnswer rating = answerRating("Beş.");
+
+        InterviewVerificationResponse.Result result = verifyRating("Dört.", "dört");
+
+        assertThat(result.status()).isEqualTo("corrected");
+        assertThat(result.recorded()).isEqualTo("5");
+        assertThat(result.suggested()).isEqualTo("4");
+        assertThat(rating.getAnswerNumber()).isEqualByComparingTo("4");
+        JsonNode verification = new ObjectMapper().readTree(rating.getAnswerJson()).path("verification");
+        assertThat(verification.path("original").path("answerNumber").decimalValue()).isEqualByComparingTo("5");
+        assertThat(verification.path("checks")).hasSize(2);
+    }
+
+    @Test
+    void verification_sendsAnAnswerToAPersonWhenTheChecksDisagree() {
+        SurveyAnswer rating = answerRating("Beş.");
+
+        InterviewVerificationResponse.Result result = verifyRating("Dört.", "Üç.");
+
+        assertThat(result.status()).isEqualTo("review");
+        assertThat(result.reason()).isEqualTo("checks_disagree");
+        assertThat(rating.getAnswerNumber()).isEqualByComparingTo("5");
+    }
+
+    @Test
+    void verification_doesNotFillInAnAnswerTheCallMissed() {
+        SurveyAnswer rating = answerRating("Mavi gömlekli olan");
+
+        InterviewVerificationResponse.Result result = verifyRating("Dört.", "dört");
+
+        assertThat(result.status()).isEqualTo("review");
+        assertThat(result.reason()).isEqualTo("missed_in_call");
+        assertThat(result.suggested()).isEqualTo("4");
+        assertThat(rating.isValid()).isFalse();
+    }
+
+    @Test
+    void verification_leavesACorrectionToAPersonWhenOtherQuestionsBranchOnTheAnswer() {
+        fixture.openQuestion.setBranchConditionJson("""
+                {"mode":"ASK_IF","rules":[{"questionCode":"%s","operator":"GREATER_THAN","value":3}]}
+                """.formatted(fixture.ratingQuestion.getCode()));
+        SurveyAnswer rating = answerRating("Beş.");
+
+        InterviewVerificationResponse.Result result = verifyRating("Dört.", "dört");
+
+        assertThat(result.status()).isEqualTo("review");
+        assertThat(result.reason()).isEqualTo("affects_branching");
+        assertThat(rating.getAnswerNumber()).isEqualByComparingTo("5");
+    }
+
+    private SurveyAnswer answerRating(String utterance) {
+        fixture.survey.setLanguageCode("tr");
+        fixture.ratingQuestion.setSettingsJson("{\"min\":1,\"max\":5}");
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
+                .thenReturn(List.of(fixture.ratingQuestion, fixture.openQuestion));
+        questionOptionsByQuestionId.put(fixture.ratingQuestion.getId(), List.of());
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, utterance, InterviewConversationSignal.ANSWER));
+        SurveyResponse response = responsesByAttemptId.get(fixture.callAttempt.getId());
+        return answersByResponseId.get(response.getId()).stream()
+                .filter(answer -> answer.getSurveyQuestion() == fixture.ratingQuestion)
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private InterviewVerificationResponse.Result verifyRating(String firstCheck, String secondCheck) {
+        Map<String, String> transcripts = new LinkedHashMap<>();
+        transcripts.put("speechmatics/linden-1", firstCheck);
+        transcripts.put("google/gemini-3.5-transcribe-live", secondCheck);
+        InterviewVerificationResponse response = service.recordVerification(new InterviewVerificationRequest(
+                fixture.callAttempt.getId(), null,
+                List.of(new InterviewVerificationRequest.AnswerCheck(fixture.ratingQuestion.getId(), "live", transcripts))));
+        assertThat(response.results()).hasSize(1);
+        return response.results().getFirst();
     }
 
     private SurveyQuestion useGenderQuestion(String settingsJson) {

@@ -57,10 +57,13 @@ aramalarda yeniden dolar.
 ```
 
 Her arama `logs/` altına yazılır: turlar (`<oda>.jsonl`), iki tarafın sesi (`<oda>.agent.wav`,
-`<oda>.callee.wav`) ve prototip aramalarında soru cevapları (`<oda>.answers.jsonl`). `verify_watch.py` prototip
-aramalarının cevaplarını kayıttan iki modelle yeniden dinler ve her sorunun son cevabını `<oda>.final.json`
-dosyasına yazar (otomatik düzeltme ya da insan kontrolü gerekenler). Backend aramalarının kontrolü Aşama 1'in
-5. adımında (B7) gelecek.
+`<oda>.callee.wav`) ve kontrol edilecek cevaplar (prototipte `<oda>.answers.jsonl`, backend aramalarında
+`<oda>.checks.json`). `verify_watch.py` cevapları kayıttan iki modelle yeniden dinler:
+- prototip aramalarında her sorunun son cevabını kendisi belirleyip `<oda>.final.json` dosyasına yazar;
+- backend aramalarında metinleri backend'e gönderir. Backend bunları görüşmedeki kurallarla okuyup cevaplara
+  işler (doğrulandı, otomatik düzeltme ya da insan kontrolü); sonuçları `<oda>.final.json` dosyasına yazılır.
+
+Railway'de izleyici ajanla aynı konteynerde, ayrı bir süreç olarak çalışır ve durursa yeniden başlatılır.
 
 ## Notlar
 

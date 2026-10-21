@@ -9,7 +9,9 @@ import static org.mockito.Mockito.when;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewAnswerRequest;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewConversationSignal;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewSessionRequest;
+import com.yourcompany.surveyai.call.application.dto.request.InterviewVerificationRequest;
 import com.yourcompany.surveyai.call.application.dto.response.InterviewOrchestrationResponse;
+import com.yourcompany.surveyai.call.application.dto.response.InterviewVerificationResponse;
 import com.yourcompany.surveyai.call.application.service.CallInterviewOrchestrationService;
 import com.yourcompany.surveyai.call.configuration.VoiceProviderConfigurationResolver;
 import com.yourcompany.surveyai.call.configuration.VoiceProviderMode;
@@ -109,6 +111,16 @@ class InterviewToolControllerTest {
 
         assertThatThrownBy(() -> controller.startInterview("webhook-secret", null)).isInstanceOf(UnauthorizedException.class);
         assertThatThrownBy(() -> controller.startInterview(null, null)).isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void recordVerification_needsAToolSecret() {
+        InterviewVerificationRequest request = new InterviewVerificationRequest(UUID.randomUUID(), null, java.util.List.of());
+        when(orchestrationService.recordVerification(request))
+                .thenReturn(new InterviewVerificationResponse(request.callAttemptId(), java.util.List.of()));
+
+        assertThat(controller.recordVerification(TOOL_SECRET, request).getStatusCode().is2xxSuccessful()).isTrue();
+        assertThatThrownBy(() -> controller.recordVerification("wrong", request)).isInstanceOf(UnauthorizedException.class);
     }
 
     @Test

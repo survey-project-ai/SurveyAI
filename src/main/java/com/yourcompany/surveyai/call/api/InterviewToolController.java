@@ -3,7 +3,9 @@ package com.yourcompany.surveyai.call.api;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewAnswerRequest;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewFinishRequest;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewSessionRequest;
+import com.yourcompany.surveyai.call.application.dto.request.InterviewVerificationRequest;
 import com.yourcompany.surveyai.call.application.dto.response.InterviewOrchestrationResponse;
+import com.yourcompany.surveyai.call.application.dto.response.InterviewVerificationResponse;
 import com.yourcompany.surveyai.call.application.service.CallInterviewOrchestrationService;
 import com.yourcompany.surveyai.call.configuration.VoiceProviderConfiguration;
 import com.yourcompany.surveyai.call.configuration.VoiceProviderConfigurationResolver;
@@ -112,6 +114,19 @@ public class InterviewToolController {
                 "requestedStatus=" + effectiveRequest.requestedStatus(),
                 "suppressClosingMessage=" + effectiveRequest.suppressClosingMessage()
         );
+        return ResponseEntity.ok(response);
+    }
+
+    // The agent's check of the answers against the call recording, sent a minute or so after the call.
+    @PostMapping("/verification")
+    public ResponseEntity<InterviewVerificationResponse> recordVerification(
+            @RequestHeader(name = TOOL_SECRET_HEADER, required = false) String toolSecret,
+            @RequestBody InterviewVerificationRequest request
+    ) {
+        validateToolSecret(toolSecret);
+        InterviewVerificationResponse response = callInterviewOrchestrationService.recordVerification(request);
+        log.info("Interview tool completed. endpoint=verification callAttemptId={} checkedAnswers={}",
+                response.callAttemptId(), response.results().size());
         return ResponseEntity.ok(response);
     }
 

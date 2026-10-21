@@ -1,5 +1,8 @@
 """Tests for the agent's side of a call the backend placed. Run: .venv/Scripts/python -m unittest test_backend"""
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from backend import PLEASE_WAIT, TECHNICAL_GOODBYE, BackendError, BackendInterview, dial_failure_event
 from phrases import CALLED_AGAIN, HEARD, is_line_check, may_continue_number, signal_for
@@ -49,6 +52,7 @@ class FakeClient:
         self.start_response = start or {"prompt": None, "endCall": False, "question": None}
         self.answers = list(answers)  # responses, or BackendError to raise
         self.sent = []
+        self.call_attempt_id = "attempt-1"
 
     async def start(self):
         return self.start_response
@@ -151,6 +155,29 @@ class BackendInterviewTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(reply, TECHNICAL_GOODBYE)
         self.assertTrue(end_call)
+
+    async def test_each_questions_last_answer_is_kept_for_the_check_after_the_call(self):
+        candidate = question("q3", "Kimi görmek istersiniz?")
+        client = FakeClient(answers=[
+            progress("Kimi görmek istersiniz?", candidate),
+            progress("Sizi net duyamadım. Kimi görmek istersiniz?", question("q3", "Kimi görmek istersiniz?", retry=True)),
+            {"prompt": "Teşekkürler.", "closingMessage": "Teşekkürler.", "endCall": True, "question": None},
+        ])
+        interview, _ = await self.make(client)
+        await interview.reply("Alo", heard_at_s=4.0)
+        await interview.reply("Mansur Yavaş veya", heard_at_s=10.0)
+        await interview.reply("Ekrem İmamoğlu.", previous_reply_missed=True, heard_at_s=11.5)
+
+        # The answer sent whole after the interrupted retry; its clip starts before its first half.
+        self.assertEqual(interview.answer_turns, {"q3": {"questionId": "q3", "heard_at_s": 11.5,
+                                                         "previous_heard_at_s": 4.0,
+                                                         "text": "Mansur Yavaş veya Ekrem İmamoğlu."}})
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "room.checks.json"
+            interview.save_answer_turns(path)
+            saved = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(saved["callAttemptId"], "attempt-1")
+        self.assertEqual(saved["turns"][0]["questionId"], "q3")
 
     async def test_the_gender_heard_in_the_voice_goes_to_the_backend_at_the_end(self):
         client = FakeClient()

@@ -452,9 +452,11 @@ async def entrypoint(ctx: JobContext) -> None:
 
     async def finish_call(reason: str) -> None:
         survey_agent.save_audio(ctx.room.name)
+        # verify_watch.py picks the call up from logs/ and checks the answers against the recording.
         if isinstance(interview, PrototypeInterview):
-            # verify_watch.py picks the call up from logs/ and checks the answers.
             interview.save_answer_turns(LOG_DIR / f"{ctx.room.name}.answers.jsonl")
+        else:
+            interview.save_answer_turns(LOG_DIR / f"{ctx.room.name}.checks.json")
         decision = await gender.decide(timeout=2.0)
         # Never asked: the backend records it as the gender question's answer (source "voice").
         inferred = ({"gender": {"value": decision.label, "confidence": round(decision.confidence, 3)}}

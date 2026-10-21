@@ -118,11 +118,20 @@ da Mansur Yavaş?") bu haliyle isimler okunmadan sorulurdu.
 - Aynı değer `OperationContact.gender` alanına da yazılır.
 
 **B7. Görüşme sonrası kontrol sonuçları.**
-- Ajan servisindeki `verify_watch.py` sonuçlarını yeni bir uç noktaya gönderir.
-- Backend her cevabın `answer_json` alanına kontrol durumunu ve önerilen değeri yazar.
+- Ajan her sorunun son cevap turunu (soru kimliği, kayıttaki zamanı, canlı metin) `logs/<oda>.checks.json`
+  dosyasına yazar. Ajanla aynı konteynerde çalışan `verify_watch.py` cevabın ses parçasını kayıttan keser,
+  iki modelle (Linden-1, Gemini) yeniden yazıya döker ve metinleri
+  `/api/v1/provider-tools/interviews/verification` ucuna gönderir.
+- Backend metinleri görüşmedeki motor kurallarıyla yorumlar ve her cevabın `answer_json.verification`
+  alanına durumu, gerekçeyi, kontrol metinlerini ve önerilen değeri yazar.
 - Karar verilen kural uygulanır:
-  - iki kontrol modeli aynı geçerli değeri duyduysa otomatik düzeltme yapılır, ilk değer saklanır;
-  - diğer durumlar "kontrol bekliyor" olarak işaretlenir.
+  - iki kontrol de kayıtla aynıysa `verified`; bunların %5'i (`random_sample`) yine insana gider;
+  - iki kontrol aynı ama farklı geçerli bir değerdeyse `corrected`: cevap düzeltilir, görüşmedeki değer
+    `original` olarak saklanır;
+  - görüşmede cevap kaydedilmediyse (`missed_in_call`) ya da başka sorular bu cevaba göre atlanıyorsa
+    (`affects_branching`) düzeltme yapılmaz, `review`;
+  - kontroller farklı duyduysa (`checks_disagree`) ya da kayıtta konuşma yoksa (`no_recording`) `review`;
+  - açık uçlu cevaplar karşılaştırılmaz (`not_checked`), metinler insan için saklanır.
 - Panel ekranı Aşama 2'de.
 
 **B8. Testler.**

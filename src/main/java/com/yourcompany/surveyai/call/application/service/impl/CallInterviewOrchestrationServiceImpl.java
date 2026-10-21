@@ -3,12 +3,15 @@ package com.yourcompany.surveyai.call.application.service.impl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewAnswerRequest;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewConversationSignal;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewFinishRequest;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewInferredAnswer;
+import com.yourcompany.surveyai.call.application.dto.request.InterviewVerificationRequest;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewSessionRequest;
 import com.yourcompany.surveyai.call.application.dto.response.InterviewOrchestrationResponse;
+import com.yourcompany.surveyai.call.application.dto.response.InterviewVerificationResponse;
 import com.yourcompany.surveyai.call.application.support.SpokenNumberParser;
 import com.yourcompany.surveyai.call.application.dto.response.InterviewQuestionOptionPayload;
 import com.yourcompany.surveyai.call.application.dto.response.InterviewQuestionPayload;
@@ -48,6 +51,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Random;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -63,6 +68,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrchestrationService {
 
     private static final String RATING_RANGE_REASON = "Rating answer must be between ";
+    // Answers the post-call check confirmed that still go to a person, so the real accuracy can be measured.
+    private static final double REVIEW_SAMPLE = 0.05;
     private static final Pattern TRANSCRIPT_MARKUP_PATTERN = Pattern.compile("<[^>]+>");
     private static final Pattern VOICE_DIRECTION_PATTERN = Pattern.compile("\\[(?:[a-zA-Z_\\-]{2,20})]|\\((?:[a-zA-Z_\\-]{2,20})\\)");
     private static final Set<String> SEMANTIC_FILLER_TOKENS = Set.of(
@@ -506,6 +513,204 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         surveyResponseRepository.save(response);
         String closingMessage = suppressClosingMessage ? null : buildClosingPrompt(context.survey());
         return buildTerminalResponse(context, response, closingMessage, flowState);
+    }
+
+    // Checks after the call, as the voice prototype decided with the user: an answer both checks heard as
+    // the call recorded it is verified, and REVIEW_SAMPLE of those still go to a person, to measure the
+    // real accuracy over time. When both checks agree on another valid answer it replaces the call's, which
+    // is kept as "original" - unless other questions branch on this one (the callee may then have been asked
+    // the wrong follow-ups) or the call recorded no answer at all. Anything else goes to a person.
+    @Override
+    public InterviewVerificationResponse recordVerification(InterviewVerificationRequest request) {
+        SessionContext context = loadSessionContext(request.callAttemptId(), request.providerCallId());
+        Map<UUID, SurveyQuestion> questionsById = new LinkedHashMap<>();
+        context.questions().forEach(question -> questionsById.put(question.getId(), question));
+        List<InterviewVerificationResponse.Result> results = new ArrayList<>();
+        for (InterviewVerificationRequest.AnswerCheck check : request.checks() == null
+                ? List.<InterviewVerificationRequest.AnswerCheck>of() : request.checks()) {
+            SurveyQuestion question = check.questionId() == null ? null : questionsById.get(check.questionId());
+            SurveyAnswer answer = question == null ? null : context.answersByQuestionId().get(question.getId());
+            if (answer != null) {
+                results.add(verifyAnswer(context, question, answer, check));
+            }
+        }
+        return new InterviewVerificationResponse(context.callAttempt().getId(), results);
+    }
+
+    private InterviewVerificationResponse.Result verifyAnswer(
+            SessionContext context,
+            SurveyQuestion question,
+            SurveyAnswer answer,
+            InterviewVerificationRequest.AnswerCheck check
+    ) {
+        List<SurveyQuestionOption> options = context.optionsByQuestionId().getOrDefault(question.getId(), List.of());
+        String recordedKey = recordedAnswerKey(question, answer);
+        String recorded = describeRecordedAnswer(answer);
+        List<Map<String, Object>> checkEntries = new ArrayList<>();
+        List<String> checkedKeys = new ArrayList<>();
+        NormalizedAnswer heard = null;
+        Map<String, String> transcripts = check.transcripts() == null ? Map.of() : check.transcripts();
+        for (Map.Entry<String, String> transcript : transcripts.entrySet()) {
+            String text = trimToNull(transcript.getValue());
+            NormalizedAnswer normalized = text == null ? null : normalizeAnswer(context, question, options,
+                    new InterviewAnswerRequest(context.callAttempt().getId(), null, null, text, InterviewConversationSignal.ANSWER),
+                    answer);
+            String key = normalized != null && normalized.valid() ? normalizedAnswerKey(question, normalized) : null;
+            checkedKeys.add(key);
+            if (heard == null && key != null) {
+                heard = normalized;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("model", transcript.getKey());
+            entry.put("text", text);
+            entry.put("value", key == null ? null : describeNormalizedAnswer(normalized));
+            checkEntries.add(entry);
+        }
+
+        boolean checksAgree = !checkedKeys.isEmpty()
+                && checkedKeys.stream().allMatch(key -> Objects.equals(key, checkedKeys.getFirst()));
+        String agreedKey = checksAgree ? checkedKeys.getFirst() : null;
+        String status;
+        String reason = null;
+        String suggested = null;
+        Map<String, Object> original = null;
+        if (question.getQuestionType() == QuestionType.OPEN_ENDED) {
+            // Free answers are worded differently by every model; the texts are kept for a person to compare.
+            status = "not_checked";
+        } else if (transcripts.isEmpty()) {
+            // The agent found no speech for the answer in the recording.
+            status = "review";
+            reason = "no_recording";
+        } else if (checksAgree && Objects.equals(agreedKey, recordedKey)) {
+            status = recordedKey == null ? "no_answer" : "verified";
+            if (recordedKey != null && sampledForReview(context, question)) {
+                reason = "random_sample";
+            }
+        } else if (checksAgree && agreedKey != null && recordedKey != null && !affectsBranching(question, context)) {
+            status = "corrected";
+            suggested = describeNormalizedAnswer(heard);
+            original = new LinkedHashMap<>();
+            original.put("answerText", answer.getAnswerText());
+            original.put("answerNumber", answer.getAnswerNumber());
+            original.put("selectedOptionId", answer.getSelectedOption() == null ? null : answer.getSelectedOption().getId());
+            original.put("rawText", answer.getRawInputText());
+            applyNormalizedAnswer(answer, question, heard, answer.getRetryCount() == null ? 0 : answer.getRetryCount());
+        } else {
+            status = "review";
+            suggested = describeNormalizedAnswer(heard);
+            if (checksAgree && agreedKey != null && recordedKey != null) {
+                reason = "affects_branching";
+            } else if (recordedKey == null && heard != null) {
+                reason = "missed_in_call";
+            } else {
+                reason = "checks_disagree";
+            }
+        }
+
+        Map<String, Object> verification = new LinkedHashMap<>();
+        verification.put("status", status);
+        verification.put("reason", reason);
+        verification.put("liveText", check.liveText());
+        verification.put("recorded", recorded);
+        verification.put("suggested", suggested);
+        verification.put("original", original);
+        verification.put("checks", checkEntries);
+        verification.put("checkedAt", OffsetDateTime.now().toString());
+        answer.setAnswerJson(withVerification(answer.getAnswerJson(), verification));
+        surveyAnswerRepository.save(answer);
+        log.info("Answer checked after the call. callAttemptId={} questionCode={} status={} reason={}",
+                context.callAttempt().getId(), question.getCode(), status, reason);
+        return new InterviewVerificationResponse.Result(question.getId(), question.getCode(), status, reason, recorded, suggested);
+    }
+
+    // What an answer means, comparable between the call and a check: the option, the number, the values or a
+    // special answer such as "bilmiyorum". Null when it is no valid answer.
+    private String recordedAnswerKey(SurveyQuestion question, SurveyAnswer answer) {
+        if (!answer.isValid()) {
+            return null;
+        }
+        JsonNode json = readAnswerJson(answer.getAnswerJson());
+        String special = trimToNull(json.path("specialAnswerCode").asText(null));
+        if (special != null) {
+            return "special:" + special;
+        }
+        List<String> values = new ArrayList<>();
+        json.path("normalizedValues").forEach(value -> values.add(value.asText()));
+        return answerKey(question, answer.getSelectedOption(), answer.getAnswerNumber(), values, answer.getAnswerText());
+    }
+
+    private String normalizedAnswerKey(SurveyQuestion question, NormalizedAnswer answer) {
+        if (answer.specialAnswerCode() != null) {
+            return "special:" + answer.specialAnswerCode();
+        }
+        return answerKey(question, answer.selectedOption(), answer.numberValue(), answer.normalizedValues(), answer.answerText());
+    }
+
+    private String answerKey(
+            SurveyQuestion question,
+            SurveyQuestionOption option,
+            BigDecimal number,
+            List<String> values,
+            String text
+    ) {
+        return switch (question.getQuestionType()) {
+            case SINGLE_CHOICE -> option != null ? "option:" + option.getId()
+                    : trimToNull(text) == null ? null : "text:" + normalize(text);
+            case MULTI_CHOICE -> values == null || values.isEmpty() ? null
+                    : "values:" + values.stream().map(this::normalize).sorted().toList();
+            case NUMBER, RATING -> number == null ? null : "number:" + number.stripTrailingZeros().toPlainString();
+            case OPEN_ENDED -> trimToNull(text) == null ? null : "text:" + normalize(text);
+        };
+    }
+
+    private String describeRecordedAnswer(SurveyAnswer answer) {
+        if (answer.getAnswerNumber() != null) {
+            return answer.getAnswerNumber().stripTrailingZeros().toPlainString();
+        }
+        return answer.getAnswerText();
+    }
+
+    private String describeNormalizedAnswer(NormalizedAnswer answer) {
+        if (answer == null) {
+            return null;
+        }
+        if (answer.numberValue() != null) {
+            return answer.numberValue().stripTrailingZeros().toPlainString();
+        }
+        return answer.answerText();
+    }
+
+    private boolean sampledForReview(SessionContext context, SurveyQuestion question) {
+        // The same answer always draws the same way, so checking a call again does not change the sample.
+        return new Random(Objects.hash(context.callAttempt().getId(), question.getId())).nextDouble() < REVIEW_SAMPLE;
+    }
+
+    private boolean affectsBranching(SurveyQuestion question, SessionContext context) {
+        String quotedCode = "\"" + question.getCode() + "\"";
+        String id = question.getId().toString();
+        return context.questions().stream()
+                .filter(other -> other != question && other.getBranchConditionJson() != null)
+                .anyMatch(other -> other.getBranchConditionJson().contains(quotedCode)
+                        || other.getBranchConditionJson().contains(id));
+    }
+
+    private JsonNode readAnswerJson(String answerJson) {
+        try {
+            return objectMapper.readTree(answerJson == null || answerJson.isBlank() ? "{}" : answerJson);
+        } catch (JsonProcessingException ignored) {
+            return objectMapper.createObjectNode();
+        }
+    }
+
+    private String withVerification(String answerJson, Map<String, Object> verification) {
+        JsonNode root = readAnswerJson(answerJson);
+        ObjectNode payload = root instanceof ObjectNode objectNode ? objectNode : objectMapper.createObjectNode();
+        payload.set("verification", objectMapper.valueToTree(verification));
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException exception) {
+            return answerJson;
+        }
     }
 
     private SessionContext loadSessionContext(UUID callAttemptId, String providerCallId) {

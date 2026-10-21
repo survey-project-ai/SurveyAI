@@ -4,8 +4,8 @@ Starting the check from the agent's own job did not survive once: its process di
 while the same check started from outside worked. So it runs here, apart from the agent, like a job a
 backend would pick up after the call. Run it next to the agent: python verify_watch.py
 
-A call is checked once its answers (logs/<room>.answers.jsonl) and recording are written and it has no
-logs/<room>.final.json yet. Calls that ended more than LOOKBACK_SECONDS before this started are left alone.
+A call is checked once its answers (logs/<room>.answers.jsonl for the prototype survey, logs/<room>.checks.json
+for calls the backend placed) and recording are written and it has no logs/<room>.final.json yet. Calls that ended more than LOOKBACK_SECONDS before this started are left alone.
 """
 from __future__ import annotations
 
@@ -20,17 +20,19 @@ from verify_call import main as verify
 POLL_SECONDS = 5
 SETTLE_SECONDS = 3  # the agent writes the recording and the answers one after the other
 LOOKBACK_SECONDS = 15 * 60
+ANSWER_FILES = (".answers.jsonl", ".checks.json")  # prototype survey, calls the backend placed
 
 
 def waiting_calls(since: float, attempted: set[str]) -> list[str]:
     rooms = []
-    for answers in LOG_DIR.glob("*.answers.jsonl"):
-        room = answers.name.removesuffix(".answers.jsonl")
-        modified = answers.stat().st_mtime
-        if (room in attempted or modified < since or time.time() - modified < SETTLE_SECONDS
-                or (LOG_DIR / f"{room}.final.json").exists() or not (LOG_DIR / f"{room}.callee.wav").exists()):
-            continue
-        rooms.append(room)
+    for suffix in ANSWER_FILES:
+        for answers in LOG_DIR.glob("*" + suffix):
+            room = answers.name.removesuffix(suffix)
+            modified = answers.stat().st_mtime
+            if (room in attempted or modified < since or time.time() - modified < SETTLE_SECONDS
+                    or (LOG_DIR / f"{room}.final.json").exists() or not (LOG_DIR / f"{room}.callee.wav").exists()):
+                continue
+            rooms.append(room)
     return sorted(rooms)
 
 

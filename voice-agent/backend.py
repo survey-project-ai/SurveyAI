@@ -148,6 +148,12 @@ class BackendInterview:
         # The callee's last reply when the engine asked the same question again; read together with what
         # follows if the callee talked over that retry (speech recognition split one answer in two).
         self.unanswered: str | None = None
+        # Each question's answer as the engine last took it, with where it is in the callee recording, for the
+        # check after the call (verify_call.py): question id -> {questionId, heard_at_s, previous_heard_at_s, text}.
+        self.answer_turns: dict[str, dict] = {}
+        # When the previous turn reached the engine; an answer's clip starts after it.
+        self.previous_heard_at: float | None = None
+        self.unanswered_heard_from: float | None = None
         # Set once /start has answered: the callee's first words wait for it.
         self.started = asyncio.Event()
 
@@ -189,9 +195,15 @@ class BackendInterview:
 
         signal = "ANSWER" if self.step == "greeting" else signal_for(user_text)
         utterance = user_text
+        heard_from = self.previous_heard_at
         if previous_reply_missed and self.unanswered and signal == "ANSWER":
             utterance = f"{self.unanswered} {user_text}"
+            heard_from = self.unanswered_heard_from  # the clip holds both halves
         question_id = (self.question or {}).get("id")
+        if question_id is not None and signal == "ANSWER" and heard_at_s is not None:
+            self.answer_turns[question_id] = {"questionId": question_id, "heard_at_s": heard_at_s,
+                                              "previous_heard_at_s": heard_from, "text": utterance}
+        self.previous_heard_at = heard_at_s
         response = await self._call(self.client.answer, utterance, signal, question_id)
         if response is None:
             self.step = "done"
@@ -203,6 +215,7 @@ class BackendInterview:
         retried = (next_question is not None and question_id is not None and next_question.get("id") == question_id
                    and next_question.get("retryNeeded"))
         self.unanswered = utterance if retried and signal == "ANSWER" else None
+        self.unanswered_heard_from = heard_from if self.unanswered else None
         self.question = next_question
 
         end_call = bool(response.get("endCall"))
@@ -216,6 +229,13 @@ class BackendInterview:
     async def finish(self, inferred_answers: dict | None = None) -> None:
         """Ends the interview in the backend, with what the agent inferred instead of asking (the gender)."""
         await self._call(self.client.finish, inferred_answers, retry=False)
+
+    def save_answer_turns(self, path) -> None:
+        """The answers to check after the call; verify_watch.py picks the file up."""
+        if self.answer_turns:
+            path.write_text(json.dumps({"callAttemptId": self.client.call_attempt_id,
+                                        "turns": list(self.answer_turns.values())}, ensure_ascii=False),
+                            encoding="utf-8")
 
     def _remember(self, prompt: str | None) -> str | None:
         if prompt:
