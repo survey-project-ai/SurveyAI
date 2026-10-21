@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewAnswerRequest;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewConversationSignal;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewFinishRequest;
+import com.yourcompany.surveyai.call.application.dto.request.InterviewInferredAnswer;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewSessionRequest;
 import com.yourcompany.surveyai.call.application.dto.response.InterviewOrchestrationResponse;
 import com.yourcompany.surveyai.call.application.support.SpokenNumberParser;
@@ -31,6 +32,7 @@ import com.yourcompany.surveyai.survey.domain.entity.SurveyQuestionOption;
 import com.yourcompany.surveyai.survey.domain.enums.QuestionType;
 import com.yourcompany.surveyai.survey.repository.SurveyQuestionOptionRepository;
 import com.yourcompany.surveyai.survey.repository.SurveyQuestionRepository;
+import com.yourcompany.surveyai.operation.domain.entity.OperationContact;
 import com.yourcompany.surveyai.operation.support.OperationContactPhoneResolver;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -487,6 +489,8 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     public InterviewOrchestrationResponse finishInterview(InterviewFinishRequest request) {
         SessionContext context = loadSessionContext(request.callAttemptId(), request.providerCallId());
         SurveyResponse response = ensureSurveyResponse(context.callAttempt());
+        // Also for an interview that already ended: the agent decides the gender once the call is over.
+        recordInferredAnswers(context, response, request.inferredAnswers());
         boolean suppressClosingMessage = Boolean.TRUE.equals(request.suppressClosingMessage());
         // An interview that already ended keeps its outcome: finishing a declined or stopped interview
         // must not turn it into PARTIAL or COMPLETED, nor a completed one into ABANDONED.
@@ -2158,6 +2162,9 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     }
 
     private boolean isQuestionEligible(SurveyQuestion question, SessionContext context) {
+        if (isAnsweredFromVoice(question, context)) {
+            return false;
+        }
         BranchConditionSet branchConditionSet = parseBranchConditionSet(question.getBranchConditionJson());
         if (branchConditionSet == null || branchConditionSet.rules().isEmpty()) {
             return true;
@@ -2692,6 +2699,96 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             return head + " ya da " + last + "?";
         }
         return head + (labels.size() > 2 ? "," : "") + " or " + last + "?";
+    }
+
+    // Gender is never asked on our LiveKit agent's calls: the agent decides it from the callee's voice and
+    // sends it with /finish. The question is the one analytics read gender from: single choice, with
+    // "gender" or "cinsiyet" in its code or title. settingsJson "fromVoice": false asks it after all. The
+    // ElevenLabs agent cannot tell the gender, so it still asks.
+    private boolean isAnsweredFromVoice(SurveyQuestion question, SessionContext context) {
+        if (context.callAttempt().getProvider() != CallProvider.LIVEKIT
+                || question.getQuestionType() != QuestionType.SINGLE_CHOICE
+                || Boolean.FALSE.equals(readBooleanSetting(question, "fromVoice"))) {
+            return false;
+        }
+        String code = normalize(question.getCode());
+        String title = normalize(question.getTitle());
+        return code.contains("gender") || code.contains("cinsiyet") || title.contains("gender") || title.contains("cinsiyet");
+    }
+
+    private void recordInferredAnswers(
+            SessionContext context,
+            SurveyResponse response,
+            Map<String, InterviewInferredAnswer> inferredAnswers
+    ) {
+        InterviewInferredAnswer gender = inferredAnswers == null ? null : inferredAnswers.get("gender");
+        if (gender == null || trimToNull(gender.value()) == null) {
+            return;
+        }
+        for (SurveyQuestion question : context.questions()) {
+            if (!isAnsweredFromVoice(question, context)) {
+                continue;
+            }
+            SurveyQuestionOption option = matchGenderOption(
+                    context.optionsByQuestionId().getOrDefault(question.getId(), List.of()), gender.value());
+            if (option == null) {
+                log.warn("Voice gender not recorded: no matching option. callAttemptId={} questionCode={} value={}",
+                        context.callAttempt().getId(), question.getCode(), gender.value());
+                continue;
+            }
+            SurveyAnswer answer = context.answersByQuestionId().get(question.getId());
+            if (answer == null) {
+                answer = createSurveyAnswer(response, question);
+            }
+            answer.setAnswerType(question.getQuestionType());
+            answer.setRetryCount(0);
+            answer.setRawInputText(null);
+            answer.setValid(true);
+            answer.setInvalidReason(null);
+            answer.setSelectedOption(option);
+            answer.setAnswerNumber(null);
+            answer.setAnswerText(option.getLabel());
+            answer.setConfidenceScore(gender.confidence() == null ? null
+                    : BigDecimal.valueOf(gender.confidence()).setScale(4, RoundingMode.HALF_UP));
+            answer.setAnswerJson(toVoiceAnswerJson(question, option, gender));
+            context.answersByQuestionId().put(question.getId(), surveyAnswerRepository.save(answer));
+
+            // The contact list may carry the gender already; that value is kept.
+            OperationContact contact = context.callAttempt().getOperationContact();
+            if (contact != null && trimToNull(contact.getGender()) == null) {
+                contact.setGender(option.getLabel());
+            }
+        }
+    }
+
+    private SurveyQuestionOption matchGenderOption(List<SurveyQuestionOption> options, String value) {
+        String normalizedValue = normalize(value);
+        Set<String> words = switch (normalizedValue) {
+            case "kadin", "female", "woman" -> Set.of("kadin", "female", "woman", "bayan");
+            case "erkek", "male", "man" -> Set.of("erkek", "male", "man", "bay");
+            default -> Set.of();
+        };
+        return options.stream()
+                .filter(option -> words.contains(normalize(option.getLabel()))
+                        || words.contains(normalize(option.getOptionCode()))
+                        || words.contains(normalize(option.getValue())))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String toVoiceAnswerJson(SurveyQuestion question, SurveyQuestionOption option, InterviewInferredAnswer gender) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("questionType", question.getQuestionType());
+        payload.put("source", "voice");
+        payload.put("confidence", gender.confidence());
+        payload.put("normalizedText", option.getLabel());
+        payload.put("selectedOptionId", option.getId());
+        payload.put("valid", true);
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException exception) {
+            return "{}";
+        }
     }
 
     private Boolean readBooleanSetting(SurveyQuestion question, String key) {

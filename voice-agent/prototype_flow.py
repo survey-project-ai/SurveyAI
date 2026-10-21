@@ -314,8 +314,9 @@ class PrototypeInterview:
         self.previous_heard_at = heard_at_s
         return reply, end_call
 
-    async def finish(self) -> None:
-        pass
+    async def finish(self, inferred_answers: dict | None = None) -> None:
+        if inferred_answers and "gender" in inferred_answers:
+            self.flow.answers["gender"] = f"{inferred_answers['gender']['value']} (sesten)"
 
     def save_answer_turns(self, path) -> None:
         with path.open("w", encoding="utf-8") as handle:

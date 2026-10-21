@@ -60,7 +60,8 @@ class FakeClient:
             raise response
         return response
 
-    async def finish(self):
+    async def finish(self, inferred_answers=None):
+        self.finished_with = inferred_answers
         return {}
 
 
@@ -150,6 +151,14 @@ class BackendInterviewTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(reply, TECHNICAL_GOODBYE)
         self.assertTrue(end_call)
+
+    async def test_the_gender_heard_in_the_voice_goes_to_the_backend_at_the_end(self):
+        client = FakeClient()
+        interview, _ = await self.make(client)
+
+        await interview.finish({"gender": {"value": "kadın", "confidence": 0.976}})
+
+        self.assertEqual(client.finished_with, {"gender": {"value": "kadın", "confidence": 0.976}})
 
     async def test_a_callee_who_was_called_before_hears_an_apology(self):
         client = FakeClient(answers=[progress("Merhaba, size birkaç soru sorabilir miyim?", None)])

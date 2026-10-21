@@ -456,12 +456,17 @@ async def entrypoint(ctx: JobContext) -> None:
             # verify_watch.py picks the call up from logs/ and checks the answers.
             interview.save_answer_turns(LOG_DIR / f"{ctx.room.name}.answers.jsonl")
         decision = await gender.decide(timeout=2.0)
+        # Never asked: the backend records it as the gender question's answer (source "voice").
+        inferred = ({"gender": {"value": decision.label, "confidence": round(decision.confidence, 3)}}
+                    if decision.label else None)
+        if client is None:
+            await interview.finish(inferred)  # the prototype notes it with its own answers
         logger.info("call finished (%s): %d turns, answers=%s, gender=%s, scores=%s", reason, len(recorder.turns),
                     getattr(getattr(interview, "flow", None), "answers", "in the backend"), decision,
                     [score.__dict__ for score in gender.scores])
         if client is not None and answered_at is not None:
             # The interview first, so the call's final event finds it decided; the room closes after this.
-            await interview.finish()
+            await interview.finish(inferred)
             report("ended", durationSeconds=round(time.time() - answered_at), transcript=recorder.transcript,
                    reason=reason)
         await asyncio.gather(*reports, return_exceptions=True)

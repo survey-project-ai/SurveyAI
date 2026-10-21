@@ -66,9 +66,12 @@ class InterviewClient:
         return await self._tool("answer", {"callAttemptId": self.call_attempt_id, "utteranceText": text,
                                            "signal": signal, "questionId": question_id})
 
-    async def finish(self) -> dict:
+    async def finish(self, inferred_answers: dict | None = None) -> dict:
         # The agent says its own goodbye, or the callee is already gone.
-        return await self._tool("finish", {"callAttemptId": self.call_attempt_id, "suppressClosingMessage": True})
+        body = {"callAttemptId": self.call_attempt_id, "suppressClosingMessage": True}
+        if inferred_answers:
+            body["inferredAnswers"] = inferred_answers
+        return await self._tool("finish", body)
 
     async def _tool(self, name: str, body: dict) -> dict:
         url = f"{self.settings.url}/api/v1/provider-tools/interviews/{name}"
@@ -210,8 +213,9 @@ class BackendInterview:
             prompt = f"{CALLED_AGAIN} {prompt}"
         return self._remember(prompt), end_call
 
-    async def finish(self) -> None:
-        await self._call(self.client.finish, retry=False)
+    async def finish(self, inferred_answers: dict | None = None) -> None:
+        """Ends the interview in the backend, with what the agent inferred instead of asking (the gender)."""
+        await self._call(self.client.finish, inferred_answers, retry=False)
 
     def _remember(self, prompt: str | None) -> str | None:
         if prompt:

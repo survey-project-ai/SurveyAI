@@ -107,9 +107,11 @@ da Mansur Yavaş?") bu haliyle isimler okunmadan sorulurdu.
   biçiminde eklenir.
 
 **B6. Sesten cinsiyet.**
-- Anket ayarı: "Cinsiyet sesten belirlensin". Varsayılan açık (bkz. Karar 3).
-- Açıksa motor, cinsiyet sorusunu atlar. Cinsiyet sorusu bugünkü analizlerle aynı kuralla tanınır: kodu ya da
-  başlığı "gender/cinsiyet" içeren tek seçimli soru.
+- Ayar cinsiyet sorusunun kendisinde: `settingsJson` içinde `"fromVoice"`. Varsayılan açık (bkz. Karar 3);
+  `false` verilirse soru sorulur. Seçenek okuma ayarı gibi soru düzeyinde; veritabanı değişikliği gerekmedi.
+- Açıksa motor, LiveKit aramalarında cinsiyet sorusunu atlar; soru tamamlanma hesabına da girmez. ElevenLabs
+  ajanı sesten cinsiyet bilemediği için orada soru sorulmaya devam eder. Cinsiyet sorusu bugünkü analizlerle
+  aynı kuralla tanınır: kodu ya da başlığı "gender/cinsiyet" içeren tek seçimli soru.
 - Ajan `/finish` isteğine `inferredAnswers: {gender: "kadın" | "erkek"}` ekler.
 - Motor değeri "Kadın"/"Erkek" seçeneğine eşleyip `answer_json.source = "voice"` ile kaydeder.
 - Emin olunamadıysa soru cevapsız kalır.

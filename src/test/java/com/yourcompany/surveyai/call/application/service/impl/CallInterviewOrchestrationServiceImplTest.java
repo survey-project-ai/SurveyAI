@@ -9,6 +9,8 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewAnswerRequest;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewConversationSignal;
+import com.yourcompany.surveyai.call.application.dto.request.InterviewFinishRequest;
+import com.yourcompany.surveyai.call.application.dto.request.InterviewInferredAnswer;
 import com.yourcompany.surveyai.call.application.dto.request.InterviewSessionRequest;
 import com.yourcompany.surveyai.call.application.dto.response.InterviewOrchestrationResponse;
 import com.yourcompany.surveyai.call.domain.entity.CallAttempt;
@@ -348,6 +350,89 @@ class CallInterviewOrchestrationServiceImplTest {
         assertThat(response.endCall()).isTrue();
         assertThat(response.surveyStatus()).isEqualTo(SurveyResponseStatus.ABANDONED);
         assertThat(response.closingMessage()).isEqualTo("Anladım, teşekkür ederim. İyi günler dilerim.");
+    }
+
+    @Test
+    void genderQuestion_isNotAskedOnLiveKitCalls() {
+        fixture.callAttempt.setProvider(CallProvider.LIVEKIT);
+        useGenderQuestion(null);
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        InterviewOrchestrationResponse afterFirst = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Evet", InterviewConversationSignal.ANSWER));
+        InterviewOrchestrationResponse afterLast = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Ulasim sorunlarini cozmesi", InterviewConversationSignal.ANSWER));
+
+        assertThat(afterFirst.question().code()).isEqualTo("why");
+        assertThat(afterLast.surveyStatus()).isEqualTo(SurveyResponseStatus.COMPLETED);
+    }
+
+    @Test
+    void genderQuestion_isAskedOnElevenLabsCallsAndWhenTheQuestionSaysSo() {
+        useGenderQuestion(null);
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+        InterviewOrchestrationResponse elevenLabs = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Evet", InterviewConversationSignal.ANSWER));
+
+        assertThat(elevenLabs.question().code()).isEqualTo("gender");
+
+        fixture.callAttempt.setProvider(CallProvider.LIVEKIT);
+        useGenderQuestion("{\"fromVoice\":false}");
+        assertThat(service.getCurrentQuestion(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null))
+                .question().code()).isEqualTo("gender");
+    }
+
+    @Test
+    void finishInterview_recordsTheGenderTheAgentHeardEvenAfterTheInterviewEnded() throws Exception {
+        fixture.callAttempt.setProvider(CallProvider.LIVEKIT);
+        SurveyQuestion gender = useGenderQuestion(null);
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Evet", InterviewConversationSignal.ANSWER));
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Ulasim sorunlarini cozmesi", InterviewConversationSignal.ANSWER));
+
+        InterviewOrchestrationResponse finished = service.finishInterview(new InterviewFinishRequest(
+                fixture.callAttempt.getId(), null, null, null, true,
+                Map.of("gender", new InterviewInferredAnswer("kadın", 0.976))));
+
+        SurveyResponse response = responsesByAttemptId.get(fixture.callAttempt.getId());
+        SurveyAnswer genderAnswer = answersByResponseId.get(response.getId()).stream()
+                .filter(answer -> answer.getSurveyQuestion() == gender)
+                .findFirst()
+                .orElseThrow();
+        assertThat(finished.surveyStatus()).isEqualTo(SurveyResponseStatus.COMPLETED);
+        assertThat(genderAnswer.getSelectedOption().getLabel()).isEqualTo("Kadın");
+        assertThat(genderAnswer.isValid()).isTrue();
+        assertThat(new ObjectMapper().readTree(genderAnswer.getAnswerJson()).path("source").asText()).isEqualTo("voice");
+        assertThat(fixture.contact.getGender()).isEqualTo("Kadın");
+    }
+
+    @Test
+    void finishInterview_keepsTheGenderFromTheContactList() {
+        fixture.callAttempt.setProvider(CallProvider.LIVEKIT);
+        fixture.contact.setGender("Erkek");
+        useGenderQuestion(null);
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        service.finishInterview(new InterviewFinishRequest(fixture.callAttempt.getId(), null, null, null, true,
+                Map.of("gender", new InterviewInferredAnswer("kadın", 0.9))));
+
+        assertThat(fixture.contact.getGender()).isEqualTo("Erkek");
+    }
+
+    private SurveyQuestion useGenderQuestion(String settingsJson) {
+        SurveyQuestion gender = buildQuestion("gender", 2, QuestionType.SINGLE_CHOICE, "Cinsiyetiniz nedir?");
+        if (settingsJson != null) {
+            gender.setSettingsJson(settingsJson);
+        }
+        fixture.openQuestion.setQuestionOrder(3);
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
+                .thenReturn(List.of(fixture.yesNoQuestion, gender, fixture.openQuestion));
+        questionOptionsByQuestionId.put(gender.getId(), List.of(
+                buildOption(gender, 1, "female", "Kadın"),
+                buildOption(gender, 2, "male", "Erkek")));
+        return gender;
     }
 
     @Test
