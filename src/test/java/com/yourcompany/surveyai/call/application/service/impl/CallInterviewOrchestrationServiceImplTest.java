@@ -782,7 +782,27 @@ class CallInterviewOrchestrationServiceImplTest {
         assertThat(answers.getFirst().getRetryCount()).isEqualTo(1);
         assertThat(response.question()).isNotNull();
         assertThat(response.question().code()).isEqualTo("satisfied");
-        assertThat(response.prompt()).contains("Answer did not match");
+        assertThat(response.prompt()).startsWith("I couldn't find that among the choices. Please say one of them.");
+    }
+
+    @Test
+    void choiceRetry_saysWhyOnceBeforeAskingAgain() {
+        fixture.survey.setLanguageCode("tr");
+        fixture.yesNoQuestion.setCode("candidate");
+        fixture.yesNoQuestion.setTitle("Cumhurbaşkanı adayı olarak kimi görmek istersiniz?");
+        questionOptionsByQuestionId.put(fixture.yesNoQuestion.getId(), List.of(
+                buildOption(fixture.yesNoQuestion, 1, "option_1", "Recep Tayyip Erdoğan"),
+                buildOption(fixture.yesNoQuestion, 2, "option_2", "Ekrem İmamoğlu"),
+                buildOption(fixture.yesNoQuestion, 3, "option_3", "Mansur Yavaş")));
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        // The third test call: an answer heard clearly that is not among the choices.
+        InterviewOrchestrationResponse response = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Başka birisi.", InterviewConversationSignal.ANSWER));
+
+        assertThat(response.prompt())
+                .startsWith("Bu cevabı seçenekler arasında bulamadım. Lütfen seçeneklerden birini söyleyin. Cumhurbaşkanı")
+                .doesNotContain("duyamadım");
     }
 
     @Test
@@ -1686,7 +1706,7 @@ class CallInterviewOrchestrationServiceImplTest {
         assertThat(answers.getFirst().getRetryCount()).isEqualTo(1);
         assertThat(response.question()).isNotNull();
         assertThat(response.question().code()).isEqualTo("why");
-        assertThat(response.prompt()).contains("No clear answer captured from the caller");
+        assertThat(response.prompt()).startsWith("I didn't catch that clearly. Please answer once more.").doesNotContain("No clear answer captured");
     }
 
     @Test

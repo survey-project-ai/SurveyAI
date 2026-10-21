@@ -3152,19 +3152,29 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         if (clarificationPrompt != null) {
             return clarificationPrompt;
         }
-        // A rating's retry prompt already says what is wanted ("Lütfen 1 ile 5 arasında tek bir sayı
-        // söyleyin"), so its stored reason, which is English, is not read out in front of it.
-        if (answer.getInvalidReason() != null && !answer.getInvalidReason().isBlank()
-                && !answer.getInvalidReason().startsWith(RATING_RANGE_REASON)) {
-            String invalidReason = localizeInvalidReason(question.getSurvey(), answer.getInvalidReason());
-            return invalidReason + ". " + buildRetryPrompt(
-                    question,
-                    List.of(),
-                    extractRatingMin(question),
-                    extractRatingMax(question)
-            );
+        // One sentence, spoken before the question is asked again. A number's or rating's retry prompt
+        // already says what is wanted ("Lütfen 1 ile 5 arasında tek bir sayı söyleyin"). Otherwise the
+        // reason is said with the request; it used to come before a retry prompt that began with the same
+        // words ("Sizi net duyamadım. Sizi net duyamadım. Lütfen bir kez daha cevaplayın.").
+        boolean numeric = question.getQuestionType() == QuestionType.NUMBER || question.getQuestionType() == QuestionType.RATING;
+        if (!numeric && question.getRetryPrompt() == null && answer.getInvalidReason() != null
+                && !answer.getInvalidReason().isBlank()) {
+            return localizedRetryLeadIn(question.getSurvey(), answer.getInvalidReason());
         }
         return buildRetryPrompt(question, List.of(), extractRatingMin(question), extractRatingMax(question));
+    }
+
+    // An answer that did not match an option was heard; it is not among the choices, which are read again.
+    private String localizedRetryLeadIn(Survey survey, String invalidReason) {
+        boolean noOption = invalidReason.startsWith("Answer did not match");
+        if (isTurkish(survey)) {
+            return noOption
+                    ? "Bu cevabı seçenekler arasında bulamadım. Lütfen seçeneklerden birini söyleyin."
+                    : localizeInvalidReason(survey, invalidReason) + ". Lütfen bir kez daha cevaplayın.";
+        }
+        return noOption
+                ? "I couldn't find that among the choices. Please say one of them."
+                : "I didn't catch that clearly. Please answer once more.";
     }
 
     private void appendPromptSentence(StringBuilder builder, String text) {
@@ -3569,9 +3579,7 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         }
         return switch (invalidReason) {
             case "No clear answer captured from the caller" -> "Söylediğinizi net anlayamadım";
-            case "Answer did not match a known option" -> "Sizi net duyamadım";
-            case "Answer did not match any known options" -> "Sizi net duyamadım";
-            default -> "Sizi net duyamadım";
+            default -> "Sizi net anlayamadım";
         };
     }
 
