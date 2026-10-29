@@ -70,6 +70,11 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
     private static final String RATING_RANGE_REASON = "Rating answer must be between ";
     // Answers the post-call check confirmed that still go to a person, so the real accuracy can be measured.
     private static final double REVIEW_SAMPLE = 0.05;
+    private static final String REJECTED_CHOICE_REASON = "Answer rejected a choice";
+    private static final int AGE_MIN = 15;
+    private static final int AGE_MAX = 110;
+    // A reply with one of these rejects the name it carries ("Erdoğan değil", "İmamoğlu olmasın").
+    private static final Set<String> REJECTING_WORDS = Set.of("degil", "olmasin", "istemiyorum", "istemem", "asla", "not");
     private static final Pattern TRANSCRIPT_MARKUP_PATTERN = Pattern.compile("<[^>]+>");
     private static final Pattern VOICE_DIRECTION_PATTERN = Pattern.compile("\\[(?:[a-zA-Z_\\-]{2,20})]|\\((?:[a-zA-Z_\\-]{2,20})\\)");
     private static final Set<String> SEMANTIC_FILLER_TOKENS = Set.of(
@@ -95,6 +100,9 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             "uygun degil", "uygun degilim", "musait degil", "musait degilim", "mesgulum",
             "simdi olmaz", "olmaz", "zamanim yok", "vaktim yok",
             "rahatsiz etmeyin", "aramayin", "beni aramayin",
+            // "Sormayın" ended a test call's consent in a second clarification instead of a goodbye.
+            "sormayin", "sormayiniz", "katilmiyorum", "gerek yok", "istemiyoruz", "kapatiyorum", "kapatacagim",
+            "sonra arayin", "daha sonra arayin",
             "not now", "not interested", "no thanks", "no thank you", "do not call", "dont call"
     );
     private static final List<String> CONSENT_ACCEPT_PHRASES = List.of(
@@ -549,6 +557,7 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         List<Map<String, Object>> checkEntries = new ArrayList<>();
         List<String> checkedKeys = new ArrayList<>();
         NormalizedAnswer heard = null;
+        NormalizedAnswer heardOtherwise = null;  // the first check that heard something other than the call
         Map<String, String> transcripts = check.transcripts() == null ? Map.of() : check.transcripts();
         for (Map.Entry<String, String> transcript : transcripts.entrySet()) {
             String text = trimToNull(transcript.getValue());
@@ -559,6 +568,9 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             checkedKeys.add(key);
             if (heard == null && key != null) {
                 heard = normalized;
+            }
+            if (heardOtherwise == null && key != null && !key.equals(recordedKey)) {
+                heardOtherwise = normalized;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("model", transcript.getKey());
@@ -597,7 +609,7 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             applyNormalizedAnswer(answer, question, heard, answer.getRetryCount() == null ? 0 : answer.getRetryCount());
         } else {
             status = "review";
-            suggested = describeNormalizedAnswer(heard);
+            suggested = describeNormalizedAnswer(heardOtherwise != null ? heardOtherwise : heard);
             if (checksAgree && agreedKey != null && recordedKey != null) {
                 reason = "affects_branching";
             } else if (recordedKey == null && heard != null) {
@@ -978,7 +990,7 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
 
         return switch (question.getQuestionType()) {
             case OPEN_ENDED -> normalizeOpenEnded(context, question, raw);
-            case NUMBER -> normalizeNumber(raw);
+            case NUMBER -> normalizeNumber(question, raw);
             case RATING -> normalizeRating(question, raw);
             case SINGLE_CHOICE -> normalizeSingleChoice(question, options, raw);
             case MULTI_CHOICE -> normalizeMultiChoice(question, options, raw);
@@ -1063,6 +1075,15 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         if (directMatch != null) {
             return NormalizedAnswer.validOption(raw, directMatch, List.of(directMatch.getLabel()));
         }
+        SurveyQuestionOption nameMatch = matchDistinctiveName(question, options, raw);
+        if (nameMatch != null) {
+            return NormalizedAnswer.validOption(raw, nameMatch, List.of(nameMatch.getLabel()));
+        }
+        // "Tayyip olmasın" names whom the callee does not want; the question is asked again rather than
+        // offering that name back ("Recep Tayyip Erdoğan mı, yoksa Mansur Yavaş?").
+        if (hasEntityLexicon(question) && semanticTokens(raw).stream().anyMatch(REJECTING_WORDS::contains)) {
+            return NormalizedAnswer.invalid(REJECTED_CHOICE_REASON, raw);
+        }
         SemanticOptionDecision semanticDecision = classifySingleChoiceSemantically(question, options, raw);
         if (semanticDecision.matchedOption() != null) {
             return NormalizedAnswer.validOption(raw, semanticDecision.matchedOption(), List.of(semanticDecision.matchedOption().getLabel()));
@@ -1100,12 +1121,29 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         return NormalizedAnswer.validNumber(raw, BigDecimal.valueOf(parsed));
     }
 
-    private NormalizedAnswer normalizeNumber(String raw) {
+    private NormalizedAnswer normalizeNumber(SurveyQuestion question, String raw) {
         Integer parsed = extractNumber(raw);
         if (parsed == null) {
             return NormalizedAnswer.invalid("Number answer could not be parsed", raw);
         }
+        int[] range = numberRange(question);
+        if (range != null && (parsed < range[0] || parsed > range[1])) {
+            return NormalizedAnswer.invalid("Number answer must be between " + range[0] + " and " + range[1], raw);
+        }
         return NormalizedAnswer.validNumber(raw, BigDecimal.valueOf(parsed));
+    }
+
+    // settingsJson min/max, or for an age question an age a callee can have: "Belli bir" was once taken as 1.
+    private int[] numberRange(SurveyQuestion question) {
+        String settingsJson = question.getSettingsJson();
+        if (settingsJson != null && (settingsJson.contains("\"min\"") || settingsJson.contains("\"max\""))) {
+            return new int[]{readIntegerSetting(settingsJson, Integer.MIN_VALUE, "min"), readIntegerSetting(settingsJson, Integer.MAX_VALUE, "max")};
+        }
+        String code = normalize(question.getCode());
+        String title = normalize(question.getTitle());
+        boolean asksAge = code.equals("age") || code.equals("yas") || code.startsWith("age ") || code.startsWith("yas ")
+                || title.contains("kac yasinda") || title.contains("yasiniz") || title.contains("how old");
+        return asksAge ? new int[]{AGE_MIN, AGE_MAX} : null;
     }
 
     private NormalizedAnswer normalizeOpenEnded(SessionContext context, SurveyQuestion question, String raw) {
@@ -1587,6 +1625,56 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
         }
     }
 
+    // On a question whose choices are names (it has an entity lexicon: candidates, parties, places), a word that
+    // belongs to one choice only picks it, as the voice prototype read candidates: "Ekrem" or "imam" is
+    // İmamoğlu, "Tayyip" is Erdoğan. In a test call "Ekrem Başkan" was answered with "Ekrem İmamoğlu mu, yoksa
+    // Recep Tayyip Erdoğan?" and "Ekrem imam" was not taken. Words several choices share say nothing, and a
+    // reply that rejects ("Ekrem değil", "Tayyip olmasın") is left to the other rules.
+    private SurveyQuestionOption matchDistinctiveName(SurveyQuestion question, List<SurveyQuestionOption> options, String raw) {
+        if (options.size() < 2 || looksLikeYesNo(options) || !hasEntityLexicon(question)) {
+            return null;
+        }
+        Set<String> said = semanticTokens(raw);
+        if (said.stream().anyMatch(REJECTING_WORDS::contains)) {
+            return null;
+        }
+        Map<String, List<String>> aliasesByOptionKey = extractOptionAliases(question);
+        Map<SurveyQuestionOption, Set<String>> wordsByOption = new LinkedHashMap<>();
+        for (SurveyQuestionOption option : options) {
+            Set<String> words = new LinkedHashSet<>();
+            List<String> names = new ArrayList<>();
+            names.add(option.getLabel());
+            names.addAll(resolveAliasesForOption(option, aliasesByOptionKey));
+            names.forEach(name -> semanticTokens(name).stream().filter(word -> word.length() >= 3).forEach(words::add));
+            wordsByOption.put(option, words);
+        }
+        Set<SurveyQuestionOption> picked = new LinkedHashSet<>();
+        for (String word : said) {
+            if (word.length() < 3) {
+                continue;
+            }
+            List<SurveyQuestionOption> owners = options.stream()
+                    .filter(option -> wordsByOption.get(option).stream().anyMatch(name -> sameName(word, name)))
+                    .toList();
+            if (owners.size() == 1) {
+                picked.add(owners.getFirst());
+            }
+        }
+        return picked.size() == 1 ? picked.iterator().next() : null;
+    }
+
+    // "imam" starts "imamoglu"; "imamoglunu" carries a case ending.
+    private boolean sameName(String said, String name) {
+        return said.equals(name)
+                || (said.length() >= 4 && name.startsWith(said))
+                || (name.length() >= 4 && said.startsWith(name));
+    }
+
+    private boolean hasEntityLexicon(SurveyQuestion question) {
+        String settingsJson = question.getSettingsJson();
+        return settingsJson != null && (settingsJson.contains("\"autoEntityLexicon\"") || settingsJson.contains("\"autoAliases\""));
+    }
+
     private SemanticOptionDecision classifySingleChoiceSemantically(
             SurveyQuestion question,
             List<SurveyQuestionOption> options,
@@ -1614,18 +1702,10 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
             return new SemanticOptionDecision(best.option(), null);
         }
 
-        if (best.score() >= 0.48d) {
-            List<String> labels = new ArrayList<>();
-            labels.add(best.option().getLabel());
-            if (second != null) {
-                labels.add(second.option().getLabel());
-            } else if (options.size() > 1) {
-                options.stream()
-                        .filter(option -> !option.getId().equals(best.option().getId()))
-                        .findFirst()
-                        .map(SurveyQuestionOption::getLabel)
-                        .ifPresent(labels::add);
-            }
+        // Two close choices: ask which one. With one weak choice the question is asked again with its choices; the
+        // first other choice used to be added ("Ekrem İmamoğlu mu, yoksa Recep Tayyip Erdoğan?").
+        if (best.score() >= 0.48d && second != null) {
+            List<String> labels = List.of(best.option().getLabel(), second.option().getLabel());
             return new SemanticOptionDecision(null, buildClarificationPrompt(question.getSurvey(), labels.stream().distinct().toList()));
         }
 
@@ -3166,6 +3246,9 @@ public class CallInterviewOrchestrationServiceImpl implements CallInterviewOrche
 
     // An answer that did not match an option was heard; it is not among the choices, which are read again.
     private String localizedRetryLeadIn(Survey survey, String invalidReason) {
+        if (REJECTED_CHOICE_REASON.equals(invalidReason)) {
+            return localized(survey, "Anladım.", "I see.");
+        }
         boolean noOption = invalidReason.startsWith("Answer did not match");
         if (isTurkish(survey)) {
             return noOption

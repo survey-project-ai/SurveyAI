@@ -22,6 +22,7 @@ class SpokenNumberParserTest {
             "bin dokuz yuz seksen bes, 1985",
             "iki bin yirmi dort, 2024",
             "bir, 1",
+            "belli bir, 51",
             "sifir, 0",
             "bir dort diyelim, 4",
             "bes alti, 5",

@@ -489,6 +489,100 @@ class CallInterviewOrchestrationServiceImplTest {
         assertThat(rating.getAnswerNumber()).isEqualByComparingTo("5");
     }
 
+    @Test
+    void consent_endsPolitelyWhenTheCalleeSaysNotToAsk() {
+        fixture.survey.setLanguageCode("tr");
+        fixture.survey.setIntroPrompt("Merhaba, Ayna Araştırma adına arıyorum. Size birkaç soru sorabilir miyim?");
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Alo efendim?", InterviewConversationSignal.ANSWER));
+
+        InterviewOrchestrationResponse response = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Sormayın.", InterviewConversationSignal.ANSWER));
+
+        assertThat(response.endCall()).isTrue();
+        assertThat(response.surveyStatus()).isEqualTo(SurveyResponseStatus.ABANDONED);
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "'Ekrem Başkan.', Ekrem İmamoğlu",
+            "'Ekrem imam.', Ekrem İmamoğlu",
+            "'İmamoğlu''nu isterim.', Ekrem İmamoğlu",
+            "'Tayyip.', Recep Tayyip Erdoğan",
+            "'Mansur bey.', Mansur Yavaş"
+    })
+    void candidate_isPickedByAWordOnlyItsNameHas(String utterance, String expected) {
+        useCandidateQuestion();
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, utterance, InterviewConversationSignal.ANSWER));
+
+        SurveyAnswer answer = answersByResponseId.get(responsesByAttemptId.get(fixture.callAttempt.getId()).getId()).getFirst();
+        assertThat(answer.isValid()).isTrue();
+        assertThat(answer.getSelectedOption().getLabel()).isEqualTo(expected);
+    }
+
+    @Test
+    void candidate_aRejectedNameIsNotTakenAsTheChoice() {
+        useCandidateQuestion();
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        InterviewOrchestrationResponse response = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Tayyip olmasın.", InterviewConversationSignal.ANSWER));
+
+        SurveyAnswer answer = answersByResponseId.get(responsesByAttemptId.get(fixture.callAttempt.getId()).getId()).getFirst();
+        assertThat(answer.getSelectedOption()).isNull();
+        assertThat(response.prompt()).startsWith("Anladım. Cumhurbaşkanı adayı").doesNotContain("Hangisi daha yakın");
+    }
+
+    @Test
+    void ageQuestion_readsBelliBirAsFiftyOneAndRejectsAnImpossibleAge() {
+        fixture.survey.setLanguageCode("tr");
+        SurveyQuestion ageQuestion = buildQuestion("age", 1, QuestionType.NUMBER, "Kaç yaşındasınız?");
+        when(surveyQuestionRepository.findAllBySurvey_IdAndDeletedAtIsNullOrderByQuestionOrderAsc(fixture.survey.getId()))
+                .thenReturn(List.of(ageQuestion, fixture.openQuestion));
+        questionOptionsByQuestionId.put(ageQuestion.getId(), List.of());
+        service.startInterview(new InterviewSessionRequest(fixture.callAttempt.getId(), null, null));
+
+        InterviewOrchestrationResponse impossible = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Bir.", InterviewConversationSignal.ANSWER));
+        InterviewOrchestrationResponse heardWrong = service.submitAnswer(new InterviewAnswerRequest(
+                fixture.callAttempt.getId(), null, null, "Belli bir.", InterviewConversationSignal.ANSWER));
+
+        assertThat(impossible.question().code()).isEqualTo("age");
+        assertThat(heardWrong.question().code()).isEqualTo("why");
+        SurveyAnswer age = answersByResponseId.get(responsesByAttemptId.get(fixture.callAttempt.getId()).getId()).getFirst();
+        assertThat(age.getAnswerNumber()).isEqualByComparingTo("51");
+    }
+
+    @Test
+    void verification_suggestsWhatDiffersFromTheCall() {
+        answerRating("Dört.");
+
+        InterviewVerificationResponse.Result result = verifyRating("dört", "Üç.");
+
+        assertThat(result.status()).isEqualTo("review");
+        assertThat(result.suggested()).isEqualTo("3");
+    }
+
+    private void useCandidateQuestion() {
+        fixture.survey.setLanguageCode("tr");
+        fixture.yesNoQuestion.setCode("candidate");
+        fixture.yesNoQuestion.setTitle("Cumhurbaşkanı adayı olarak kimi görmek istersiniz?");
+        // The aliases the survey builder generated for the test survey.
+        fixture.yesNoQuestion.setSettingsJson("""
+                {"autoAliases": {"erdogan": ["Erdoğan", "Recep Tayyip Erdoğan", "Tayyip Erdoğan", "RTE"],
+                                 "imamoglu": ["İmamoğlu", "Ekrem İmamoğlu", "imamoglu"],
+                                 "yavas": ["Yavaş", "Mansur Yavaş", "yavas"]}}
+                """);
+        questionOptionsByQuestionId.put(fixture.yesNoQuestion.getId(), List.of(
+                buildOption(fixture.yesNoQuestion, 1, "erdogan", "Recep Tayyip Erdoğan"),
+                buildOption(fixture.yesNoQuestion, 2, "imamoglu", "Ekrem İmamoğlu"),
+                buildOption(fixture.yesNoQuestion, 3, "yavas", "Mansur Yavaş")));
+    }
+
     private SurveyAnswer answerRating(String utterance) {
         fixture.survey.setLanguageCode("tr");
         fixture.ratingQuestion.setSettingsJson("{\"min\":1,\"max\":5}");

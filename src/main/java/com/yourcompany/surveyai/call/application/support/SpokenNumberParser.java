@@ -52,7 +52,9 @@ public final class SpokenNumberParser {
         if (normalizedText == null || normalizedText.isBlank()) {
             return null;
         }
-        List<Object> items = toNumbersAndWords(normalizedText.trim().split("\\s+"));
+        // Speech recognition wrote "elli bir" as "belli bir" in two calls.
+        String text = normalizedText.trim().replaceAll("\\bbelli (?=(bir|iki|uc|dort|bes|alti|yedi|sekiz|dokuz)\\b)", "elli ");
+        List<Object> items = toNumbersAndWords(text.split("\\s+"));
 
         for (int index = 0; index < items.size(); index++) {
             Object item = items.get(index);
